@@ -1,0 +1,71 @@
+-- 1. Ensure the PropertyUnits table exists
+CREATE TABLE IF NOT EXISTS "PropertyUnits" (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    unit_id VARCHAR(255) UNIQUE NOT NULL,
+    floor VARCHAR(50),
+    type VARCHAR(255),
+    area VARCHAR(255),
+    price VARCHAR(255),
+    status VARCHAR(50) DEFAULT 'AVAILABLE',
+    tag_color VARCHAR(50) DEFAULT 'green',
+    img TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 2. IMPORTANT: Disable Row Level Security so your Next.js app can insert and update statuses!
+ALTER TABLE "PropertyUnits" DISABLE ROW LEVEL SECURITY;
+
+-- 3. Seed the database with 50 flats (Levels 1 to 5)
+INSERT INTO "PropertyUnits" (unit_id, floor, type, area, price, status, img)
+VALUES
+('101', '1', '2BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', 'C:\Users\lenovo\OneDrive\Documents\neus\nexus\public\images\unit_interior_1777642600392.png'),
+('102', '1', '2BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', 'C:\Users\lenovo\OneDrive\Documents\neus\nexus\public\images\hero_slider_2_1777798109562.png'),
+('103', '1', '2BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', 'C:\Users\lenovo\OneDrive\Documents\neus\nexus\public\images\hero_slider_2_1777798109562.png'),
+('104', '1', '2BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', 'C:\Users\lenovo\OneDrive\Documents\neus\nexus\public\images\hero_slider_2_1777798109562.png'),
+('105', '1', '2BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', 'C:\Users\lenovo\OneDrive\Documents\neus\nexus\public\images\hero_slider_2_1777798109562.png'),
+('106', '1', '2BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', 'C:\Users\lenovo\OneDrive\Documents\neus\nexus\public\images\hero_slider_2_1777798109562.png'),
+('107', '1', '3BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('108', '1', '3BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('109', '1', '3BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('110', '1', '3BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('201', '2', '3BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('202', '2', '3BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('203', '2', '3BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('204', '2', '3BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('205', '2', '3BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('206', '2', '3BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('207', '2', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('208', '2', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('209', '2', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('210', '2', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('301', '3', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('302', '3', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('303', '3', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('304', '3', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('305', '3', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('306', '3', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('307', '3', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('308', '3', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('309', '3', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('310', '3', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('401', '4', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('402', '4', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('403', '4', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('404', '4', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('405', '4', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('406', '4', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('407', '4', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('408', '4', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('409', '4', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('410', '4', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('501', '5', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('502', '5', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('503', '5', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('504', '5', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('505', '5', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('506', '5', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('507', '5', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('508', '5', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('509', '5', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png'),
+('510', '5', '4BHK PENTHOUSE', '5400', '₹ 14.25 Cr', 'AVAILABLE', '/images/hero_slider_2_1777798109562.png')
+ON CONFLICT (unit_id) DO NOTHING;

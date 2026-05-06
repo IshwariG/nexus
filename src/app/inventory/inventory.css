@@ -1,14 +1,26 @@
 .inventory-page {
-  background-color: var(--color-primary);
+  background-color: #d1d7db;
   min-height: 100vh;
+  
 }
 
 .inventory-hero {
   position: relative;
   height: 60vh;
-  min-height: 400px;
+  min-height: 500px;
   display: flex;
   align-items: center;
+  overflow: hidden;
+}
+
+.inventory-hero .hero-bg img {
+  animation: bgMotion 3s ease-in-out infinite alternate;
+  transform-origin: center;
+}
+
+@keyframes bgMotion {
+  from { transform: scale(1); }
+  to   { transform: scale(1.08); }
 }
 
 .inventory-hero .hero-bg {
@@ -20,7 +32,7 @@
 .inventory-hero .hero-overlay {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: linear-gradient(to bottom, rgba(10,28,18,0.5) 0%, rgba(10,28,18,0.2) 50%, var(--color-primary) 100%);
+  background: linear-gradient(to bottom, rgba(10,28,18,0.5) 0%, rgba(10,28,18,0.2) 50%, #BDD5E7 100%);
   z-index: 2;
 }
 
@@ -40,14 +52,14 @@
 }
 
 .hero-text-box .title {
-  color: var(--color-text-light);
+  color:  #000202;
   font-size: 2.5rem;
   line-height: 1.1;
   margin-bottom: 1.5rem;
 }
 
 .hero-text-box .description {
-  color: var(--color-text-light);
+  color: #2c3e50;
   font-size: 0.95rem;
   opacity: 0.8;
   line-height: 1.6;
@@ -60,8 +72,8 @@
 .filters-bar {
   display: flex;
   gap: 1.5rem;
-  background-color: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
+  background-color: rgba(255,255,255,0.6);
+  border: 1px solid rgba(0,0,0,0.1);
   padding: 1.5rem;
   border-radius: 8px;
   margin-top: -3rem;
@@ -86,7 +98,9 @@
 }
 
 .filter-select {
-  background: transparent;
+  background-color: #022e36;          /* make it white */
+  border: 1px solid rgba(0,0,0,0.1);  /* subtle border instead of bottom line */
+  color: #022e36;         
   border: none;
   border-bottom: 1px solid rgba(255,255,255,0.2);
   color: var(--color-text-light);
@@ -102,13 +116,13 @@
 }
 
 .filter-select option {
-  background-color: var(--color-primary);
+  background-color: #022e36;
   color: var(--color-text-light);
 }
 
 .filter-btn {
   background-color: var(--color-text-light);
-  color: var(--color-primary);
+  color: #012525;
   border: none;
 }
 
@@ -169,7 +183,7 @@
 
 .unit-header h3 {
   font-size: 1.25rem;
-  color: var(--color-primary);
+  color: #113629;
 }
 
 .unit-floor {
@@ -209,7 +223,7 @@
 
 .unit-price {
   font-size: 1.5rem;
-  color: var(--color-primary);
+  color: #113629;
 }
 
 .unit-action {
@@ -221,7 +235,7 @@
 }
 
 .unit-card:hover .unit-action {
-  color: var(--color-primary);
+  color: #113629;
 }
 
 .load-more-section {
@@ -237,7 +251,7 @@
 
 .bg-white {
   background-color: var(--color-text-light) !important;
-  color: var(--color-primary) !important;
+  color: #113629 !important;
   border: none !important;
 }
 
@@ -252,7 +266,7 @@
 
 .heritage-desc {
   max-width: 400px;
-  color: var(--color-text-light);
+  color: #113629;
   font-size: 0.9rem;
   opacity: 0.8;
   text-align: right;
@@ -282,7 +296,7 @@
   font-size: 0.6rem;
   text-transform: uppercase;
   letter-spacing: 2px;
-  color: var(--color-accent);
+  color: #c2a661;
   display: block;
   margin-bottom: 0.5rem;
 }
@@ -302,4 +316,7 @@
 
 .heritage-card:hover .heritage-action {
   opacity: 1;
+}
+.text-blue{
+  color: darkblue;
 }

@@ -1,0 +1,39 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Inquiry {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  phone     String
+  message   String?
+  source    String   @default("Website")
+  status    String   @default("New") // New, Contacted, Qualified, Lost
+  createdAt DateTime @default(now())
+}
+
+model PropertyUnit {
+  id        String   @id @default(uuid())
+  unitId    String   @unique
+  floor     String
+  type      String
+  area      String
+  price     String
+  status    String   @default("AVAILABLE") // AVAILABLE, RESERVED, SOLD OUT
+  tagColor  String   @default("green") // green, blue, red
+  img       String
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id        String   @id @default(uuid())
+  role      String   // Admin, Sales
+  username  String   @unique
+  password  String
+}

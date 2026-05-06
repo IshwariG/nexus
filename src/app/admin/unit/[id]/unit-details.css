@@ -1,0 +1,405 @@
+/* Unit Details CSS */
+.unit-details-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: #fcfbfa; /* Slightly warm off-white */
+  font-family: 'Inter', sans-serif;
+}
+
+/* Sidebar override for unit details */
+.ud-sidebar {
+  width: 240px;
+  background-color: #f5f4ef;
+  border-right: 1px solid #e0dfd5;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 100;
+}
+
+.ud-main {
+  flex: 1;
+  margin-left: 240px;
+  position: relative;
+}
+
+/* Hero Section */
+.ud-hero {
+  position: relative;
+  height: 500px;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 2rem;
+  z-index: 10;
+}
+
+.ud-hero::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.8) 100%);
+}
+
+.ud-hero-card {
+  position: relative;
+  background: rgba(255,255,255,0.15);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(255,255,255,0.2);
+  width: 90%;
+  max-width: 1100px;
+  padding: 3rem;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-radius: 4px;
+}
+
+.ud-hero-title {
+  max-width: 60%;
+}
+
+.ud-hero-title h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: 3.5rem;
+  margin: 1rem 0;
+  line-height: 1.1;
+  font-weight: 500;
+}
+
+.ud-hero-subtitle {
+  font-size: 0.9rem;
+  opacity: 0.9;
+  letter-spacing: 1px;
+}
+
+.ud-badges {
+  display: flex;
+  gap: 1rem;
+}
+
+.ud-badge {
+  background: var(--vanya-green, #113629);
+  padding: 4px 10px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  border-radius: 2px;
+}
+.ud-badge.outline {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.5);
+}
+
+.ud-hero-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1rem;
+}
+
+.ud-status-btn {
+  background: rgba(17, 34, 51, 0.9);
+  color: white;
+  padding: 0.8rem 1.5rem;
+  border-radius: 2px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: none;
+  cursor: pointer;
+  min-width: 250px;
+  justify-content: center;
+  position: relative;
+}
+
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+}
+.status-dot.blue { background: #4dabf7; }
+.status-dot.green { background: #69db7c; }
+.status-dot.red { background: #ff8787; }
+
+.ud-status-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  color: #111;
+  border: 1px solid #ddd;
+  margin-top: 5px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+  display: none;
+  flex-direction: column;
+  z-index: 50;
+  border-radius: 2px;
+}
+.ud-status-btn:hover .ud-status-dropdown {
+  display: flex;
+}
+.ud-dropdown-item {
+  padding: 0.8rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+}
+.ud-dropdown-item:hover { background: #f5f5f5; }
+
+.ud-btn-group {
+  display: flex;
+  gap: 1rem;
+}
+
+.ud-btn-outline {
+  background: var(--vanya-green, #113629);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: white;
+  padding: 0.8rem 1.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ud-btn-outline.clear {
+  background: transparent;
+}
+.ud-btn-outline:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+/* Content Area */
+.ud-content {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 4rem;
+  padding: 4rem 5%;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Left Column */
+.ud-section-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 2rem;
+  color: #111;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid #eaeaea;
+  padding-bottom: 1rem;
+}
+
+.ud-specs-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rem;
+  margin-bottom: 3rem;
+}
+
+.ud-spec-item p {
+  font-size: 0.65rem;
+  color: #888;
+  letter-spacing: 2px;
+  margin: 0 0 0.5rem 0;
+  text-transform: uppercase;
+}
+
+.ud-spec-item h3 {
+  font-size: 1.5rem;
+  color: #111;
+  margin: 0;
+  font-weight: 400;
+}
+.ud-spec-item h3 span {
+  font-size: 0.8rem;
+  color: #666;
+  font-style: italic;
+  font-family: 'Playfair Display', serif;
+}
+
+.ud-images-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 3rem;
+}
+.ud-images-row img {
+  width: 100%;
+  height: 250px;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.ud-features-box {
+  background: #f5f5f5;
+  padding: 2.5rem;
+  border-radius: 2px;
+}
+.ud-features-title {
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+  color: #555;
+  margin-bottom: 1.5rem;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.ud-features-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+.ud-feature-item {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  font-size: 0.85rem;
+  color: #333;
+  line-height: 1.5;
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+}
+.ud-feature-item span {
+  font-style: normal;
+  font-size: 1rem;
+  opacity: 0.7;
+}
+
+/* Right Column: Context Card */
+.ud-context-card {
+  background: white;
+  border: 1px solid #eaeaea;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.03);
+  padding: 2rem;
+  position: sticky;
+  top: 2rem;
+}
+
+.ud-context-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #eaeaea;
+  padding-bottom: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.ud-context-header h3 {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.5rem;
+  margin: 0;
+  color: #111;
+}
+
+.ud-client-profile {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+.ud-client-avatar {
+  width: 50px; height: 50px;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+}
+.ud-client-info h4 { margin: 0 0 0.25rem 0; font-size: 1.1rem; color: #111; font-family: 'Playfair Display', serif; }
+.ud-client-info p { margin: 0; font-size: 0.75rem; color: #666; }
+
+.ud-offers-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid #eaeaea;
+  padding-bottom: 2rem;
+}
+.ud-offer-box p { margin: 0 0 0.5rem 0; font-size: 0.6rem; color: #888; letter-spacing: 1px; text-transform: uppercase; }
+.ud-offer-box h3 { margin: 0; font-size: 1.25rem; color: #111; }
+
+.ud-notes {
+  background: #fdfdfc;
+  border-left: 3px solid #eaeaea;
+  padding: 1rem 1.5rem;
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 0.9rem;
+  color: #444;
+  line-height: 1.6;
+  margin-bottom: 2rem;
+}
+
+.ud-timeline-title {
+  font-size: 0.6rem;
+  color: #888;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 1.5rem;
+}
+.ud-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  position: relative;
+  margin-bottom: 2rem;
+}
+.ud-timeline::before {
+  content: ''; position: absolute; left: 6px; top: 5px; bottom: 5px; width: 1px; background: #eaeaea;
+}
+.ud-timeline-item {
+  display: flex;
+  gap: 1.5rem;
+  position: relative;
+  z-index: 2;
+}
+.ud-timeline-dot {
+  width: 13px; height: 13px; border-radius: 50%; background: white; border: 2px solid #ccc; flex-shrink: 0; margin-top: 2px;
+}
+.ud-timeline-dot.active { border-color: #111; }
+.ud-timeline-content p { margin: 0 0 0.25rem 0; font-size: 0.6rem; color: #888; font-weight: 600; letter-spacing: 1px; }
+.ud-timeline-content span { font-size: 0.8rem; color: #333; line-height: 1.4; display: block; }
+
+.ud-action-btn {
+  background: #111928;
+  color: white;
+  width: 100%;
+  padding: 1rem;
+  border: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.ud-action-btn:hover { background: #000; }
+
+.ud-secondary-actions {
+  display: flex;
+  gap: 1rem;
+}
+.ud-secondary-btn {
+  flex: 1;
+  background: white;
+  border: 1px solid #eaeaea;
+  padding: 0.75rem;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-align: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: #555;
+}
+.ud-secondary-btn:hover { background: #fdfdfc; }

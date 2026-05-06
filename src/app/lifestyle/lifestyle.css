@@ -1,0 +1,215 @@
+.lifestyle-main {
+  width: 100%;
+}
+
+.lifestyle-hero {
+  position: relative;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background-size: cover;
+  background-position: center;
+  color: white;
+  animation: bgMotion 5s ease-in-out infinite alternate;
+}
+
+.lifestyle-hero::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.lifestyle-hero-content {
+  position: relative;
+  z-index: 1;
+  max-width: 800px;
+  padding: 2rem;
+}
+
+.lifestyle-hero-content h1 {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.lifestyle-hero-content p {
+  font-size: 1.1rem;
+  letter-spacing: 1px;
+  opacity: 0.9;
+}
+
+.experiences-section {
+  padding: 8rem 5%;
+  background: #fdfcfa;
+}
+
+.section-header {
+  text-align: center;
+  margin-bottom: 6rem;
+}
+
+.section-header span {
+  font-size: 0.75rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #888;
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.section-header h2 {
+  font-size: 3rem;
+  color: #113629;
+}
+
+.experience-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8rem;
+  gap: 4rem;
+}
+
+.experience-block.reverse {
+  flex-direction: row-reverse;
+}
+
+.exp-image {
+  flex: 1;
+  height: 350px;
+  background-size: cover;
+  background-attachment: fixed;
+  background-position: center;
+}
+
+.exp-content {
+  flex: 1;
+  max-width: 500px;
+  padding: 2rem;
+}
+
+.exp-content h3 {
+  font-size: 2.5rem;
+  color: #113629;
+  margin-bottom: 1.5rem;
+}
+
+.exp-content p {
+  color: #555;
+  line-height: 1.8;
+  margin-bottom: 2rem;
+}
+
+.exp-link {
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+  color: #113629;
+  text-transform: uppercase;
+  text-decoration: none;
+  border-bottom: 1px solid #113629;
+  padding-bottom: 5px;
+}
+
+.sanctuary-section {
+  background: #113629;
+  color: white;
+  padding: 8rem 5%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4rem;
+}
+
+.sanctuary-content {
+  flex: 1;
+  max-width: 600px;
+}
+
+.sanctuary-content span {
+  font-size: 0.75rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  opacity: 0.7;
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.sanctuary-content h2 {
+  font-size: 3.5rem;
+  margin-bottom: 2rem;
+}
+
+.sanctuary-content p {
+  opacity: 0.8;
+  line-height: 1.8;
+  margin-bottom: 3rem;
+}
+
+.sanctuary-stats {
+  display: flex;
+  gap: 3rem;
+}
+
+.stat-item h3 {
+  font-size: 2.5rem;
+  margin: 0 0 0.5rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.2);
+  padding-bottom: 0.5rem;
+}
+
+.stat-item p {
+  font-size: 0.65rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.7;
+  margin: 0;
+}
+
+.sanctuary-image {
+  flex: 1;
+  height: 600px;
+  background-image: url('/images/heritage_emerald_1777643352616.png');
+  background-size: cover;
+  background-position: center;
+  border: 1px solid rgba(255,255,255,0.2);
+}
+
+.legacy-form-section {
+  padding: 8rem 5%;
+  background: #fdfcfa;
+  text-align: center;
+}
+
+.legacy-form-section h2 {
+  font-size: 2rem;
+  color: #113629;
+  margin-bottom: 1rem;
+}
+
+.legacy-form-section p {
+  color: #666;
+  max-width: 600px;
+  margin: 0 auto 3rem auto;
+}
+
+.legacy-form-container {
+  max-width: 800px;
+  margin: 0 auto;
+  background: white;
+  padding: 4rem;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.03);
+}
+
+@media (max-width: 768px) {
+  .experience-block, .experience-block.reverse, .sanctuary-section {
+    flex-direction: column;
+  }
+  .exp-image, .sanctuary-image {
+    width: 100%;
+    height: 300px;
+  }
+  .lifestyle-hero-content h1 { font-size: 2.5rem; }
+  .sanctuary-content h2 { font-size: 2.5rem; }
+}

@@ -1,7 +1,7 @@
 .inquiry-page {
   min-height: 100vh;
   position: relative;
-  background-color: var(--color-primary);
+  background-color: #113629;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -11,7 +11,7 @@
 .inquiry-overlay {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background-image: url('/images/hero.png');
+  background-image: url('/images/hero_building_1777640070355.png');
   background-size: cover;
   background-position: center;
   opacity: 0.2;
@@ -21,7 +21,7 @@
 .inquiry-container {
   position: relative;
   z-index: 10;
-  background-color: var(--color-light);
+  background-color: #fdfcfa;
   width: 100%;
   max-width: 1000px;
   box-shadow: 0 20px 40px rgba(0,0,0,0.3);
@@ -44,7 +44,7 @@
 .inquiry-title {
   font-size: 3.5rem;
   line-height: 1.1;
-  color: var(--color-primary);
+  color: #113629;
   margin-bottom: 2rem;
 }
 
@@ -104,7 +104,7 @@
 
 .inquiry-input:focus {
   outline: none;
-  border-bottom-color: var(--color-primary);
+  border-bottom-color: #113629;
 }
 
 .inquiry-textarea {
@@ -144,9 +144,9 @@
 }
 
 .interest-option.active, .interest-option:has(input:checked) {
-  background-color: var(--color-primary);
+  background-color: #113629;
   color: var(--color-text-light);
-  border-color: var(--color-primary);
+  border-color: #113629;
 }
 
 .submit-btn {

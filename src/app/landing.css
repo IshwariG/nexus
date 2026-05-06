@@ -1,0 +1,199 @@
+.hero-section {
+  position: relative;
+  height: 90vh;
+  min-height: 700px;
+  background-image: url('/landing_hero_building_1777792553808.png');
+  background-size: 50% 100%;
+  background-position: right;
+  display: flex;
+  align-items: center;
+}
+.hero-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(to right, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.1) 100%);
+}
+.hero-content {
+  position: relative;
+  z-index: 2;
+  color: white;
+  max-width: 700px;
+}
+.hero-label {
+  font-size: 0.65rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #a7d0b8;
+  margin-bottom: 1rem;
+  display: block;
+}
+.hero-title {
+  font-size: 4.5rem;
+  line-height: 1.1;
+  margin-bottom: 1.5rem;
+}
+.hero-desc {
+  font-size: 1rem;
+  color: rgba(255,255,255,0.8);
+  margin-bottom: 3rem;
+  max-width: 500px;
+}
+.hero-actions { display: flex; gap: 1rem; }
+
+/* Vision Section */
+.vision-section {
+  padding: 8rem 0;
+  background-image: url('/images/ic1.png');
+  background-size: cover;
+  background-position: center;
+  position: relative;
+}
+.vision-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4rem;
+  align-items: center;
+}
+.section-label {
+  font-size: 0.65rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 1rem;
+  display: block;
+}
+.vision-title {
+  font-size: 3rem;
+  color: var(--text-dark);
+  margin-bottom: 2rem;
+  max-width: 400px;
+}
+.vision-desc {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: 3rem;
+  max-width: 450px;
+}
+.vision-features {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+.feature {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+.feature-icon {
+  font-size: 1.5rem;
+  color: var(--text-dark);
+}
+.feature-text h4 { font-family: var(--font-serif); font-size: 1.2rem; margin-bottom: 0.5rem; }
+.feature-text p { font-size: 0.8rem; color: var(--text-muted); max-width: 300px; }
+
+.vision-images {
+  position: relative;
+  height: 600px;
+}
+.vision-img-1 {
+  position: absolute;
+  left: 0; top: 50px;
+  width: 60%; height: 80%;
+  object-fit: cover;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+}
+.vision-img-2 {
+  position: absolute;
+  right: 0; top: 0;
+  width: 55%; height: 75%;
+  object-fit: cover;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+  z-index: 2;
+}
+
+/* Amenities Section */
+.amenities-section {
+  padding: 6rem 0;
+  background-color: #fff;
+  text-align: center;
+}
+.amenities-title {
+  font-size: 3rem;
+  margin-bottom: 4rem;
+}
+.amenities-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+}
+.am-card {
+  height: 400px;
+  position: relative;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 2rem 1.5rem;
+  text-align: left;
+  color: white;
+}
+.am-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 60%);
+}
+.am-card > * { position: relative; z-index: 2; }
+.am-card h3 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+.am-card p { font-size: 0.65rem; letter-spacing: 1px; text-transform: uppercase; opacity: 0.8; }
+
+/* Contact Section */
+.contact-section {
+  padding: 8rem 0;
+  position: relative;
+  background-image: url('/landing_hero_building_1777792553808.png');
+  background-size: cover;
+  background-position: center;
+}
+.contact-overlay {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(17, 54, 41, 0.93);
+}
+.contact-content {
+  position: relative; z-index: 2;
+  text-align: center;
+  color: white;
+}
+.contact-title {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+.contact-desc {
+  font-size: 0.9rem;
+  opacity: 0.8;
+  max-width: 600px;
+  margin: 0 auto 4rem auto;
+}
+.contact-form {
+  max-width: 800px;
+  margin: 0 auto;
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 3rem;
+  background: rgba(255,255,255,0.03);
+  backdrop-filter: blur(10px);
+}
+.form-row {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;
+}
+.c-input {
+  width: 100%;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 1rem;
+  color: white;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  outline: none;
+}
+.c-input:focus { border-color: rgba(255,255,255,0.3); }
+.c-input::placeholder { color: rgba(255,255,255,0.5); }
+textarea.c-input { height: 120px; resize: none; margin-bottom: 2rem; }
