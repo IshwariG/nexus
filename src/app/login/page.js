@@ -75,22 +75,47 @@ export default function LoginPage() {
                   Proceed to Login →
                 </button>
               </div>
+
+              {/* Buyer Card */}
+              <div className="access-card">
+                <div className="icon-wrapper">
+                  <span className="icon">🔑</span>
+                </div>
+                <h3>Buyer Access</h3>
+                <p>Track your flat's construction progress, manage payments, and access exclusive owner documentation.</p>
+                <button className="btn btn-primary access-btn" style={{background: '#113629'}} onClick={() => handleSelectRole('Buyer')}>
+                  Proceed to Login →
+                </button>
+              </div>
             </div>
           </div>
         ) : (
           <div className="form-view animate-fade-in">
             <div className="login-modal">
               <div className="modal-header">
-                <h3>{role} Executive Login</h3>
-                <p>Enter your credentials to access the portfolio dashboard.</p>
+                <h3>{role === 'Buyer' ? 'Owner Portal' : `${role} Executive`} Login</h3>
+                <p>{role === 'Buyer' ? 'Enter your owner credentials to view your residence details.' : 'Enter your credentials to access the portfolio dashboard.'}</p>
               </div>
               
               <form className="login-form" onSubmit={handleSubmit}>
                 <div className="form-group">
-                  <label>{role === 'Sales' ? 'Sales Representative ID' : 'Admin ID'}</label>
+                  <label>
+                    {role === 'Sales' ? 'Sales Representative ID' : 
+                     role === 'Buyer' ? 'Owner / Buyer ID' : 
+                     'Admin ID'}
+                  </label>
                   <div className="input-with-icon">
                     <span className="input-icon">👤</span>
-                    <input type="text" name="username" placeholder={role === 'Sales' ? 'SR-XXXXX' : 'ADM-XXXX'} required />
+                    <input 
+                      type="text" 
+                      name="username" 
+                      placeholder={
+                        role === 'Sales' ? 'SR-XXXXX' : 
+                        role === 'Buyer' ? 'Enter your assigned Username' : 
+                        'ADM-XXXX'
+                      } 
+                      required 
+                    />
                   </div>
                 </div>
                 
@@ -106,15 +131,17 @@ export default function LoginPage() {
                   <label className="checkbox-label">
                     <input type="checkbox" /> Remember device
                   </label>
-                  <a href="#" className="forgot-link">Forgot {role === 'Sales' ? 'Sales ID' : 'Admin ID'}?</a>
+                  <a href="#" className="forgot-link">
+                    Forgot {role === 'Sales' ? 'Sales ID' : role === 'Buyer' ? 'Username' : 'Admin ID'}?
+                  </a>
                 </div>
                 
-                <button type="submit" className="btn btn-primary auth-btn">
-                  AUTHENTICATE ACCOUNT
+                <button type="submit" className="btn btn-primary auth-btn" style={{background: role === 'Buyer' ? '#113629' : 'var(--vanya-gold)'}}>
+                  {role === 'Buyer' ? 'ENTER OWNER PORTAL' : 'AUTHENTICATE ACCOUNT'}
                 </button>
                 
                 <div className="restricted-badge">
-                  <span>Restricted Access</span>
+                  <span>{role === 'Buyer' ? 'Secure Access' : 'Restricted Access'}</span>
                 </div>
               </form>
             </div>

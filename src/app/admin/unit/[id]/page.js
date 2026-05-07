@@ -155,7 +155,7 @@ export default function UnitDetailsPage({ params }) {
               <div className="ud-hero-title">
                  <div className="ud-badges">
                     <span className="ud-badge">UNIT V-{displayUnit.unit_id}</span>
-                    <span className="ud-badge outline">4BHK PENTHOUSE</span>
+                    <span className="ud-badge outline">{displayUnit.type || 'LUXURY APARTMENT'}</span>
                  </div>
                  <h1>The Amaranta<br/>Sky-Villa</h1>
                  <p className="ud-hero-subtitle">
@@ -260,74 +260,56 @@ export default function UnitDetailsPage({ params }) {
 
            <div className="ud-content-right">
               <div className="ud-context-card">
-                 <div className="ud-context-header">
-                    <h3>Negotiation Context</h3>
-                    <span style={{background:'#e3f2fd', color:'#1565c0', padding:'4px 8px', fontSize:'0.6rem', fontWeight:600, letterSpacing:'1px'}}>HIGH INTENT</span>
+                 <div className="ud-context-header" style={{marginBottom: '1rem'}}>
+                    <h3 className="serif" style={{color: '#113629'}}>Schedule Unit Visit</h3>
+                    <span style={{background:'#e8f5e9', color:'#2e7d32', padding:'4px 8px', fontSize:'0.6rem', fontWeight:600, letterSpacing:'1px'}}>ACTION REQUIRED</span>
                  </div>
+                 <p style={{color: '#666', fontSize: '0.8rem', marginBottom: '1.5rem'}}>Schedule a guided on-site visit or virtual walkthrough for this specific unit.</p>
                  
-                 <div className="ud-client-profile">
-                    <div className="ud-client-avatar" style={{backgroundImage: "url('/images/unit_interior_1777642600392.png')"}}></div>
-                    <div className="ud-client-info">
-                       <h4>Mr. Aditiya Vardhan</h4>
-                       <p>Managing Director, AV Capital</p>
-                    </div>
-                 </div>
-
-                 <div className="ud-offers-grid">
-                    <div className="ud-offer-box">
-                       <p>CURRENT OFFER</p>
-                       <h3>₹ 14.25 <span style={{fontSize:'0.7rem', color:'#888'}}>Cr</span></h3>
-                    </div>
-                    <div className="ud-offer-box">
-                       <p>EXPECTED CLOSURE</p>
-                       <h3>Q4 2024</h3>
-                    </div>
-                 </div>
-
-                 <p className="ud-timeline-title">LATEST FOLLOW-UP NOTES</p>
-                 <div className="ud-notes">
-                    "Client requested a second walkthrough with their interior designer next Tuesday. Interested in additional custom wiring for a dedicated home theater in the 4th bedroom. Discussed flexible payment plan options."
-                 </div>
-
-                 <p className="ud-timeline-title">INTERACTION TIMELINE</p>
-                 <div className="ud-timeline">
-                    <div className="ud-timeline-item">
-                       <div className="ud-timeline-dot active"></div>
-                       <div className="ud-timeline-content">
-                          <p>SEP 12, 2024</p>
-                          <span><strong>On-site</strong> visit with family. High interest in the west-facing terrace.</span>
-                       </div>
-                    </div>
-                    <div className="ud-timeline-item">
-                       <div className="ud-timeline-dot"></div>
-                       <div className="ud-timeline-content">
-                          <p>SEP 05, 2024</p>
-                          <span><strong>Virtual walkthrough</strong> completed. Pricing slab shared via secure portal.</span>
-                       </div>
-                    </div>
-                    <div className="ud-timeline-item">
-                       <div className="ud-timeline-dot"></div>
-                       <div className="ud-timeline-content">
-                          <p>AUG 28, 2024</p>
-                          <span><strong>Initial</strong> lead generation via Private Concierge network.</span>
-                       </div>
-                    </div>
-                 </div>
-
-                 <button className="ud-action-btn">
-                    📞 INITIATE CALL
-                 </button>
-                 
-                 <div className="ud-secondary-actions">
-                    <button className="ud-secondary-btn">
-                       <span>🕒</span>
-                       SCHEDULE VISIT
-                    </button>
-                    <button className="ud-secondary-btn">
-                       <span>📄</span>
-                       SHARED DOCS
-                    </button>
-                 </div>
+                 <form onSubmit={async (e) => {
+                   e.preventDefault();
+                   const fd = new FormData(e.target);
+                   const data = Object.fromEntries(fd);
+                   await fetch('/api/inquiries', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({
+                       name: data.client_name,
+                       email: data.client_email || '',
+                       phone: data.client_phone,
+                       message: `Scheduled Visit for Unit ${displayUnit.unit_id} on ${data.visit_date} at ${data.visit_time}. Notes: ${data.notes}`,
+                       source: 'UNIT_VISIT_SCHEDULED'
+                     })
+                   });
+                   alert('Visit scheduled successfully! The lead has been added to the pipeline.');
+                   e.target.reset();
+                 }} style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
+                   <div>
+                      <label style={{display:'block', fontSize:'0.7rem', fontWeight:'bold', color:'#888', marginBottom:'0.3rem'}}>CLIENT NAME *</label>
+                      <input type="text" name="client_name" required style={{width: '100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px'}} />
+                   </div>
+                   <div>
+                      <label style={{display:'block', fontSize:'0.7rem', fontWeight:'bold', color:'#888', marginBottom:'0.3rem'}}>PHONE NUMBER *</label>
+                      <input type="tel" name="client_phone" required style={{width: '100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px'}} />
+                   </div>
+                   <div style={{display: 'flex', gap: '1rem'}}>
+                     <div style={{flex: 1}}>
+                        <label style={{display:'block', fontSize:'0.7rem', fontWeight:'bold', color:'#888', marginBottom:'0.3rem'}}>DATE *</label>
+                        <input type="date" name="visit_date" required style={{width: '100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px'}} />
+                     </div>
+                     <div style={{flex: 1}}>
+                        <label style={{display:'block', fontSize:'0.7rem', fontWeight:'bold', color:'#888', marginBottom:'0.3rem'}}>TIME *</label>
+                        <input type="time" name="visit_time" required style={{width: '100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px'}} />
+                     </div>
+                   </div>
+                   <div>
+                      <label style={{display:'block', fontSize:'0.7rem', fontWeight:'bold', color:'#888', marginBottom:'0.3rem'}}>ADDITIONAL NOTES</label>
+                      <textarea name="notes" rows="3" style={{width: '100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px', resize: 'none'}}></textarea>
+                   </div>
+                   <button type="submit" className="ud-action-btn" style={{marginTop: '0.5rem', cursor: 'pointer', background: '#113629', color: 'white', border: 'none', padding: '1rem', width: '100%', borderRadius: '4px', fontWeight: 'bold', letterSpacing: '1px'}}>
+                      CONFIRM SCHEDULE
+                   </button>
+                 </form>
               </div>
            </div>
         </section>

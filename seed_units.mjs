@@ -29,8 +29,8 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function seed() {
   const units = [];
-  // 5 levels, 10 units each (101-110, 201-210, etc.)
-  for(let lvl = 1; lvl <= 5; lvl++) {
+  // 10 levels, 10 units each (101-110 to 1001-1010)
+  for(let lvl = 1; lvl <= 10; lvl++) {
     for(let i = 1; i <= 10; i++) {
       const unitId = lvl * 100 + i;
       units.push({

@@ -4,46 +4,95 @@ import { cookies } from 'next/headers';
 import Link from 'next/link';
 import PortfolioTable from './PortfolioTable';
 import GridClient from './GridClient';
+import InquiryPipelineClient from './InquiryPipelineClient';
+import SalesmanNewInquiryClient from './SalesmanNewInquiryClient';
+import AdminAddBuyerClient from './AdminAddBuyerClient';
+import BuyerPaymentClient from './BuyerPaymentClient';
+import AdminUpdateBuyerClient from './AdminUpdateBuyerClient';
 
 function SalesView({ inquiries, units, userId }) {
-  // Generate grid levels 1-5 validation
-  const gridLevels = [5, 4, 3, 2, 1];
+  // Generate grid levels 1-10 validation
   const validUnits = units.filter(u => {
     const id = parseInt(u.unit_id);
     const floor = Math.floor(id / 100);
-    return gridLevels.includes(floor) && (id % 100) >= 1 && (id % 100) <= 10;
+    return floor >= 1 && floor <= 10 && (id % 100) >= 1 && (id % 100) <= 10;
   });
 
-  const assignedUnits = validUnits.slice(0, 20); // Assign 20 flats to Salesman
+  // Assign distinct 20 flats to each salesman
+  let assignedUnits = [];
+  if (userId === 'SR-9999') {
+    assignedUnits = validUnits.filter(u => ['1', '2'].includes(u.floor));
+  } else if (userId === 'SR-1111') {
+    assignedUnits = validUnits.filter(u => ['3', '4'].includes(u.floor));
+  } else if (userId === 'SR-2222') {
+    assignedUnits = validUnits.filter(u => ['5', '6'].includes(u.floor));
+  } else if (userId === 'SR-3333') {
+    assignedUnits = validUnits.filter(u => ['7', '8'].includes(u.floor));
+  } else if (userId === 'SR-4444') {
+    assignedUnits = validUnits.filter(u => ['9', '10'].includes(u.floor));
+  } else {
+    assignedUnits = validUnits.slice(0, 20); // Fallback
+  }
   const totalAssigned = assignedUnits.length;
   const soldUnits = assignedUnits.filter(u => u.status === 'SOLD OUT').length;
   const inNegotiation = assignedUnits.filter(u => u.status === 'IN NEGOTIATION' || u.status === 'RESERVED').length;
-  const visibleInquiries = inquiries.filter(i => i.status !== 'SOLD OUT');
-  const pendingLeads = visibleInquiries.length;
+  const availableUnits = assignedUnits.filter(u => u.status === 'AVAILABLE').length;
+
+  const salesmanNames = {
+    'SR-9999': 'Vikram Sethi',
+    'SR-1111': 'Ananya Rao',
+    'SR-2222': 'Karan Malhotra',
+    'SR-3333': 'Priya Sharma',
+    'SR-4444': 'Rohan Verma'
+  };
+
+  // Filter inquiries assigned to this salesman
+  const visibleInquiries = inquiries.filter(inq => {
+    if (!inq.status) return false;
+    const parts = inq.status.split('|');
+    return parts.length > 1 && parts[1] === userId;
+  });
 
   return (
     <div className="sales-layout">
       <aside className="sales-sidebar">
         <div className="sales-sidebar-logo">
-          <h2>VANYA</h2>
-          <p>EXECUTIVE DIGITAL</p>
+          <h2>EXECUTIVE PORTAL</h2>
+          <p>VANYA RESIDENCES</p>
+        </div>
+        <div className="sales-profile mt-2 mb-2">
+          <div className="sales-avatar">VS</div>
+          <div>
+            <strong>{salesmanNames[userId] || 'Executive'}</strong>
+            <span className="text-muted" style={{display:'block', fontSize:'0.75rem', marginTop:'0.2rem'}}>ID: {userId}</span>
+          </div>
         </div>
         <nav className="sales-nav">
-          <Link href="/admin" className="active">Dashboard</Link>
-          <Link href="/inventory">Inventory</Link>
-          <a href="#">Leads</a>
-          <a href="#">Analytics</a>
-          <a href="#">Amenities</a>
+          <a href="#" className="active">Overview</a>
+          <a href="#">My Portfolio</a>
+          <a href="#">Active Leads <span className="badge-count">{visibleInquiries.length}</span></a>
+          <a href="#">Client Messages</a>
         </nav>
-        <div className="sales-bottom">
-          <button className="btn-sales-new">+ NEW INQUIRY</button>
+        
+        <div className="sales-bottom mt-auto">
+          <SalesmanNewInquiryClient userId={userId} />
+          <form action={async () => {
+             "use server";
+             const cookieStore = await cookies();
+             cookieStore.delete('user_role');
+             cookieStore.delete('user_id');
+             const { redirect } = await import('next/navigation');
+             redirect('/');
+          }}>
+            <button type="submit" className="btn-outline mt-1" style={{width: '100%'}}>LOGOUT</button>
+          </form>
         </div>
       </aside>
 
       <main className="sales-main">
         <div className="sales-hero">
           <div className="hero-greeting-box">
-            <h1 className="serif">Namaste, {userId}</h1>
+            <h1 className="serif">Namaste, {salesmanNames[userId]?.split(' ')[0] || 'Executive'}</h1>
             <p>Executive Sales Portal — Vanya Residences Heritage Collection</p>
           </div>
         </div>
@@ -56,23 +105,24 @@ function SalesView({ inquiries, units, userId }) {
             </div>
             <div className="sales-stat-card">
               <span>UNITS SOLD</span>
-              <h2>{soldUnits}</h2>
+              <h2 className="c-sold">{soldUnits}</h2>
             </div>
             <div className="sales-stat-card">
               <span>IN NEGOTIATION</span>
-              <h2>{inNegotiation}</h2>
+              <h2 className="text-blue">{inNegotiation}</h2>
             </div>
             <div className="sales-stat-card">
               <span>PENDING LEADS</span>
-              <h2>{pendingLeads}</h2>
+              <h2>{visibleInquiries.length}</h2>
             </div>
           </div>
 
-          <div className="widget-card">
+          <div className="widget-card mb-2">
             <h3 className="section-title serif">Portfolio Inventory</h3>
             <PortfolioTable assignedUnits={assignedUnits} />
           </div>
 
+        <div className="sales-grid">
           <div className="widget-card">
             <div className="flex-between">
               <h3 className="section-title serif" style={{margin:0}}>Active Inquiry Pipeline <span className="badge sold">URGENT</span></h3>
@@ -89,15 +139,33 @@ function SalesView({ inquiries, units, userId }) {
                 </tr>
               </thead>
               <tbody>
-                {visibleInquiries.length > 0 ? visibleInquiries.map(inq => (
-                  <tr key={inq.id}>
-                    <td><strong>{inq.name}</strong><br/><span className="text-muted">NEW DELHI</span></td>
+                {visibleInquiries.length > 0 ? visibleInquiries.map((inq, i) => {
+                  let city = "UNKNOWN LOCATION";
+                  if (inq.message) {
+                    const match = inq.message.match(/Pincode:\s*(\d{6})/i);
+                    if (match) {
+                      const pin = match[1];
+                      if (pin.startsWith('11')) city = 'NEW DELHI';
+                      else if (pin.startsWith('40')) city = 'MUMBAI';
+                      else if (pin.startsWith('56')) city = 'BANGALORE';
+                      else if (pin.startsWith('50')) city = 'HYDERABAD';
+                      else if (pin.startsWith('60')) city = 'CHENNAI';
+                      else if (pin.startsWith('70')) city = 'KOLKATA';
+                      else if (pin.startsWith('41')) city = 'PUNE';
+                      else if (pin.startsWith('38')) city = 'AHMEDABAD';
+                      else city = `PIN: ${pin}`;
+                    }
+                  }
+                  
+                  return (
+                  <tr key={inq.id || i}>
+                    <td><strong>{inq.name}</strong><br/><span className="text-muted">{city}</span></td>
                     <td className="text-muted">📞 {inq.phone}<br/>✉️ {inq.email}</td>
-                    <td><span style={{background: '#f5f5f5', padding: '4px 8px', fontSize: '0.65rem'}}>{inq.source}</span></td>
+                    <td><span style={{background: '#f5f5f5', padding: '4px 8px', fontSize: '0.65rem'}}>{inq.source?.replace(/_.*/, '')}</span></td>
                     <td className="text-muted">{new Date(inq.created_at).toLocaleDateString()}</td>
                    
                   </tr>
-                )) : <tr><td colSpan="5">No active leads.</td></tr>}
+                )}) : <tr><td colSpan="5">No active leads.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -120,7 +188,7 @@ function SalesView({ inquiries, units, userId }) {
                 </div>
              </div>
           </div>
-
+        </div>
         </div>
       </main>
     </div>
@@ -128,24 +196,268 @@ function SalesView({ inquiries, units, userId }) {
 }
 
 
-function AdminView({ inquiries, units }) {
-  // Generate grid: LVL05 to LVL01
-  const gridLevels = [5, 4, 3, 2, 1];
-
-  // Only count units that actually belong in our 5-floor Master Grid to prevent mismatches
-  const validUnits = units.filter(u => {
-    const id = parseInt(u.unit_id);
-    const floor = Math.floor(id / 100);
-    return gridLevels.includes(floor) && (id % 100) >= 1 && (id % 100) <= 10;
-  });
-
-  const soldUnits = validUnits.filter(u => u.status === 'SOLD OUT').length;
-  const reservedUnits = validUnits.filter(u => u.status === 'RESERVED' || u.status === 'IN NEGOTIATION').length;
-  const availableUnits = validUnits.filter(u => u.status === 'AVAILABLE').length;
-  const totalUnits = validUnits.length || 1;
+function BuyerView({ userId, buyerDetails }) {
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  const milestones = buyerDetails?.milestones || [
+    { step: "Foundation", status: "COMPLETED" },
+    { step: "Structure", status: "IN PROGRESS" },
+    { step: "Finishing", status: "PENDING" },
+    { step: "Handover", status: "PENDING" }
+  ];
 
   return (
-    <div className="admin-layout">
+    <div className={`admin-layout ${showMobileSidebar ? 'sidebar-open' : ''}`} style={{background: '#fcfcfc'}}>
+      {/* Mobile Header */}
+      <div className="mobile-header" style={{
+        display: 'none', 
+        padding: '1rem', 
+        background: '#fff', 
+        borderBottom: '1px solid #eee',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}>
+        <div style={{display: 'flex', alignItems: 'center', gap: '0.75rem'}}>
+          <button 
+            onClick={() => setShowMobileSidebar(!showMobileSidebar)}
+            style={{background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer'}}
+          >
+            ☰
+          </button>
+          <span className="serif" style={{fontWeight: 700, fontSize: '1rem'}}>MY VANYA</span>
+        </div>
+        <div style={{width: '32px', height: '32px', background: '#c9a96e', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.8rem'}}>B</div>
+      </div>
+
+      {/* Sidebar overlay for mobile */}
+      <div 
+        className="sidebar-overlay" 
+        style={{display: showMobileSidebar ? 'block' : 'none'}}
+        onClick={() => setShowMobileSidebar(false)}
+      ></div>
+
+      <aside className="admin-sidebar" style={{background: '#113629'}}>
+        <div className="admin-sidebar-logo">
+          <h2 className="serif" style={{color: 'white'}}>MY VANYA</h2>
+          <p style={{color: 'rgba(255,255,255,0.6)'}}>OWNER PORTAL</p>
+        </div>
+        <nav className="admin-nav">
+          <a href="#" className="active" style={{color: '#fff', background: 'rgba(255,255,255,0.1)'}}><span className="nav-icon">🏠</span> Residence Overview</a>
+          <a href="#" style={{color: 'rgba(255,255,255,0.6)'}}><span className="nav-icon">🏗️</span> Construction Log</a>
+          <a href="#" style={{color: 'rgba(255,255,255,0.6)'}}><span className="nav-icon">💳</span> Financials</a>
+          <a href="#" style={{color: 'rgba(255,255,255,0.6)'}}><span className="nav-icon">📂</span> Documents</a>
+        </nav>
+        
+        <div className="admin-user mt-auto" style={{
+          borderTop: '1px solid rgba(255,255,255,0.1)', 
+          padding: '1.5rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '1rem'
+        }}>
+          <div className="admin-avatar" style={{
+            background: '#c9a96e', 
+            color: '#fff', 
+            fontWeight: 'bold',
+            flexShrink: 0,
+            width: '40px',
+            height: '40px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '50%'
+          }}>{userId?.charAt(0).toUpperCase()}</div>
+          <div style={{display: 'flex', flexDirection: 'column', overflow: 'hidden'}}>
+            <strong style={{
+              color: 'white', 
+              fontSize: '0.9rem', 
+              whiteSpace: 'nowrap', 
+              overflow: 'hidden', 
+              textOverflow: 'ellipsis',
+              display: 'block'
+            }}>{userId}</strong>
+            <span style={{color: 'rgba(255,255,255,0.6)', fontSize: '0.65rem', letterSpacing: '0.5px'}}>RESIDENT OWNER</span>
+          </div>
+        </div>
+        <form action={async () => {
+           "use server";
+           const cookieStore = await cookies();
+           cookieStore.delete('user_role');
+           cookieStore.delete('user_id');
+           const { redirect } = await import('next/navigation');
+           redirect('/');
+        }}>
+          <button type="submit" className="btn-outline mt-1" style={{width: '90%', margin: '0 auto 1.5rem auto', borderColor: 'rgba(255,255,255,0.2)', color: '#fff'}}>LOGOUT</button>
+        </form>
+      </aside>
+
+      <main className="admin-main" style={{padding: '2rem 3rem'}}>
+        <div className="admin-header" style={{background: 'transparent', border: 'none', padding: 0, marginBottom: '2.5rem'}}>
+          <div>
+            <h1 className="serif" style={{fontSize: '2.4rem'}}>Welcome to Vanya, {userId}</h1>
+            <p className="text-muted" style={{fontSize: '0.8rem', letterSpacing: '1px'}}>UNIT {buyerDetails?.unit_id || '101'} • HERITAGE COLLECTION • TOWER A</p>
+          </div>
+          <div style={{display: 'flex', gap: '1.5rem', alignItems: 'center'}}>
+             <div style={{textAlign: 'right'}}>
+                <p className="text-muted" style={{fontSize: '0.65rem', marginBottom: '0.2rem'}}>ESTIMATED POSSESSION</p>
+                <strong style={{color: '#113629'}}>{buyerDetails?.possession_date || 'DECEMBER 2027'}</strong>
+             </div>
+             <span className="icon-bell" style={{fontSize: '1.2rem'}}>🔔</span>
+          </div>
+        </div>
+
+        <div className="grid-2">
+          {/* Construction Progress Card */}
+          <div className="widget-card" style={{padding: '0', overflow: 'hidden'}}>
+            <div style={{
+              backgroundImage: "url('/images/uc1.png')",
+              height: '240px',
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              position: 'relative'
+            }}>
+              <div style={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0, bottom: 0,
+                background: 'linear-gradient(to top, rgba(17,54,41,0.9) 0%, transparent 70%)'
+              }}></div>
+              <div style={{position: 'absolute', bottom: '1.5rem', left: '2rem', color: '#fff'}}>
+                <span className="badge" style={{background: '#c9a96e', color: '#fff', marginBottom: '0.5rem'}}>SITE UPDATE: MAY 2026</span>
+                <h3 className="serif" style={{margin: 0, fontSize: '1.4rem'}}>Tower A: Structural Phase</h3>
+              </div>
+            </div>
+            
+            <div style={{padding: '2rem'}}>
+              <div className="flex-between" style={{marginBottom: '0.5rem'}}>
+                <h4 className="serif" style={{fontSize: '1.1rem'}}>Global Project Progress</h4>
+                <span style={{fontWeight: '700', color: '#113629'}}>{buyerDetails?.construction_progress || 35}%</span>
+              </div>
+              <div style={{background: '#f0f0f0', height: '8px', borderRadius: '4px', overflow: 'hidden', marginBottom: '1.5rem'}}>
+                <div style={{background: '#113629', width: `${buyerDetails?.construction_progress || 35}%`, height: '100%', borderRadius: '4px'}}></div>
+              </div>
+              
+              <div className="milestones-list" style={{borderTop: '1px solid #f0f0f0', paddingTop: '1.5rem'}}>
+                {milestones.map((m, i) => (
+                  <div key={i} className="flex-between" style={{marginBottom: '0.8rem', opacity: m.status === 'PENDING' ? 0.4 : 1}}>
+                    <div style={{display: 'flex', gap: '1rem', alignItems: 'center'}}>
+                      <div style={{
+                        width: '24px', height: '24px', borderRadius: '50%', 
+                        background: m.status === 'COMPLETED' ? '#113629' : m.status === 'IN PROGRESS' ? '#c9a96e' : '#eee',
+                        display: 'flex', alignItems: 'center', justifyCenter: 'center', color: '#fff', fontSize: '0.7rem'
+                      }}>
+                        {m.status === 'COMPLETED' ? '✓' : ''}
+                      </div>
+                      <span style={{fontSize: '0.85rem', fontWeight: 500}}>{m.step}</span>
+                    </div>
+                    <span style={{fontSize: '0.65rem', fontWeight: 700, color: m.status === 'IN PROGRESS' ? '#c9a96e' : '#777'}}>{m.status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-column" style={{display: 'flex', flexDirection: 'column', gap: '1.5rem'}}>
+            {/* Financial Card */}
+            <div className="widget-card" style={{margin: 0}}>
+              <div className="flex-between mb-2">
+                <h3 className="serif">Financial Summary</h3>
+                <span className="text-muted">💳</span>
+              </div>
+              <div className="flex-between" style={{alignItems: 'flex-end', marginBottom: '1.5rem'}}>
+                <div>
+                  <p className="text-muted" style={{fontSize: '0.7rem', textTransform: 'uppercase', marginBottom: '0.5rem'}}>OWNERSHIP VALUE</p>
+                  <h2 className="serif" style={{margin: 0, fontSize: '2rem'}}>{buyerDetails?.total_amount || '₹ 14.25 Cr'}</h2>
+                </div>
+                <div style={{textAlign: 'right'}}>
+                  <p className="text-muted" style={{fontSize: '0.7rem', textTransform: 'uppercase', marginBottom: '0.5rem'}}>EQUITY PAID</p>
+                  <h3 className="serif" style={{margin: 0, color: '#2e7d32'}}>{buyerDetails?.amount_paid || '₹ 5.00 Cr'}</h3>
+                </div>
+              </div>
+              
+              <div style={{background: '#f8fafc', padding: '1.5rem', borderRadius: '12px', border: '1px solid #edf2f7'}}>
+                <div className="flex-between">
+                   <span style={{fontSize: '0.8rem', fontWeight: 600}}>Next Scheduled Payment</span>
+                   <span className="badge" style={{background: '#fff3e0', color: '#ef6c00'}}>DUE IN 12 DAYS</span>
+                </div>
+                <div className="flex-between mt-1">
+                   <h3 className="serif" style={{margin: 0}}>₹ 1.25 Cr</h3>
+                   <span className="text-muted" style={{fontSize: '0.75rem'}}>{buyerDetails?.next_payment_date || 'June 15, 2026'}</span>
+                </div>
+              </div>
+              <BuyerPaymentClient unitId={buyerDetails?.unit_id || '101'} amountDue="₹ 1.25 Cr" />
+            </div>
+
+            <div className="widget-card" style={{margin: 0, flex: 1}}>
+              <h3 className="serif mb-2">Essential Documents</h3>
+              <div style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
+                <div className="flex-between" style={{padding: '1rem', border: '1px solid #f0f0f0', borderRadius: '10px'}}>
+                  <div style={{display: 'flex', gap: '1rem', alignItems: 'center'}}>
+                    <span style={{fontSize: '1.5rem'}}>📄</span>
+                    <div>
+                      <p style={{margin: 0, fontSize: '0.85rem', fontWeight: 600}}>Registered Sale Agreement</p>
+                      <span className="text-muted" style={{fontSize: '0.7rem'}}>PDF • 4.2 MB</span>
+                    </div>
+                  </div>
+                  <a href="/sale_agreement.pdf" download="Vanya_Sale_Agreement.pdf" className="text-blue" style={{textDecoration: 'none', fontWeight: 700}}>DOWNLOAD</a>
+                </div>
+                <div className="flex-between" style={{padding: '1rem', border: '1px solid #f0f0f0', borderRadius: '10px'}}>
+                  <div style={{display: 'flex', gap: '1rem', alignItems: 'center'}}>
+                    <span style={{fontSize: '1.5rem'}}>🏗️</span>
+                    <div>
+                      <p style={{margin: 0, fontSize: '0.85rem', fontWeight: 600}}>Unit Specification & Floor Plan</p>
+                      <span className="text-muted" style={{fontSize: '0.7rem'}}>PDF • 2.1 MB</span>
+                    </div>
+                  </div>
+                  <a href="/floor_plan.pdf" download="Vanya_Floor_Plan.pdf" className="text-blue" style={{textDecoration: 'none', fontWeight: 700}}>DOWNLOAD</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+
+function AdminView({ inquiries, units, buyers }) {
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  
+  return (
+    <div className={`admin-layout ${showMobileSidebar ? 'sidebar-open' : ''}`}>
+      {/* Mobile Header */}
+      <div className="mobile-header" style={{
+        display: 'none', 
+        padding: '1rem', 
+        background: '#fff', 
+        borderBottom: '1px solid #eee',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}>
+        <div style={{display: 'flex', alignItems: 'center', gap: '0.75rem'}}>
+          <button 
+            onClick={() => setShowMobileSidebar(!showMobileSidebar)}
+            style={{background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer'}}
+          >
+            ☰
+          </button>
+          <span className="serif" style={{fontWeight: 700, fontSize: '1rem'}}>VANYA ADMIN</span>
+        </div>
+        <div style={{width: '32px', height: '32px', background: 'var(--vanya-green)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.8rem'}}>A</div>
+      </div>
+
+      {/* Sidebar overlay for mobile */}
+      <div 
+        className="sidebar-overlay" 
+        style={{display: showMobileSidebar ? 'block' : 'none'}}
+        onClick={() => setShowMobileSidebar(false)}
+      ></div>
+
       <aside className="admin-sidebar">
         <div className="admin-sidebar-logo">
           <h2 className="serif">VANYA RESIDENCES</h2>
@@ -158,26 +470,51 @@ function AdminView({ inquiries, units }) {
           <a href="/inventory">
             <span className="nav-icon">🏢</span> Inventory
           </a>
-          <a href="#">
+          <a href="#pipeline">
             <span className="nav-icon">👥</span> Leads
           </a>
-          <a href="#">
+          <a href="#buyers">
+            <span className="nav-icon">🔐</span> Buyers
+          </a>
+          <a href="#analytics">
             <span className="nav-icon">📈</span> Analytics
           </a>
           <a href="#">
-            <span className="nav-icon">💳</span> Payments
+            <span className="nav-icon">⚙️</span> Settings
           </a>
         </nav>
-        <div className="admin-bottom">
-          <div className="admin-profile">
-            <div className="admin-avatar"></div>
-            <div>
-              <strong>Admin Portal</strong>
-              <span>SYSTEM EXECUTIVE</span>
-            </div>
+        
+        <div className="admin-user mt-auto" style={{
+          padding: '1.5rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '1rem',
+          borderTop: '1px solid #f0f0f0'
+        }}>
+          <div className="admin-avatar" style={{
+            background: 'var(--vanya-green)',
+            color: '#fff',
+            width: '40px',
+            height: '40px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '50%',
+            fontWeight: 'bold',
+            flexShrink: 0
+          }}>A</div>
+          <div style={{display: 'flex', flexDirection: 'column', overflow: 'hidden'}}>
+            <strong style={{
+              fontSize: '0.9rem', 
+              color: '#111',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}>Admin Portal</strong>
+            <span style={{fontSize: '0.65rem', color: '#b0b8c4'}}>SYSTEM EXECUTIVE</span>
           </div>
-          <button className="btn-dark mt-2" style={{width: '100%'}}>NEW INQUIRY</button>
         </div>
+        <button className="btn-dark mt-2" style={{width: '100%'}}>NEW INQUIRY</button>
       </aside>
 
       <main className="admin-main">
@@ -193,184 +530,65 @@ function AdminView({ inquiries, units }) {
           </div>
         </div>
 
-        {/* Analytical Performance Report */}
-        <div className="performance-section mb-2">
-          <div style={{ textAlign: 'center' }}>
-            <div>
-              <h3 className="serif" style={{margin:0}}>Analytical Performance Report</h3>
-              <p className="text-muted" style={{margin:0, fontSize:'0.8rem'}}>Aggregate sales intelligence & velocity tracking</p>
-            </div>
-            
-          </div>
-
-          <div className="perf-grid-top mt-2">
-            <div className="perf-card text-center">
-              <p className="perf-label">INVENTORY DISTRIBUTION</p>
-              <div className="donut-chart-mock" style={{
-                background: `conic-gradient(
-                  #8b1c1c 0% ${(soldUnits/totalUnits)*100}%,
-                  #1a4d8c ${(soldUnits/totalUnits)*100}% ${((soldUnits+reservedUnits)/totalUnits)*100}%,
-                  #2e7d32 ${((soldUnits+reservedUnits)/totalUnits)*100}% 100%
-                )`
-              }}>
-                 <div className="donut-inner">
-                   <h2 className="serif" style={{margin:0, fontSize:'2rem'}}>{totalUnits}</h2>
-                   <span style={{fontSize:'0.6rem', color:'#888', letterSpacing:'1px'}}>TOTAL UNITS</span>
-                 </div>
-              </div>
-              <div className="donut-legend">
-                <span><span className="dot sold"></span> SOLD ({soldUnits}) <span className="p-val">{Math.round((soldUnits/totalUnits)*100)}%</span></span>
-                <span><span className="dot reserved"></span> RSVD ({reservedUnits}) <span className="p-val">{Math.round((reservedUnits/totalUnits)*100)}%</span></span>
-                <span><span className="dot available"></span> AVAL ({availableUnits}) <span className="p-val">{Math.round((availableUnits/totalUnits)*100)}%</span></span>
-              </div>
-            </div>
-            <div className="perf-card">
-              <div className="flex-between mb-1">
-                <p className="perf-label">MONTHLY SALES VELOCITY</p>
-                <div className="chart-legend">
-                  <span><span className="dot" style={{background: '#113629'}}></span> REVENUE</span>
-                  <span><span className="dot" style={{background: '#c62828'}}></span> TARGET</span>
-                </div>
-              </div>
-              <div className="bar-chart-mock">
-                <div className="bar-col"><div className="bar" style={{height:'40%'}}></div><span>JANUARY</span></div>
-                <div className="bar-col"><div className="bar" style={{height:'55%'}}></div><span>FEBRUARY</span></div>
-                <div className="bar-col"><div className="bar" style={{height:'50%'}}></div><span>MARCH</span></div>
-                <div className="bar-col"><div className="bar" style={{height:'80%'}}></div><span>APRIL</span></div>
-                <div className="bar-col"><div className="bar" style={{height:'65%'}}></div><span>MAY</span></div>
-                <div className="bar-col"><div className="bar" style={{height:'95%'}}></div><span>JUNE</span></div>
-              </div>
-            </div>
-            <div className="perf-card-stack">
-              <div className="perf-card p-small">
-                <p className="perf-label">AVG. PRICE PER UNIT</p>
-                <h2 className="serif m-0">$2.1M</h2>
-                <div className="progress-bar mt-1"><div className="progress" style={{width:'70%', background:'#113629'}}></div></div>
-              </div>
-              <div className="perf-card p-small">
-                <p className="perf-label">TOTAL PORTFOLIO VALUE</p>
-                <h2 className="serif m-0">$210.5M</h2>
-                <span className="text-green text-xs">+15.2% INCREASE</span>
-              </div>
-              <div className="perf-card p-small">
-                <p className="perf-label">CONVERSION RATE</p>
-                <h2 className="serif text-blue m-0">28.4%</h2>
-                <span className="text-muted text-xs">LEAD TO DEPOSIT</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="perf-grid-bottom mt-1">
-            <div className="perf-card flex-center-left">
-              <div>
-                <p className="perf-label">TOTAL REVENUE</p>
-                <h2 className="serif m-0">$142.6M</h2>
-                <span className="text-green text-xs font-bold">↗ +12.4% VS LAST QUARTER</span>
-              </div>
-              <div className="icon-bg ml-auto">🏛️</div>
-            </div>
-            <div className="perf-card flex-center-left">
-              <div style={{width:'100%'}}>
-                <p className="perf-label">UNITS SOLD</p>
-                <h2 className="serif m-0">{soldUnits} <span className="text-muted" style={{fontSize:'1rem'}}>/ {totalUnits}</span></h2>
-                <div className="progress-bar mt-1"><div className="progress" style={{width:`${(soldUnits/totalUnits)*100}%`, background: '#113629'}}></div></div>
-              </div>
-            </div>
-            <div className="perf-card flex-center-left">
-              <div>
-                <p className="perf-label">AVG. SALES CYCLE</p>
-                <h2 className="serif m-0">24 Days</h2>
-                <span className="text-blue text-xs font-bold">◷ -4 DAYS IMPROVEMENT</span>
-              </div>
-              <div className="icon-bg ml-auto">⏱️</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="widget-card">
-          <div className="flex-between align-start mb-1">
-            <div>
-              <h3 className="serif" style={{margin:'0 0 0.25rem 0'}}>Master Occupancies Grid</h3>
-              <p className="text-muted" style={{margin:0}}>Strategic architectural distribution tracking (LVL01 - LVL05)</p>
-            </div>
-            <div>
-              <div className="phase-buttons">
-                <button className="active">PHASE 1: UNITS 1-50</button>
-                <button>PHASE 2: UNITS 51-100</button>
-              </div>
-              <div className="occ-legend mt-1 right">
-                <span className="l-sold">SOLD</span>
-                <span className="l-reserved">RESERVED</span>
-                <span className="l-available">AVAILABLE</span>
-              </div>
-            </div>
-          </div>
-          
+        <div id="analytics">
           <GridClient units={units} inquiries={inquiries} />
-
-          <div className="occ-summary mt-3 text-center" style={{justifyContent: 'center', gap: '4rem'}}>
-            <div>
-              <span className="text-muted" style={{fontSize:'0.65rem', fontWeight:600, letterSpacing:'1px'}}>TOTAL SOLD PORTFOLIO</span>
-              <h2 className="serif c-sold" style={{fontSize: '2rem', margin:0}}>{soldUnits}</h2>
-            </div>
-            <div>
-              <span className="text-muted" style={{fontSize:'0.65rem', fontWeight:600, letterSpacing:'1px'}}>ACTIVE RESERVATIONS</span>
-              <h2 className="serif c-reserved" style={{fontSize: '2rem', margin:0}}>{reservedUnits}</h2>
-            </div>
-            <div>
-              <span className="text-muted" style={{fontSize:'0.65rem', fontWeight:600, letterSpacing:'1px'}}>INVENTORY AVAILABLE</span>
-              <h2 className="serif c-available" style={{fontSize: '2rem', margin:0}}>{availableUnits}</h2>
-            </div>
-          </div>
         </div>
 
-        <div className="widget-card">
-          <div className="flex-between mb-2">
-            <div>
-              <h3 className="serif" style={{margin:'0 0 0.25rem 0'}}>Master Inquiry Pipeline</h3>
-              <p className="text-muted" style={{margin:0}}>Unified tracking of cross-channel lead acquisition</p>
-            </div>
-            <div style={{display:'flex', gap:'1rem'}}>
-              <div className="search-box">
+        <div id="buyers" className="widget-card mt-2">
+           <div className="flex-between mb-2">
+             <div>
+               <h3 className="serif" style={{margin:0}}>Buyer Portal Management</h3>
+               <p className="text-muted" style={{margin:0}}>Update construction progress and financial records for owners</p>
+             </div>
+             <div style={{display:'flex', gap:'1rem'}}>
+               <div className="search-box">
                  <span className="search-icon">🔍</span>
-                 <input type="text" placeholder="FILTER BY CLIENT..." className="input-search" />
-              </div>
-              <button className="btn-dark">EXPORT LOG</button>
-            </div>
-          </div>
-          
-          <table className="table-standard">
-            <thead>
-              <tr>
-                <th>CLIENT & CONTACT</th>
-                <th>ASSIGNED SALESMAN</th>
-                <th>SOURCE</th>
-                <th>STATUS</th>
-                <th>TIMESTAMP</th>
-                
-              </tr>
-            </thead>
-            <tbody>
-              {inquiries.length > 0 ? inquiries.slice(0,4).map((inq, i) => (
-                <tr key={inq.id || i}>
-                  <td><strong>{inq.name.toUpperCase()}</strong><br/><span className="text-muted">{inq.email} <br/> {inq.phone}</span></td>
-                  <td>
-                    <div className="salesman-info">
-                       <div className="sm-avatar bg-blue">VS</div>
-                       <div><strong>Vikram Sethi</strong></div>
-                    </div>
-                  </td>
-                  <td><span className="source-pill">🌐 {inq.source?.toUpperCase() || 'WEBSITE PORTAL'}</span></td>
-                  <td><span className={`badge ${inq.status.toLowerCase().replace(' ', '-')}`}>{inq.status}</span></td>
-                  <td className="text-muted" style={{fontSize:'0.75rem'}}>{new Date(inq.created_at).toLocaleString('en-US', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</td>
-                  
-                </tr>
-              )) : <tr><td colSpan="6" style={{textAlign:'center', padding:'2rem'}}>No inquiries found.</td></tr>}
-            </tbody>
-          </table>
-          <div className="text-center mt-1 pt-1 border-t">
-             <a href="#" className="text-muted" style={{fontSize:'0.65rem', fontWeight:600, letterSpacing:'1px', textDecoration:'none'}}>VIEW ALL 248 INQUIRIES ⌄</a>
-          </div>
+                 <input className="input-search" placeholder="Search Buyers..." style={{width: '180px'}} />
+               </div>
+               <AdminAddBuyerClient />
+             </div>
+           </div>
+           <table className="table-standard">
+             <thead>
+               <tr>
+                 <th>BUYER NAME</th>
+                 <th>UNIT ID</th>
+                 <th>PROGRESS</th>
+                 <th>TOTAL DUE</th>
+                 <th>PAID</th>
+                 <th>ACTIONS</th>
+               </tr>
+             </thead>
+             <tbody>
+               {buyers?.length > 0 ? buyers.map((b, i) => (
+                 <tr key={i}>
+                   <td><strong>{b.username}</strong></td>
+                   <td>{b.unit_id}</td>
+                   <td>
+                     <div style={{display:'flex', alignItems:'center', gap:'0.5rem'}}>
+                       <div style={{width:'50px', background:'#eee', height:'4px'}}>
+                         <div style={{width:`${b.construction_progress}%`, background:'#113629', height:'100%'}}></div>
+                       </div>
+                       <span style={{fontSize:'0.7rem'}}>{b.construction_progress}%</span>
+                     </div>
+                   </td>
+                   <td>{b.total_amount}</td>
+                   <td>{b.amount_paid}</td>
+                   <td>
+                     <AdminUpdateBuyerClient buyer={b} />
+                   </td>
+                 </tr>
+               )) : (
+                 <tr>
+                   <td colSpan="6" style={{textAlign:'center', padding:'2rem'}} className="text-muted">No buyer accounts active. Add your first buyer to enable the Owner Portal.</td>
+                 </tr>
+               )}
+             </tbody>
+           </table>
+        </div>
+
+        <div id="pipeline" className="mt-2">
+          <InquiryPipelineClient inquiries={inquiries} />
         </div>
 
         <div className="widget-card" style={{background: 'transparent', boxShadow: 'none', padding: 0}}>
@@ -382,7 +600,7 @@ function AdminView({ inquiries, units }) {
              <a href="#" className="text-dark" style={{fontSize:'0.7rem', fontWeight:600, textDecoration:'none', letterSpacing:'1px'}}>VIEW ALL TEAMS →</a>
            </div>
            
-           <div className="exec-portal-grid">
+            <div className="exec-portal-grid">
              <div className="exec-card">
                <div className="exec-avatar" style={{backgroundImage:"url('/images/unit_interior_1777642600392.png')"}}></div>
                <h4>VIKRAM SETHI</h4>
@@ -404,28 +622,64 @@ function AdminView({ inquiries, units }) {
                <h4>ANANYA RAO</h4>
                <p>REGIONAL DIRECTOR</p>
                <div className="exec-rev"><span>REVENUE</span><strong>$38.7M</strong></div>
-               <button className="btn-outline">OPEN DASHBOARD</button>
+               <form action={async () => {
+                 "use server";
+                 const cookieStore = await cookies();
+                 cookieStore.set('user_role', 'Sales', { path: '/' });
+                 cookieStore.set('user_id', 'SR-1111', { path: '/' });
+                 const { redirect } = await import('next/navigation');
+                 redirect('/admin');
+               }}>
+                 <button type="submit" className="btn-outline" style={{width: '100%'}}>OPEN DASHBOARD</button>
+               </form>
              </div>
              <div className="exec-card">
                <div className="exec-avatar" style={{backgroundImage:"url('/images/unit_interior_1777642600392.png')"}}></div>
                <h4>KARAN MALHOTRA</h4>
                <p>SALES DIRECTOR</p>
                <div className="exec-rev"><span>REVENUE</span><strong>$29.5M</strong></div>
-               <button className="btn-outline">OPEN DASHBOARD</button>
+               <form action={async () => {
+                 "use server";
+                 const cookieStore = await cookies();
+                 cookieStore.set('user_role', 'Sales', { path: '/' });
+                 cookieStore.set('user_id', 'SR-2222', { path: '/' });
+                 const { redirect } = await import('next/navigation');
+                 redirect('/admin');
+               }}>
+                 <button type="submit" className="btn-outline" style={{width: '100%'}}>OPEN DASHBOARD</button>
+               </form>
              </div>
              <div className="exec-card">
                <div className="exec-avatar" style={{backgroundImage:"url('/images/unit_interior_1777642600392.png')"}}></div>
                <h4>PRIYA SHARMA</h4>
                <p>LEAD BROKER</p>
                <div className="exec-rev"><span>REVENUE</span><strong>$18.2M</strong></div>
-               <button className="btn-outline">OPEN DASHBOARD</button>
+               <form action={async () => {
+                 "use server";
+                 const cookieStore = await cookies();
+                 cookieStore.set('user_role', 'Sales', { path: '/' });
+                 cookieStore.set('user_id', 'SR-3333', { path: '/' });
+                 const { redirect } = await import('next/navigation');
+                 redirect('/admin');
+               }}>
+                 <button type="submit" className="btn-outline" style={{width: '100%'}}>OPEN DASHBOARD</button>
+               </form>
              </div>
              <div className="exec-card">
                <div className="exec-avatar" style={{backgroundImage:"url('/images/unit_interior_1777642600392.png')"}}></div>
                <h4>ROHAN VERMA</h4>
                <p>SENIOR ASSOCIATE</p>
                <div className="exec-rev"><span>REVENUE</span><strong>$12.4M</strong></div>
-               <button className="btn-outline">OPEN DASHBOARD</button>
+               <form action={async () => {
+                 "use server";
+                 const cookieStore = await cookies();
+                 cookieStore.set('user_role', 'Sales', { path: '/' });
+                 cookieStore.set('user_id', 'SR-4444', { path: '/' });
+                 const { redirect } = await import('next/navigation');
+                 redirect('/admin');
+               }}>
+                 <button type="submit" className="btn-outline" style={{width: '100%'}}>OPEN DASHBOARD</button>
+               </form>
              </div>
            </div>
         </div>
@@ -462,6 +716,8 @@ export default async function AdminDashboard() {
   
   let inquiries = [];
   let units = [];
+  let buyers = [];
+  let currentBuyer = null;
   
   try {
     const { data: iData } = await supabase.from('Inquiries').select('*').order('created_at', { ascending: false });
@@ -469,11 +725,22 @@ export default async function AdminDashboard() {
     
     const { data: uData } = await supabase.from('PropertyUnits').select('*').order('unit_id', { ascending: true });
     if (uData) units = uData;
+
+    const { data: bData } = await supabase.from('BuyerDetails').select('*');
+    if (bData) buyers = bData;
+
+    if (userRole === 'Buyer') {
+      currentBuyer = buyers.find(b => b.username === userId);
+    }
   } catch(e) {}
   
   if (userRole === 'Sales') {
     return <SalesView inquiries={inquiries} units={units} userId={userId} />;
   }
+
+  if (userRole === 'Buyer') {
+    return <BuyerView userId={userId} buyerDetails={currentBuyer} />;
+  }
   
-  return <AdminView inquiries={inquiries} units={units} />;
+  return <AdminView inquiries={inquiries} units={units} buyers={buyers} />;
 }

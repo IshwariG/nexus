@@ -18,6 +18,35 @@ export async function GET() {
 export async function POST(request) {
   try {
     const data = await request.json();
+    
+    // Round-robin assignment if not explicitly assigned
+    const salesmen = ['SR-9999', 'SR-1111', 'SR-2222', 'SR-3333', 'SR-4444'];
+    let nextSalesman = salesmen[0];
+
+    if (data.salesman_id) {
+      // Explicit assignment for leads captured by the salesman themselves
+      nextSalesman = data.salesman_id;
+    } else {
+      // Get last inquiry to find who was assigned last
+      const { data: lastInquiry } = await supabase
+        .from('Inquiries')
+        .select('status')
+        .order('created_at', { ascending: false })
+        .limit(1);
+        
+      if (lastInquiry && lastInquiry.length > 0) {
+        const lastStatus = lastInquiry[0].status || '';
+        const parts = lastStatus.split('|');
+        if (parts.length > 1) {
+          const lastSalesman = parts[1];
+          const lastIndex = salesmen.indexOf(lastSalesman);
+          if (lastIndex !== -1) {
+            nextSalesman = salesmen[(lastIndex + 1) % salesmen.length];
+          }
+        }
+      }
+    }
+
     const { data: newInquiry, error } = await supabase
       .from('Inquiries')
       .insert([
@@ -27,7 +56,7 @@ export async function POST(request) {
           phone: data.phone,
           message: data.message || '',
           source: data.source || 'Website',
-          status: 'NEW'
+          status: `NEW|${nextSalesman}`
         }
       ])
       .select();

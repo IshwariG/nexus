@@ -14,6 +14,118 @@
   --shadow-lg: 0 4px 20px rgba(0,0,0,0.1);
 }
 
+/* --- MODAL SYSTEM --- */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(11, 21, 18, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 1.5rem;
+  animation: modalFadeIn 0.3s ease;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-content {
+  background: white;
+  width: 100%;
+  max-width: 600px;
+  border-radius: 20px;
+  padding: 2.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  position: relative;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: modalSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalSlideUp {
+  from { transform: translateY(40px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.modal-header h2 {
+  font-size: 1.8rem;
+  color: var(--vanya-green);
+  margin: 0;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  color: #999;
+  cursor: pointer;
+  padding: 0.5rem;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.close-btn:hover { color: var(--vanya-green); }
+
+.form-group {
+  margin-bottom: 1.25rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 0.5rem;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  transition: all 0.2s;
+  background: #f9f9f9;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--vanya-green);
+  background: white;
+  box-shadow: 0 0 0 4px rgba(17, 54, 41, 0.08);
+}
+
+.form-section {
+  padding: 1.5rem;
+  background: #fcfdfe;
+  border: 1px solid #f0f0f0;
+  border-radius: 14px;
+  margin-bottom: 1.5rem;
+}
+
 body {
   margin: 0;
   background-color: var(--admin-bg);
@@ -765,8 +877,8 @@ h1, h2, h3, h4, .serif {
 .link-action { color: var(--vanya-green); font-size: 0.65rem; text-decoration: none; font-weight: 600; letter-spacing: 1px; border-bottom: 1px solid var(--vanya-green); padding-bottom: 1px; transition: opacity 0.2s; }
 .link-action:hover { opacity: 0.7; }
 
-.btn-outline { background: transparent; border: 1px solid #eee; padding: 0.5rem; width: 100%; font-size: 0.62rem; margin-top: 1rem; cursor: pointer; font-weight: 600; border-radius: 6px; transition: all 0.2s; }
-.btn-outline:hover { background: #f5f5f5; border-color: #ddd; }
+.btn-outline { background: transparent; border: 1px solid #ddd; padding: 0.5rem; width: 100%; font-size: 0.62rem; margin-top: 1rem; cursor: pointer; font-weight: 600; border-radius: 6px; transition: all 0.2s; }
+.btn-outline:hover { background: #f8fafc; border-color: var(--vanya-green); color: var(--vanya-green); }
 .btn-outline-dark {
   background: transparent;
   border: 1px solid var(--vanya-green);
@@ -798,15 +910,60 @@ h1, h2, h3, h4, .serif {
 }
 .milestone-icon { width: 42px; height: 42px; background: linear-gradient(135deg, #e8f5e9, #c8e6c9); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
 .milestone-info { flex: 1; }
-.time-ago { font-size: 0.58rem; color: #c0c7d0; letter-spacing: 1px; text-transform: uppercase; }
+.time-ago { font-size: 0.58rem; color: #b0b8c4; letter-spacing: 1px; font-weight: 600; }
 
-/* --- ADMIN CONTENT PADDING --- */
-.admin-main > .performance-section,
-.admin-main > .widget-card {
-  margin-left: 2.5rem;
-  margin-right: 2.5rem;
+/* --- BUYER PORTAL SPECIFIC --- */
+.milestones-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px dashed #ddd;
 }
 
-.sales-content .widget-card {
-  border-radius: var(--card-radius);
+.text-blue { color: #1565c0 !important; }
+.bg-white { background-color: #fff !important; }
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+  .sales-sidebar, .admin-sidebar { width: 220px; }
+  .sales-main, .admin-main { margin-left: 220px; }
+}
+
+@media (max-width: 768px) {
+  .admin-layout { flex-direction: column; }
+  .mobile-header { display: flex !important; }
+  
+  .admin-sidebar {
+    position: fixed;
+    left: -280px; /* Hide offscreen */
+    width: 280px;
+    height: 100vh;
+    z-index: 1000;
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .sidebar-open .admin-sidebar {
+    left: 0;
+  }
+
+  .sidebar-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 999;
+    backdrop-filter: blur(2px);
+  }
+
+  .admin-main { margin-left: 0 !important; }
+  .admin-header { display: none; } /* Use mobile header instead */
+  
+  .sales-stats-row, .grid-2, .grid-3, .exec-portal-grid { grid-template-columns: 1fr; }
+  .widget-card { padding: 1.5rem; }
+  .admin-main > .performance-section,
+  .admin-main > .widget-card {
+    margin-left: 1rem;
+    margin-right: 1rem;
+  }
 }

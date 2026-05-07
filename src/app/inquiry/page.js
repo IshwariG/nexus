@@ -1,4 +1,5 @@
 "use client";
+import { useState } from 'react';
 import "./inquiry.css";
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
@@ -6,6 +7,8 @@ import { Suspense } from 'react';
 function InquiryForm() {
   const searchParams = useSearchParams();
   const source = searchParams.get('source') || 'Direct Link';
+  const [interestLevel, setInterestLevel] = useState('GENERAL INQUIRY');
+
   return (
     <div className="inquiry-page">
       <div className="inquiry-overlay"></div>
@@ -35,7 +38,7 @@ function InquiryForm() {
               const data = Object.fromEntries(formData);
               data.source = `Inquiry Page (${source})`; // Track QR codes
               const originalMessage = data.message || '';
-              data.message = `[Pincode: ${data.pincode}] ${originalMessage}`;
+              data.message = `[Interest: ${data.interest_level}] [Pincode: ${data.pincode}] ${originalMessage}`;
               await fetch('/api/inquiries', {
                 method: 'POST',
                 body: JSON.stringify(data),
@@ -43,6 +46,7 @@ function InquiryForm() {
               });
               alert('Registration Submitted successfully!');
               e.target.reset();
+              setInterestLevel('GENERAL INQUIRY');
             }}>
               <input type="text" name="name" placeholder="Full Name" required pattern="[A-Za-z\s]+" title="Please enter letters only" className="inquiry-input" />
               <input type="email" name="email" placeholder="Email Address" required pattern="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" title="Please enter a valid email address" className="inquiry-input" />
@@ -51,14 +55,14 @@ function InquiryForm() {
               <div className="interest-level">
                 <p className="field-label">INTEREST LEVEL</p>
                 <div className="interest-options">
-                  <label className="interest-option active">
-                    <input type="radio" name="source" value="GENERAL INQUIRY" defaultChecked /> GENERAL INQUIRY
+                  <label className={`interest-option ${interestLevel === 'GENERAL INQUIRY' ? 'active' : ''}`}>
+                    <input type="radio" name="interest_level" value="GENERAL INQUIRY" checked={interestLevel === 'GENERAL INQUIRY'} onChange={() => setInterestLevel('GENERAL INQUIRY')} /> GENERAL INQUIRY
                   </label>
-                  <label className="interest-option">
-                    <input type="radio" name="source" value="SERIOUS BUYER" /> SERIOUS BUYER
+                  <label className={`interest-option ${interestLevel === 'SERIOUS BUYER' ? 'active' : ''}`}>
+                    <input type="radio" name="interest_level" value="SERIOUS BUYER" checked={interestLevel === 'SERIOUS BUYER'} onChange={() => setInterestLevel('SERIOUS BUYER')} /> SERIOUS BUYER
                   </label>
-                  <label className="interest-option">
-                    <input type="radio" name="source" value="INVESTMENT GRADE" /> INVESTMENT GRADE
+                  <label className={`interest-option ${interestLevel === 'INVESTMENT GRADE' ? 'active' : ''}`}>
+                    <input type="radio" name="interest_level" value="INVESTMENT GRADE" checked={interestLevel === 'INVESTMENT GRADE'} onChange={() => setInterestLevel('INVESTMENT GRADE')} /> INVESTMENT GRADE
                   </label>
                 </div>
               </div>
