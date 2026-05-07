@@ -197,7 +197,6 @@ function SalesView({ inquiries, units, userId }) {
 
 
 function BuyerView({ userId, buyerDetails }) {
-  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const milestones = buyerDetails?.milestones || [
     { step: "Foundation", status: "COMPLETED" },
     { step: "Structure", status: "IN PROGRESS" },
@@ -206,37 +205,7 @@ function BuyerView({ userId, buyerDetails }) {
   ];
 
   return (
-    <div className={`admin-layout ${showMobileSidebar ? 'sidebar-open' : ''}`} style={{background: '#fcfcfc'}}>
-      {/* Mobile Header */}
-      <div className="mobile-header" style={{
-        display: 'none', 
-        padding: '1rem', 
-        background: '#fff', 
-        borderBottom: '1px solid #eee',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}>
-        <div style={{display: 'flex', alignItems: 'center', gap: '0.75rem'}}>
-          <button 
-            onClick={() => setShowMobileSidebar(!showMobileSidebar)}
-            style={{background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer'}}
-          >
-            ☰
-          </button>
-          <span className="serif" style={{fontWeight: 700, fontSize: '1rem'}}>MY VANYA</span>
-        </div>
-        <div style={{width: '32px', height: '32px', background: '#c9a96e', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.8rem'}}>B</div>
-      </div>
-
-      {/* Sidebar overlay for mobile */}
-      <div 
-        className="sidebar-overlay" 
-        style={{display: showMobileSidebar ? 'block' : 'none'}}
-        onClick={() => setShowMobileSidebar(false)}
-      ></div>
+    <div className="admin-layout" style={{background: '#fcfcfc'}}>
 
       <aside className="admin-sidebar" style={{background: '#113629'}}>
         <div className="admin-sidebar-logo">
@@ -423,40 +392,9 @@ function BuyerView({ userId, buyerDetails }) {
 
 
 function AdminView({ inquiries, units, buyers }) {
-  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   
   return (
-    <div className={`admin-layout ${showMobileSidebar ? 'sidebar-open' : ''}`}>
-      {/* Mobile Header */}
-      <div className="mobile-header" style={{
-        display: 'none', 
-        padding: '1rem', 
-        background: '#fff', 
-        borderBottom: '1px solid #eee',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}>
-        <div style={{display: 'flex', alignItems: 'center', gap: '0.75rem'}}>
-          <button 
-            onClick={() => setShowMobileSidebar(!showMobileSidebar)}
-            style={{background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer'}}
-          >
-            ☰
-          </button>
-          <span className="serif" style={{fontWeight: 700, fontSize: '1rem'}}>VANYA ADMIN</span>
-        </div>
-        <div style={{width: '32px', height: '32px', background: 'var(--vanya-green)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.8rem'}}>A</div>
-      </div>
-
-      {/* Sidebar overlay for mobile */}
-      <div 
-        className="sidebar-overlay" 
-        style={{display: showMobileSidebar ? 'block' : 'none'}}
-        onClick={() => setShowMobileSidebar(false)}
-      ></div>
+    <div className="admin-layout">
 
       <aside className="admin-sidebar">
         <div className="admin-sidebar-logo">
