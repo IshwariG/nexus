@@ -27,11 +27,21 @@ export default function InquiryPipelineClient({ inquiries }) {
     return status.split('|')[0];
   };
 
-  const filteredInquiries = inquiries.filter(inq => 
-    (inq.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-    (inq.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (inq.phone || '').includes(searchQuery)
-  );
+  const filteredInquiries = inquiries.filter(inq => {
+    // Exclude internal admin actions (Assignments/Scheduled Visits) from the Lead Pipeline
+    const isInternalAction = 
+      (inq.source || '').startsWith('UNIT_ASSIGNMENT_') || 
+      (inq.status || '').startsWith('SCHEDULED|') ||
+      (inq.status || '').startsWith('DONE|');
+
+    if (isInternalAction) return false;
+
+    return (
+      (inq.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+      (inq.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (inq.phone || '').includes(searchQuery)
+    );
+  });
 
   const displayedInquiries = viewAll ? filteredInquiries : filteredInquiries.slice(0, 4);
 

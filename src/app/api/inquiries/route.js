@@ -24,10 +24,8 @@ export async function POST(request) {
     let nextSalesman = salesmen[0];
 
     if (data.salesman_id) {
-      // Explicit assignment for leads captured by the salesman themselves
       nextSalesman = data.salesman_id;
     } else {
-      // Get last inquiry to find who was assigned last
       const { data: lastInquiry } = await supabase
         .from('Inquiries')
         .select('status')
@@ -47,6 +45,9 @@ export async function POST(request) {
       }
     }
 
+    // Use provided status or default to NEW|salesman
+    const finalStatus = data.status || `NEW|${nextSalesman}`;
+
     const { data: newInquiry, error } = await supabase
       .from('Inquiries')
       .insert([
@@ -56,7 +57,7 @@ export async function POST(request) {
           phone: data.phone,
           message: data.message || '',
           source: data.source || 'Website',
-          status: `NEW|${nextSalesman}`
+          status: finalStatus
         }
       ])
       .select();
@@ -65,5 +66,26 @@ export async function POST(request) {
     return NextResponse.json(newInquiry, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to submit inquiry' }, { status: 500 });
+  }
+}
+
+export async function PATCH(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    const { status } = await request.json();
+
+    if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 });
+
+    const { data, error } = await supabase
+      .from('Inquiries')
+      .update({ status })
+      .eq('id', id)
+      .select();
+
+    if (error) throw error;
+    return NextResponse.json({ success: true, data });
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to update inquiry' }, { status: 500 });
   }
 }

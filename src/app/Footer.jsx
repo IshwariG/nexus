@@ -18,9 +18,9 @@ export default function Footer() {
         <div className="footer-links">
           <div>
             <h4>Residences</h4>
-            <a href="#">2BHK Elite</a>
-            <a href="#">3BHK Supreme</a>
-            <a href="#">4BHK Penthouse</a>
+            <a href="/inventory">2BHK Elite</a>
+            <a href="/inventory">3BHK Supreme</a>
+            <a href="/inventory">Heritage Collection</a>
           </div>
           <div>
             <h4>Legal</h4>

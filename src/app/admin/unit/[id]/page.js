@@ -118,21 +118,18 @@ export default function UnitDetailsPage({ params }) {
           <p style={{fontSize: '0.6rem', color: '#888', margin: 0, letterSpacing: '1px'}}>HERITAGE COLLECTION</p>
         </div>
         <nav className="admin-nav" style={{flex: 1, paddingTop: '2rem'}}>
-          <Link href="/admin" style={{padding: '1rem 1.5rem', display: 'block', color: '#555', textDecoration: 'none', fontSize: '0.85rem'}}>
+          <Link href="/admin#overview" style={{padding: '1rem 1.5rem', display: 'block', color: '#555', textDecoration: 'none', fontSize: '0.85rem'}}>
             <span style={{marginRight: '0.5rem'}}>📊</span> Dashboard
           </Link>
-          <Link href="/inventory" style={{padding: '1rem 1.5rem', display: 'block', background: '#113629', color: 'white', textDecoration: 'none', fontSize: '0.85rem'}}>
+          <Link href="/admin#portfolio" style={{padding: '1rem 1.5rem', display: 'block', color: '#555', textDecoration: 'none', fontSize: '0.85rem'}}>
             <span style={{marginRight: '0.5rem'}}>🏢</span> Inventory
           </Link>
-          <a href="#" style={{padding: '1rem 1.5rem', display: 'block', color: '#555', textDecoration: 'none', fontSize: '0.85rem'}}>
+          <Link href="/admin#leads" style={{padding: '1rem 1.5rem', display: 'block', color: '#555', textDecoration: 'none', fontSize: '0.85rem'}}>
             <span style={{marginRight: '0.5rem'}}>👥</span> Leads
-          </a>
-          <a href="#" style={{padding: '1rem 1.5rem', display: 'block', color: '#555', textDecoration: 'none', fontSize: '0.85rem'}}>
+          </Link>
+          <Link href="/admin#analytics" style={{padding: '1rem 1.5rem', display: 'block', color: '#555', textDecoration: 'none', fontSize: '0.85rem'}}>
             <span style={{marginRight: '0.5rem'}}>📈</span> Analytics
-          </a>
-          <a href="#" style={{padding: '1rem 1.5rem', display: 'block', color: '#555', textDecoration: 'none', fontSize: '0.85rem'}}>
-            <span style={{marginRight: '0.5rem'}}>💳</span> Payments
-          </a>
+          </Link>
         </nav>
         
         <div style={{padding: '2rem 1.5rem'}}>
@@ -153,13 +150,13 @@ export default function UnitDetailsPage({ params }) {
         <section className="ud-hero" style={{backgroundImage: "url('/images/c1.png')"}}>
            <div className="ud-hero-card">
               <div className="ud-hero-title">
-                 <div className="ud-badges">
+                  <div className="ud-badges">
                     <span className="ud-badge">UNIT V-{displayUnit.unit_id}</span>
-                    <span className="ud-badge outline">{displayUnit.type || 'LUXURY APARTMENT'}</span>
+                    <span className="ud-badge outline">{parseInt(displayUnit.unit_id) % 2 === 0 ? '3 BHK' : '2 BHK'} PREMIER</span>
                  </div>
-                 <h1>The Amaranta<br/>Sky-Villa</h1>
+                 <h1>The Vanya<br/>{parseInt(displayUnit.unit_id) % 2 === 0 ? 'Heritage 3BHK' : 'Heritage 2BHK'}</h1>
                  <p className="ud-hero-subtitle">
-                   Floor {displayUnit.unit_id ? displayUnit.unit_id.toString().charAt(0) : '14'}, West Wing • 5,400 Sq. Ft. • Sunset Orientation
+                   Floor {displayUnit.unit_id ? displayUnit.unit_id.toString().charAt(0) : '14'}, West Wing • {parseInt(displayUnit.unit_id) % 2 === 0 ? '2,800' : '1,950'} Sq. Ft. • Sunset Orientation
                  </p>
               </div>
               <div className="ud-hero-actions">
@@ -184,7 +181,21 @@ export default function UnitDetailsPage({ params }) {
                         <div className="ud-dropdown-item" onClick={() => updateStatus('SOLD OUT')}>SOLD OUT</div>
                       </div>
                     )}
-                    <button className="ud-btn-outline clear" style={{flex: 1}}>DOWNLOAD<br/>BROCHURE</button>
+                    <button 
+                      className="ud-btn-outline clear" 
+                      style={{flex: 1}}
+                      onClick={() => {
+                        const content = `VANYA RESIDENCES - UNIT ${displayUnit.unit_id} BROCHURE\n\nConfiguration: ${parseInt(displayUnit.unit_id) % 2 === 0 ? '3 BHK' : '2 BHK'}\nArea: ${parseInt(displayUnit.unit_id) % 2 === 0 ? '2,800' : '1,950'} Sq. Ft.\nPrice: Negotiable\nStatus: ${displayUnit.status}`;
+                        const blob = new Blob([content], { type: 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `Vanya_Unit_${displayUnit.unit_id}_Brochure.txt`;
+                        link.click();
+                      }}
+                    >
+                      DOWNLOAD<br/>BROCHURE
+                    </button>
                  </div>
               </div>
            </div>
@@ -198,7 +209,7 @@ export default function UnitDetailsPage({ params }) {
               <div className="ud-specs-grid">
                  <div className="ud-spec-item">
                     <p>TOTAL AREA</p>
-                    <h3>5,400 <span>Sq. Ft.</span></h3>
+                    <h3>{parseInt(displayUnit.unit_id) % 2 === 0 ? '2,800' : '1,950'} <span>Sq. Ft.</span></h3>
                  </div>
                  <div className="ud-spec-item">
                     <p>CEILING HEIGHT</p>
@@ -267,23 +278,32 @@ export default function UnitDetailsPage({ params }) {
                  <p style={{color: '#666', fontSize: '0.8rem', marginBottom: '1.5rem'}}>Schedule a guided on-site visit or virtual walkthrough for this specific unit.</p>
                  
                  <form onSubmit={async (e) => {
-                   e.preventDefault();
-                   const fd = new FormData(e.target);
-                   const data = Object.fromEntries(fd);
-                   await fetch('/api/inquiries', {
-                     method: 'POST',
-                     headers: { 'Content-Type': 'application/json' },
-                     body: JSON.stringify({
-                       name: data.client_name,
-                       email: data.client_email || '',
-                       phone: data.client_phone,
-                       message: `Scheduled Visit for Unit ${displayUnit.unit_id} on ${data.visit_date} at ${data.visit_time}. Notes: ${data.notes}`,
-                       source: 'UNIT_VISIT_SCHEDULED'
-                     })
-                   });
-                   alert('Visit scheduled successfully! The lead has been added to the pipeline.');
-                   e.target.reset();
-                 }} style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
+                    e.preventDefault();
+                    const fd = new FormData(e.target);
+                    const data = Object.fromEntries(fd);
+                    
+                    // Get salesman ID from cookie
+                    const salesmanId = document.cookie
+                      .split('; ')
+                      .find(row => row.startsWith('user_id='))
+                      ?.split('=')[1] || 'Unknown';
+
+                    await fetch('/api/inquiries', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        name: data.client_name,
+                        email: data.client_email || '',
+                        phone: data.client_phone,
+                        message: `Scheduled Visit for Unit ${displayUnit.unit_id} on ${data.visit_date} at ${data.visit_time}. Notes: ${data.notes}`,
+                        source: 'UNIT_VISIT_SCHEDULED',
+                        status: `SCHEDULED|${salesmanId}`,
+                        salesman_id: salesmanId
+                      })
+                    });
+                    alert('Visit scheduled successfully! The lead has been added to the pipeline.');
+                    e.target.reset();
+                  }} style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
                    <div>
                       <label style={{display:'block', fontSize:'0.7rem', fontWeight:'bold', color:'#888', marginBottom:'0.3rem'}}>CLIENT NAME *</label>
                       <input type="text" name="client_name" required style={{width: '100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px'}} />

@@ -9,6 +9,9 @@ import SalesmanNewInquiryClient from './SalesmanNewInquiryClient';
 import AdminAddBuyerClient from './AdminAddBuyerClient';
 import BuyerPaymentClient from './BuyerPaymentClient';
 import AdminUpdateBuyerClient from './AdminUpdateBuyerClient';
+import VisitManagerClient from './VisitManagerClient';
+import GlobalVisitsClient from './GlobalVisitsClient';
+import AdminReportActionsClient from './AdminReportActionsClient';
 
 function SalesView({ inquiries, units, userId }) {
   // Generate grid levels 1-10 validation
@@ -49,9 +52,27 @@ function SalesView({ inquiries, units, userId }) {
   // Filter inquiries assigned to this salesman
   const visibleInquiries = inquiries.filter(inq => {
     if (!inq.status) return false;
+    
+    // Exclude internal admin actions (Assignments/Scheduled Visits) from the Lead Pipeline
+    const isInternalAction = 
+      (inq.source || '').startsWith('UNIT_ASSIGNMENT_') || 
+      (inq.status || '').startsWith('SCHEDULED|') ||
+      (inq.status || '').startsWith('DONE|');
+
+    if (isInternalAction) return false;
+
     const parts = inq.status.split('|');
     return parts.length > 1 && parts[1] === userId;
   });
+
+  const salesmanMeta = {
+    'SR-9999': { initials: 'VS', color: 'bg-blue' },
+    'SR-1111': { initials: 'AR', color: 'bg-green' },
+    'SR-2222': { initials: 'KM', color: 'bg-red' },
+    'SR-3333': { initials: 'PS', color: 'bg-yellow' },
+    'SR-4444': { initials: 'RV', color: 'bg-purple' }
+  };
+  const meta = salesmanMeta[userId] || { initials: 'EX', color: 'bg-blue' };
 
   return (
     <div className="sales-layout">
@@ -61,17 +82,16 @@ function SalesView({ inquiries, units, userId }) {
           <p>VANYA RESIDENCES</p>
         </div>
         <div className="sales-profile mt-2 mb-2">
-          <div className="sales-avatar">VS</div>
+          <div className={`sm-avatar ${meta.color}`} style={{width:'40px', height:'40px', fontSize:'0.9rem'}}>{meta.initials}</div>
           <div>
             <strong>{salesmanNames[userId] || 'Executive'}</strong>
             <span className="text-muted" style={{display:'block', fontSize:'0.75rem', marginTop:'0.2rem'}}>ID: {userId}</span>
           </div>
         </div>
         <nav className="sales-nav">
-          <a href="#" className="active">Overview</a>
-          <a href="#">My Portfolio</a>
-          <a href="#">Active Leads <span className="badge-count">{visibleInquiries.length}</span></a>
-          <a href="#">Client Messages</a>
+          <a href="#overview" className="active">Overview</a>
+          <a href="#portfolio">My Portfolio</a>
+          <a href="#leads">Active Leads <span className="badge-count">{visibleInquiries.length}</span></a>
         </nav>
         
         <div className="sales-bottom mt-auto">
@@ -98,9 +118,9 @@ function SalesView({ inquiries, units, userId }) {
         </div>
 
         <div className="sales-content">
-          <div className="sales-stats-row">
+          <div className="sales-stats-row" id="overview">
             <div className="sales-stat-card">
-              <span>TOTAL ASSIGNED</span>
+              <span>MY PORTFOLIO</span>
               <h2>{totalAssigned}</h2>
             </div>
             <div className="sales-stat-card">
@@ -117,12 +137,46 @@ function SalesView({ inquiries, units, userId }) {
             </div>
           </div>
 
-          <div className="widget-card mb-2">
+          <div className="widget-card mb-2" id="portfolio">
             <h3 className="section-title serif">Portfolio Inventory</h3>
             <PortfolioTable assignedUnits={assignedUnits} />
           </div>
 
-        <div className="sales-grid">
+          {/* Scheduled Visits for Salesman */}
+          <div className="widget-card mb-2">
+            <h3 className="section-title serif">My Scheduled Site Visits</h3>
+            <table className="table-standard">
+              <thead>
+                <tr>
+                  <th>CLIENT</th>
+                  <th>DETAILS</th>
+                  <th>STATUS</th>
+                  <th>ACTION</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inquiries.filter(inq => inq.status === `SCHEDULED|${userId}` || inq.status === `DONE|${userId}`).map((inq, i) => (
+                  <tr key={inq.id || i}>
+                    <td><strong>{inq.name}</strong></td>
+                    <td className="text-muted" style={{fontSize: '0.75rem'}}>{inq.message}</td>
+                    <td>
+                      <span className={`badge ${inq.status.startsWith('SCHEDULED') ? 'negotiation' : 'available'}`}>
+                        {inq.status.startsWith('SCHEDULED') ? 'UPCOMING' : 'COMPLETED'}
+                      </span>
+                    </td>
+                    <td>
+                      <VisitManagerClient inquiryId={inq.id} currentStatus={inq.status} salesmanId={userId} />
+                    </td>
+                  </tr>
+                ))}
+                {inquiries.filter(inq => inq.status.startsWith('SCHEDULED|' + userId) || inq.status.startsWith('DONE|' + userId)).length === 0 && (
+                  <tr><td colSpan="4" className="text-muted">No scheduled visits found.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+        <div className="sales-grid" id="leads">
           <div className="widget-card">
             <div className="flex-between">
               <h3 className="section-title serif" style={{margin:0}}>Active Inquiry Pipeline <span className="badge sold">URGENT</span></h3>
@@ -213,10 +267,10 @@ function BuyerView({ userId, buyerDetails }) {
           <p style={{color: 'rgba(255,255,255,0.6)'}}>OWNER PORTAL</p>
         </div>
         <nav className="admin-nav">
-          <a href="#" className="active" style={{color: '#fff', background: 'rgba(255,255,255,0.1)'}}><span className="nav-icon">🏠</span> Residence Overview</a>
-          <a href="#" style={{color: 'rgba(255,255,255,0.6)'}}><span className="nav-icon">🏗️</span> Construction Log</a>
-          <a href="#" style={{color: 'rgba(255,255,255,0.6)'}}><span className="nav-icon">💳</span> Financials</a>
-          <a href="#" style={{color: 'rgba(255,255,255,0.6)'}}><span className="nav-icon">📂</span> Documents</a>
+          <a href="#overview" className="active" style={{color: '#fff', background: 'rgba(255,255,255,0.1)'}}><span className="nav-icon">🏠</span> Residence Overview</a>
+          <a href="#construction" style={{color: 'rgba(255,255,255,0.6)'}}><span className="nav-icon">🏗️</span> Construction Log</a>
+          <a href="#financials" style={{color: 'rgba(255,255,255,0.6)'}}><span className="nav-icon">💳</span> Financials</a>
+          <a href="#documents" style={{color: 'rgba(255,255,255,0.6)'}}><span className="nav-icon">📂</span> Documents</a>
         </nav>
         
         <div className="admin-user mt-auto" style={{
@@ -263,7 +317,7 @@ function BuyerView({ userId, buyerDetails }) {
       </aside>
 
       <main className="admin-main" style={{padding: '2rem 3rem'}}>
-        <div className="admin-header" style={{background: 'transparent', border: 'none', padding: 0, marginBottom: '2.5rem'}}>
+        <div className="admin-header" id="overview" style={{background: 'transparent', border: 'none', padding: 0, marginBottom: '2.5rem'}}>
           <div>
             <h1 className="serif" style={{fontSize: '2.4rem'}}>Welcome to Vanya, {userId}</h1>
             <p className="text-muted" style={{fontSize: '0.8rem', letterSpacing: '1px'}}>UNIT {buyerDetails?.unit_id || '101'} • HERITAGE COLLECTION • TOWER A</p>
@@ -279,7 +333,7 @@ function BuyerView({ userId, buyerDetails }) {
 
         <div className="grid-2">
           {/* Construction Progress Card */}
-          <div className="widget-card" style={{padding: '0', overflow: 'hidden'}}>
+          <div className="widget-card" id="construction" style={{padding: '0', overflow: 'hidden'}}>
             <div style={{
               backgroundImage: "url('/images/uc1.png')",
               height: '240px',
@@ -329,7 +383,7 @@ function BuyerView({ userId, buyerDetails }) {
 
           <div className="flex-column" style={{display: 'flex', flexDirection: 'column', gap: '1.5rem'}}>
             {/* Financial Card */}
-            <div className="widget-card" style={{margin: 0}}>
+            <div className="widget-card" id="financials" style={{margin: 0}}>
               <div className="flex-between mb-2">
                 <h3 className="serif">Financial Summary</h3>
                 <span className="text-muted">💳</span>
@@ -358,7 +412,7 @@ function BuyerView({ userId, buyerDetails }) {
               <BuyerPaymentClient unitId={buyerDetails?.unit_id || '101'} amountDue="₹ 1.25 Cr" />
             </div>
 
-            <div className="widget-card" style={{margin: 0, flex: 1}}>
+            <div className="widget-card" id="documents" style={{margin: 0, flex: 1}}>
               <h3 className="serif mb-2">Essential Documents</h3>
               <div style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
                 <div className="flex-between" style={{padding: '1rem', border: '1px solid #f0f0f0', borderRadius: '10px'}}>
@@ -461,11 +515,7 @@ function AdminView({ inquiries, units, buyers }) {
             <h1 className="serif">Master Portfolio Overview</h1>
             <p>PROJECT ID: VNY-HRGC-001</p>
           </div>
-          <div style={{display:'flex', gap:'1rem', alignItems: 'center'}}>
-             <span className="text-muted" style={{fontSize: '0.7rem', fontWeight: 600}}>QUARTERLY REPORT</span>
-             <span className="text-muted" style={{fontSize: '0.7rem', fontWeight: 600}}>EXPORT DATA</span>
-             <span className="icon-bell">🔔</span>
-          </div>
+          <AdminReportActionsClient inquiries={inquiries} units={units} buyers={buyers} />
         </div>
 
         <div id="analytics">
@@ -525,6 +575,9 @@ function AdminView({ inquiries, units, buyers }) {
            </table>
         </div>
 
+        {/* Global Visits for Admin with Search */}
+        <GlobalVisitsClient inquiries={inquiries} />
+
         <div id="pipeline" className="mt-2">
           <InquiryPipelineClient inquiries={inquiries} />
         </div>
@@ -540,10 +593,10 @@ function AdminView({ inquiries, units, buyers }) {
            
             <div className="exec-portal-grid">
              <div className="exec-card">
-               <div className="exec-avatar" style={{backgroundImage:"url('/images/unit_interior_1777642600392.png')"}}></div>
+               <div className="sm-avatar bg-blue" style={{width: '56px', height: '56px', margin: '0 auto 1rem auto', fontSize: '1.2rem'}}>VS</div>
                <h4>VIKRAM SETHI</h4>
                <p>SNR. VICE PRESIDENT</p>
-               <div className="exec-rev"><span>REVENUE</span><strong>$42.4M</strong></div>
+               <div className="exec-rev"><span>REVENUE</span><strong>₹ 35.5 Cr</strong></div>
                <form action={async () => {
                  "use server";
                  const cookieStore = await cookies();
@@ -556,10 +609,10 @@ function AdminView({ inquiries, units, buyers }) {
                </form>
              </div>
              <div className="exec-card">
-               <div className="exec-avatar" style={{backgroundImage:"url('/images/unit_interior_1777642600392.png')"}}></div>
+               <div className="sm-avatar bg-green" style={{width: '56px', height: '56px', margin: '0 auto 1rem auto', fontSize: '1.2rem'}}>AR</div>
                <h4>ANANYA RAO</h4>
                <p>REGIONAL DIRECTOR</p>
-               <div className="exec-rev"><span>REVENUE</span><strong>$38.7M</strong></div>
+               <div className="exec-rev"><span>REVENUE</span><strong>₹ 32.4 Cr</strong></div>
                <form action={async () => {
                  "use server";
                  const cookieStore = await cookies();
@@ -572,10 +625,10 @@ function AdminView({ inquiries, units, buyers }) {
                </form>
              </div>
              <div className="exec-card">
-               <div className="exec-avatar" style={{backgroundImage:"url('/images/unit_interior_1777642600392.png')"}}></div>
+               <div className="sm-avatar bg-red" style={{width: '56px', height: '56px', margin: '0 auto 1rem auto', fontSize: '1.2rem'}}>KM</div>
                <h4>KARAN MALHOTRA</h4>
                <p>SALES DIRECTOR</p>
-               <div className="exec-rev"><span>REVENUE</span><strong>$29.5M</strong></div>
+               <div className="exec-rev"><span>REVENUE</span><strong>₹ 24.8 Cr</strong></div>
                <form action={async () => {
                  "use server";
                  const cookieStore = await cookies();
@@ -588,10 +641,10 @@ function AdminView({ inquiries, units, buyers }) {
                </form>
              </div>
              <div className="exec-card">
-               <div className="exec-avatar" style={{backgroundImage:"url('/images/unit_interior_1777642600392.png')"}}></div>
+               <div className="sm-avatar bg-yellow" style={{width: '56px', height: '56px', margin: '0 auto 1rem auto', fontSize: '1.2rem'}}>PS</div>
                <h4>PRIYA SHARMA</h4>
                <p>LEAD BROKER</p>
-               <div className="exec-rev"><span>REVENUE</span><strong>$18.2M</strong></div>
+               <div className="exec-rev"><span>REVENUE</span><strong>₹ 15.3 Cr</strong></div>
                <form action={async () => {
                  "use server";
                  const cookieStore = await cookies();
@@ -604,10 +657,10 @@ function AdminView({ inquiries, units, buyers }) {
                </form>
              </div>
              <div className="exec-card">
-               <div className="exec-avatar" style={{backgroundImage:"url('/images/unit_interior_1777642600392.png')"}}></div>
+               <div className="sm-avatar bg-purple" style={{width: '56px', height: '56px', margin: '0 auto 1rem auto', fontSize: '1.2rem'}}>RV</div>
                <h4>ROHAN VERMA</h4>
                <p>SENIOR ASSOCIATE</p>
-               <div className="exec-rev"><span>REVENUE</span><strong>$12.4M</strong></div>
+               <div className="exec-rev"><span>REVENUE</span><strong>₹ 10.4 Cr</strong></div>
                <form action={async () => {
                  "use server";
                  const cookieStore = await cookies();
@@ -635,6 +688,33 @@ function AdminView({ inquiries, units, buyers }) {
                  <span className="time-ago">2 HOURS AGO</span>
               </div>
            </div>
+        </div>
+
+        <div className="widget-card mt-2" id="messages">
+          <h3 className="section-title serif">Global Client Messages</h3>
+          <div className="message-list">
+            {inquiries
+              .filter(inq => inq.message && !inq.source?.startsWith('UNIT_ASSIGNMENT_') && !inq.status?.startsWith('SCHEDULED|'))
+              .map((inq, i) => (
+              <div key={inq.id || i} style={{padding:'1.5rem', borderBottom:'1px solid #f0f0f0', display:'flex', gap:'1.5rem'}}>
+                <div className="sm-avatar bg-blue" style={{width:'32px', height:'32px'}}>{inq.name.charAt(0)}</div>
+                <div style={{flex:1}}>
+                  <div className="flex-between" style={{marginBottom:'0.5rem'}}>
+                    <strong>{inq.name}</strong>
+                    <span className="text-muted" style={{fontSize:'0.65rem'}}>{new Date(inq.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <p style={{fontSize:'0.85rem', color:'#444', lineHeight:'1.5', margin:0}}>{inq.message}</p>
+                  <div style={{marginTop:'1rem', display:'flex', gap:'1rem'}}>
+                    <button className="btn-dark" style={{padding:'4px 12px', fontSize:'0.6rem'}}>REPLY TO CLIENT</button>
+                    <button className="text-muted-btn" style={{fontSize:'0.6rem', background:'none', border:'none'}}>MARK AS READ</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {inquiries.filter(inq => inq.message && !inq.source?.startsWith('UNIT_ASSIGNMENT_') && !inq.status?.startsWith('SCHEDULED|')).length === 0 && (
+              <div style={{padding:'3rem', textAlign:'center', color:'#b0b8c4'}}>No recent client messages.</div>
+            )}
+          </div>
         </div>
 
       </main>

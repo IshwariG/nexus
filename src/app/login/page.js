@@ -6,6 +6,7 @@ import './login.css';
 export default function LoginPage() {
   const [view, setView] = useState('selection'); // 'selection' | 'form'
   const [role, setRole] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSelectRole = (selectedRole) => {
     setRole(selectedRole);
@@ -121,22 +122,29 @@ export default function LoginPage() {
                 
                 <div className="form-group">
                   <label>Secure Password</label>
-                  <div className="input-with-icon">
+                  <div className="input-with-icon" style={{position: 'relative'}}>
                     <span className="input-icon">🔒</span>
-                    <input type="password" name="password" placeholder="••••••••" required />
+                    <input type={showPassword ? "text" : "password"} name="password" placeholder="••••••••" required style={{paddingRight:'2.5rem'}} />
+                    <button 
+                      type="button" 
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: 'absolute', 
+                        right: 0, 
+                        background: 'none', 
+                        border: 'none', 
+                        cursor: 'pointer',
+                        fontSize: '1.2rem',
+                        opacity: 0.6
+                      }}
+                    >
+                      {showPassword ? '👁️' : '👁️‍🗨️'}
+                    </button>
                   </div>
                 </div>
                 
-                <div className="form-actions-row">
-                  <label className="checkbox-label">
-                    <input type="checkbox" /> Remember device
-                  </label>
-                  <a href="#" className="forgot-link">
-                    Forgot {role === 'Sales' ? 'Sales ID' : role === 'Buyer' ? 'Username' : 'Admin ID'}?
-                  </a>
-                </div>
                 
-                <button type="submit" className="btn btn-primary auth-btn" style={{background: role === 'Buyer' ? '#113629' : 'var(--vanya-gold)'}}>
+                <button type="submit" className="btn btn-primary auth-btn" style={{background: '#113629'}}>
                   {role === 'Buyer' ? 'ENTER OWNER PORTAL' : 'AUTHENTICATE ACCOUNT'}
                 </button>
                 
