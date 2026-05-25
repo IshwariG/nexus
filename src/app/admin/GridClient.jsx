@@ -1,10 +1,64 @@
 "use client";
 import React, { useState } from 'react';
 
-export default function GridClient({ units, inquiries }) {
+export default function GridClient({ units, inquiries, project = 'vanya-residences' }) {
   const [selectedClient, setSelectedClient] = useState(null);
   const [activePhase, setActivePhase] = useState(1);
   const gridLevels = activePhase === 1 ? [5, 4, 3, 2, 1] : [10, 9, 8, 7, 6];
+
+  // Dynamically filter or simulate units based on project
+  let projectUnits = units;
+  if (project === 'vanya-estate') {
+    projectUnits = [];
+    for (let lvl = 1; lvl <= 10; lvl++) {
+      for (let i = 1; i <= 10; i++) {
+        const unitId = lvl * 100 + i;
+        const seedValue = (unitId * 7) % 10;
+        let status = 'AVAILABLE';
+        let tagColor = '';
+        if (seedValue < 3) {
+          status = 'SOLD OUT';
+          tagColor = 'Ram Kumar';
+        } else if (seedValue < 5) {
+          status = 'RESERVED';
+        }
+        projectUnits.push({
+          unit_id: unitId.toString(),
+          floor: lvl.toString(),
+          type: '3BHK VILLA',
+          area: '3800',
+          price: '₹ 6.50 Cr',
+          status,
+          tag_color: tagColor
+        });
+      }
+    }
+  } else if (project === 'vanya-meadows') {
+    projectUnits = [];
+    for (let lvl = 1; lvl <= 10; lvl++) {
+      for (let i = 1; i <= 8; i++) { // 8 units per level
+        const unitId = lvl * 100 + i;
+        const seedValue = (unitId * 13) % 10;
+        let status = 'AVAILABLE';
+        let tagColor = '';
+        if (seedValue < 2) {
+          status = 'SOLD OUT';
+          tagColor = 'Rajesh Gupta';
+        } else if (seedValue < 3) {
+          status = 'RESERVED';
+        }
+        projectUnits.push({
+          unit_id: unitId.toString(),
+          floor: lvl.toString(),
+          type: '5BHK ESTATE',
+          area: '7200',
+          price: '₹ 8.20 Cr',
+          status,
+          tag_color: tagColor
+        });
+      }
+    }
+  }
 
   const handleCellClick = (unitId) => {
     // Look for client details in the Inquiries side-channel
@@ -12,19 +66,18 @@ export default function GridClient({ units, inquiries }) {
     if (inquiry) {
       setSelectedClient({ unitId, inquiry });
     } else {
-      // If no details exist, maybe just show a basic message or do nothing
-      const uData = units.find(u => parseInt(u.unit_id) === unitId);
+      // If no details exist, show placeholder or lookup info
+      const uData = projectUnits.find(u => parseInt(u.unit_id) === unitId);
       if (uData && uData.tag_color && !['green', 'red', 'blue'].includes(uData.tag_color)) {
-        // Fallback for names assigned before this feature
-        setSelectedClient({ unitId, inquiry: { name: uData.tag_color, message: 'Details missing.' } });
+        setSelectedClient({ unitId, inquiry: { name: uData.tag_color, message: 'Details missing in standard pipeline.' } });
       }
     }
   };
 
-  const validUnits = units.filter(u => {
+  const validUnits = projectUnits.filter(u => {
     const id = parseInt(u.unit_id);
     const floor = Math.floor(id / 100);
-    return gridLevels.includes(floor) && (id % 100) >= 1 && (id % 100) <= 10;
+    return gridLevels.includes(floor) && (id % 100) >= 1 && (id % 100) <= (project === 'vanya-meadows' ? 8 : 10);
   });
 
   const soldUnits = validUnits.filter(u => u.status === 'SOLD OUT').length;
@@ -73,28 +126,36 @@ export default function GridClient({ units, inquiries }) {
               </div>
             </div>
             <div className="bar-chart-mock">
-              <div className="bar-col"><div className="bar" style={{height:'40%'}}></div><span>JANUARY</span></div>
-              <div className="bar-col"><div className="bar" style={{height:'55%'}}></div><span>FEBRUARY</span></div>
-              <div className="bar-col"><div className="bar" style={{height:'50%'}}></div><span>MARCH</span></div>
-              <div className="bar-col"><div className="bar" style={{height:'80%'}}></div><span>APRIL</span></div>
-              <div className="bar-col"><div className="bar" style={{height:'65%'}}></div><span>MAY</span></div>
-              <div className="bar-col"><div className="bar" style={{height:'95%'}}></div><span>JUNE</span></div>
+              <div className="bar-col"><div className="bar" style={{height: project === 'vanya-estate' ? '30%' : project === 'vanya-meadows' ? '15%' : '40%'}}></div><span>JANUARY</span></div>
+              <div className="bar-col"><div className="bar" style={{height: project === 'vanya-estate' ? '45%' : project === 'vanya-meadows' ? '20%' : '55%'}}></div><span>FEBRUARY</span></div>
+              <div className="bar-col"><div className="bar" style={{height: project === 'vanya-estate' ? '35%' : project === 'vanya-meadows' ? '25%' : '50%'}}></div><span>MARCH</span></div>
+              <div className="bar-col"><div className="bar" style={{height: project === 'vanya-estate' ? '70%' : project === 'vanya-meadows' ? '40%' : '80%'}}></div><span>APRIL</span></div>
+              <div className="bar-col"><div className="bar" style={{height: project === 'vanya-estate' ? '60%' : project === 'vanya-meadows' ? '35%' : '65%'}}></div><span>MAY</span></div>
+              <div className="bar-col"><div className="bar" style={{height: project === 'vanya-estate' ? '85%' : project === 'vanya-meadows' ? '50%' : '95%'}}></div><span>JUNE</span></div>
             </div>
           </div>
           <div className="perf-card-stack">
             <div className="perf-card p-small">
               <p className="perf-label">AVG. PRICE PER UNIT</p>
-              <h2 className="serif m-0">$2.1M</h2>
-              <div className="progress-bar mt-1"><div className="progress" style={{width:'70%', background:'#113629'}}></div></div>
+              <h2 className="serif m-0">
+                {project === 'vanya-estate' ? '₹ 6.5 Cr' : project === 'vanya-meadows' ? '₹ 8.2 Cr' : '₹ 4.8 Cr'}
+              </h2>
+              <div className="progress-bar mt-1"><div className="progress" style={{width: project === 'vanya-estate' ? '80%' : project === 'vanya-meadows' ? '90%' : '70%', background:'#113629'}}></div></div>
             </div>
             <div className="perf-card p-small">
               <p className="perf-label">TOTAL PORTFOLIO VALUE</p>
-              <h2 className="serif m-0">$210.5M</h2>
-              <span className="text-green text-xs">+15.2% INCREASE</span>
+              <h2 className="serif m-0">
+                {project === 'vanya-estate' ? '₹ 650 Cr' : project === 'vanya-meadows' ? '₹ 656 Cr' : '₹ 450 Cr'}
+              </h2>
+              <span className="text-green text-xs">
+                {project === 'vanya-estate' ? '+18.4% INCREASE' : project === 'vanya-meadows' ? '+21.0% INCREASE' : '+15.2% INCREASE'}
+              </span>
             </div>
             <div className="perf-card p-small">
               <p className="perf-label">CONVERSION RATE</p>
-              <h2 className="serif text-blue m-0">28.4%</h2>
+              <h2 className="serif text-blue m-0">
+                {project === 'vanya-estate' ? '18.2%' : project === 'vanya-meadows' ? '12.4%' : '28.4%'}
+              </h2>
               <span className="text-muted text-xs">LEAD TO DEPOSIT</span>
             </div>
           </div>
@@ -104,8 +165,12 @@ export default function GridClient({ units, inquiries }) {
           <div className="perf-card flex-center-left">
             <div>
               <p className="perf-label">TOTAL REVENUE</p>
-              <h2 className="serif m-0">$142.6M</h2>
-              <span className="text-green text-xs font-bold">↗ +12.4% VS LAST QUARTER</span>
+              <h2 className="serif m-0">
+                {project === 'vanya-estate' ? '₹ 97.5 Cr' : project === 'vanya-meadows' ? '₹ 41.0 Cr' : '₹ 180.5 Cr'}
+              </h2>
+              <span className="text-green text-xs font-bold">
+                {project === 'vanya-estate' ? '↗ +8.5% VS LAST QUARTER' : project === 'vanya-meadows' ? '↗ +5.2% VS LAST QUARTER' : '↗ +12.4% VS LAST QUARTER'}
+              </span>
             </div>
             <div className="icon-bg ml-auto">🏛️</div>
           </div>
@@ -119,8 +184,12 @@ export default function GridClient({ units, inquiries }) {
           <div className="perf-card flex-center-left">
             <div>
               <p className="perf-label">AVG. SALES CYCLE</p>
-              <h2 className="serif m-0">24 Days</h2>
-              <span className="text-blue text-xs font-bold">◷ -4 DAYS IMPROVEMENT</span>
+              <h2 className="serif m-0">
+                {project === 'vanya-estate' ? '32 Days' : project === 'vanya-meadows' ? '45 Days' : '24 Days'}
+              </h2>
+              <span className="text-blue text-xs font-bold">
+                {project === 'vanya-estate' ? '◷ -2 DAYS IMPROVEMENT' : project === 'vanya-meadows' ? '◷ STABLE VELOCITY' : '◷ -4 DAYS IMPROVEMENT'}
+              </span>
             </div>
             <div className="icon-bg ml-auto">⏱️</div>
           </div>
@@ -151,9 +220,9 @@ export default function GridClient({ units, inquiries }) {
           <div className="grid-row" key={lvl}>
             <div className="row-label">LVL {lvl.toString().padStart(2, '0')}</div>
             <div className="row-cells">
-              {Array.from({length: 10}).map((_, i) => {
+              {Array.from({length: project === 'vanya-meadows' ? 8 : 10}).map((_, i) => {
                 const unitId = lvl * 100 + i + 1;
-                const uData = units.find(u => parseInt(u.unit_id) === unitId);
+                const uData = projectUnits.find(u => parseInt(u.unit_id) === unitId);
                 const statusClass = uData ? (uData.status === 'AVAILABLE' ? 'available' : (uData.status === 'RESERVED' || uData.status === 'IN NEGOTIATION' ? 'reserved' : 'sold')) : 'available';
                 return (
                   <div key={unitId} className={`occ-cell ${statusClass}`} style={{position: 'relative', cursor: (statusClass !== 'available') ? 'pointer' : 'default'}} onClick={() => handleCellClick(unitId)}>

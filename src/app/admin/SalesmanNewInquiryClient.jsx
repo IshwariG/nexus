@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-export default function SalesmanNewInquiryClient({ userId }) {
+export default function SalesmanNewInquiryClient({ userId, buttonClass = "btn-sales-new", label = "+ NEW INQUIRY" }) {
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', source: 'Salesman Generated', pincode: '' });
   const [mounted, setMounted] = useState(false);
@@ -58,7 +58,7 @@ export default function SalesmanNewInquiryClient({ userId }) {
 
   return (
     <>
-      <button className="btn-sales-new" onClick={() => setIsOpen(true)}>+ NEW INQUIRY</button>
+      <button className={buttonClass} onClick={() => setIsOpen(true)} style={buttonClass === 'btn-dark' ? {width: '100%'} : {}}>{label}</button>
       {mounted && createPortal(modalContent, document.body)}
     </>
   );

@@ -68,11 +68,18 @@ export default function GlobalVisitsClient({ inquiries }) {
                     <span className="badge" style={{background: '#f0f0f0', color: '#333', textTransform: 'none'}}>{sName}</span>
                   </div>
                 </td>
-                <td className="text-muted" style={{fontSize: '0.75rem'}}>{inq.message}</td>
+                <td style={{fontSize: '0.78rem', color: '#4b5563'}}>{inq.message}</td>
                 <td>
-                  <span className={`badge ${inq.status.startsWith('SCHEDULED') ? 'negotiation' : 'available'}`}>
-                    {inq.status.startsWith('SCHEDULED') ? 'PENDING VISIT' : 'VISIT DONE'}
-                  </span>
+                  {inq.status.startsWith('SCHEDULED') ? (
+                    <span className="badge" style={{ background: '#fef7e0', color: '#b06000', padding: '6px 12px', borderRadius: '20px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px', textTransform: 'none', fontSize: '0.68rem' }}>
+                      PENDING VISIT
+                    </span>
+                  ) : (
+                    <span className="badge" style={{ background: '#e6f4ea', color: '#137333', padding: '6px 12px', borderRadius: '20px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px', textTransform: 'none', fontSize: '0.68rem' }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" style={{ marginRight: '2px' }}><polyline points="20 6 9 17 4 12"/></svg>
+                      VISIT DONE
+                    </span>
+                  )}
                 </td>
               </tr>
             );
@@ -82,6 +89,23 @@ export default function GlobalVisitsClient({ inquiries }) {
           )}
         </tbody>
       </table>
+
+      {/* Pagination Footer matching Screen 1 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem', padding: '0.75rem 0.5rem 0.25rem 0.5rem', borderTop: '1px solid #f1f3f5', fontSize: '0.75rem', color: '#6b7280' }}>
+        <div>Showing {filteredVisits.length} of {filteredVisits.length} entries</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button style={{ border: 'none', background: 'none', cursor: 'pointer', opacity: 0.5, fontSize: '0.85rem' }}>‹</button>
+          <button style={{ border: 'none', background: '#113629', color: 'white', width: '26px', height: '26px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>1</button>
+          <button style={{ border: 'none', background: 'none', cursor: 'pointer', opacity: 0.5, fontSize: '0.85rem' }}>›</button>
+        </div>
+        <div>
+          <select style={{ padding: '4px 8px', fontSize: '0.72rem', border: '1px solid #e5e7eb', borderRadius: '6px', background: 'white', color: '#4b5563' }}>
+            <option>10 per page</option>
+            <option>25 per page</option>
+            <option>50 per page</option>
+          </select>
+        </div>
+      </div>
     </div>
   );
 }

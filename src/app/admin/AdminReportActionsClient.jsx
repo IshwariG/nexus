@@ -45,12 +45,12 @@ export default function AdminReportActionsClient({ inquiries, units, buyers }) {
   const generateQuarterlyReport = () => {
     // Specific business metrics for the report
     const soldCount = units.filter(u => u.status === 'SOLD OUT').length;
-    const totalRev = 142.6; // Mock from GridClient for consistency
+    const totalRev = 180.5; // Mock from GridClient for consistency
     const headers = ['VANYA RESIDENCES - Q2 2026 PERFORMANCE REPORT'];
     const body = [
       '',
       `TOTAL UNITS SOLD: ${soldCount}`,
-      `REVENUE CONFIRMED: $${totalRev}M`,
+      `REVENUE CONFIRMED: ₹ ${totalRev} Cr`,
       `TOTAL INQUIRIES: ${inquiries.length}`,
       `AVERAGE CONVERSION: ${((soldCount/inquiries.length)*100).toFixed(1)}%`,
       '',

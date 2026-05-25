@@ -2,10 +2,19 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
+import { useState, useEffect } from 'react';
+
 export default function Navbar() {
   const pathname = usePathname();
+  const [mounted, setMounted] = useState(false);
 
-  if (pathname?.startsWith('/admin')) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
+  if (pathname?.startsWith('/admin') || pathname === '/login') return null;
 
   return (
     <nav className="main-nav">

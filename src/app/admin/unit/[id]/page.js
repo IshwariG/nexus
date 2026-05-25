@@ -14,90 +14,202 @@ export default function UnitDetailsPage({ params }) {
   const router = useRouter();
   const [unit, setUnit] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [buyerDetails, setBuyerDetails] = useState(null);
+  const [buyerUser, setBuyerUser] = useState(null);
+  const [unitVisits, setUnitVisits] = useState([]);
+  const [editForm, setEditForm] = useState({
+    type: '',
+    area: '',
+    price: '',
+    status: '',
+    client_name: '',
+    username: '',
+    password: '',
+    total_amount: '',
+    amount_paid: '',
+    progress: '72',
+    possession_date: '2027-12-31'
+  });
 
   useEffect(() => {
     async function fetchUnit() {
-      const { data, error } = await supabase
+      setLoading(true);
+      const { data: uData } = await supabase
         .from('PropertyUnits')
         .select('*')
         .eq('unit_id', unitId)
         .single();
         
-      if (data) setUnit(data);
+      if (uData) {
+        setUnit(uData);
+        let bData = null;
+        let usrData = null;
+        
+        if (uData.status === 'SOLD OUT' && uData.tag_color) {
+          const { data: fetchB } = await supabase
+            .from('BuyerDetails')
+            .select('*')
+            .eq('username', uData.tag_color)
+            .maybeSingle();
+          bData = fetchB;
+          if (bData) {
+            setBuyerDetails(bData);
+            const { data: fetchU } = await supabase
+              .from('Users')
+              .select('*')
+              .eq('username', uData.tag_color)
+              .maybeSingle();
+            usrData = fetchU;
+            if (usrData) setBuyerUser(usrData);
+          }
+        }
+        
+        setEditForm({
+          type: uData.type || (parseInt(uData.unit_id) % 2 === 0 ? '3BHK PENTHOUSE' : '2BHK PENTHOUSE'),
+          area: uData.area || '5400',
+          price: uData.price || '₹ 14.25 Cr',
+          status: uData.status || 'AVAILABLE',
+          client_name: uData.status === 'SOLD OUT' ? (bData?.username || uData.tag_color || '') : (uData.tag_color || ''),
+          username: bData?.username || '',
+          password: usrData?.password || 'password123',
+          total_amount: bData?.total_amount || uData.price || '₹ 14.25 Cr',
+          amount_paid: bData?.amount_paid || '₹ 0.00',
+          progress: bData?.construction_progress ? bData.construction_progress.replace('%', '') : '72',
+          possession_date: bData?.possession_date || '2027-12-31'
+        });
+      }
+      
+      const { data: iData } = await supabase
+        .from('Inquiries')
+        .select('*')
+        .order('created_at', { ascending: false });
+        
+      if (iData) {
+        const filteredVisits = iData.filter(inq => 
+          (inq.source || '').startsWith(`UNIT_ASSIGNMENT_${unitId}`) || 
+          ((inq.source || '') === 'UNIT_VISIT_SCHEDULED' && inq.message?.includes(`Unit ${unitId}`))
+        );
+        setUnitVisits(filteredVisits);
+      }
+      
       setLoading(false);
     }
     fetchUnit();
   }, [unitId]);
 
-  const [showClientModal, setShowClientModal] = useState(false);
-  const [pendingStatus, setPendingStatus] = useState('');
-  
-  const updateStatus = async (newStatus) => {
-    if (newStatus === 'SOLD OUT' || newStatus === 'IN NEGOTIATION' || newStatus === 'RESERVED') {
-      setPendingStatus(newStatus);
-      setShowClientModal(true);
-      setIsDropdownOpen(false);
-      return;
-    }
-
-    // Optimistic update for AVAILABLE
-    setUnit(prev => ({ ...prev, status: newStatus, tag_color: '' }));
-    setIsDropdownOpen(false);
-    
-    // Database update
-    const { error } = await supabase
-      .from('PropertyUnits')
-      .update({ status: newStatus, tag_color: '' })
-      .eq('unit_id', unitId);
-      
-    if (error) {
-      alert("Error updating status: " + error.message);
-    } else {
-      router.refresh();
-    }
-  };
-
-  const submitClientDetails = async (e) => {
+  const handleSaveDetails = async (e) => {
     e.preventDefault();
-    const formData = new FormData(e.target);
-    const data = Object.fromEntries(formData);
-    
-    // Save to Inquiries as a side-channel to store full client details
-    await fetch('/api/inquiries', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: data.name,
-        phone: data.phone,
-        email: data.email || '',
-        message: `Address: ${data.address}, Pincode: ${data.pincode}, Aadhaar: ${data.aadhaar}, Unit Type: ${data.unit_type}`,
-        source: `UNIT_ASSIGNMENT_${unitId}`
-      }),
-      headers: { 'Content-Type': 'application/json' }
-    });
-
-    // Optimistic update
-    setUnit(prev => ({ ...prev, status: pendingStatus, tag_color: data.name }));
-    setShowClientModal(false);
-    
-    // Database update PropertyUnits
-    const { error } = await supabase
-      .from('PropertyUnits')
-      .update({ status: pendingStatus, tag_color: data.name })
-      .eq('unit_id', unitId);
+    setLoading(true);
+    try {
+      const oldStatus = unit?.status;
+      const oldUsername = unit?.tag_color;
+      const newStatus = editForm.status;
+      const newClientName = editForm.client_name;
       
-    if (error) {
-      alert("Error updating status: " + error.message);
-    } else {
-      router.refresh();
+      // 1. Update PropertyUnits table
+      const { error: unitError } = await supabase
+        .from('PropertyUnits')
+        .update({
+          type: editForm.type,
+          area: editForm.area,
+          price: editForm.price,
+          status: newStatus,
+          tag_color: newStatus === 'SOLD OUT' ? (editForm.username || newClientName) : newClientName
+        })
+        .eq('unit_id', unitId);
+        
+      if (unitError) throw unitError;
+
+      // 2. Handle Buyer Account transitions
+      if (newStatus === 'SOLD OUT') {
+        const username = editForm.username || newClientName.toLowerCase().replace(/\s+/g, '');
+        const password = editForm.password || 'password123';
+        const totalAmount = editForm.total_amount || editForm.price;
+        const amountPaid = editForm.amount_paid || '₹ 0.00';
+        const progress = editForm.progress || '72';
+        const possessionDate = editForm.possession_date || '2027-12-31';
+
+        // Check if there was an old buyer with a different username
+        if (oldStatus === 'SOLD OUT' && oldUsername && oldUsername !== username) {
+          // Delete old user & buyer
+          await supabase.from('BuyerDetails').delete().eq('username', oldUsername);
+          await supabase.from('Users').delete().eq('username', oldUsername);
+        }
+
+        // Insert or update user in Users table
+        const { data: existingUser } = await supabase
+          .from('Users')
+          .select('username')
+          .eq('username', username)
+          .maybeSingle();
+
+        if (existingUser) {
+          await supabase
+            .from('Users')
+            .update({ password })
+            .eq('username', username);
+        } else {
+          await supabase
+            .from('Users')
+            .insert([{ username, password, role: 'Buyer' }]);
+        }
+
+        // Insert or update in BuyerDetails table
+        const { data: existingBuyer } = await supabase
+          .from('BuyerDetails')
+          .select('username')
+          .eq('username', username)
+          .maybeSingle();
+
+        const buyerPayload = {
+          username,
+          unit_id: unitId,
+          total_amount: totalAmount,
+          amount_paid: amountPaid,
+          construction_progress: `${progress}%`,
+          possession_date: possessionDate,
+          milestones: [
+            { step: "Foundation", status: "COMPLETED" },
+            { step: "Structure", status: "IN PROGRESS" },
+            { step: "Finishing", status: "PENDING" },
+            { step: "Handover", status: "PENDING" }
+          ]
+        };
+
+        if (existingBuyer) {
+          await supabase
+            .from('BuyerDetails')
+            .update(buyerPayload)
+            .eq('username', username);
+        } else {
+          await supabase
+            .from('BuyerDetails')
+            .insert([buyerPayload]);
+        }
+      } else {
+        // If status is NOT SOLD OUT, check if we need to clean up old buyer account
+        if (oldStatus === 'SOLD OUT' && oldUsername) {
+          await supabase.from('BuyerDetails').delete().eq('username', oldUsername);
+          await supabase.from('Users').delete().eq('username', oldUsername);
+        }
+      }
+
+      alert("Unit details and owner registration updated successfully!");
+      setShowEditModal(false);
+      // Refresh page
+      window.location.reload();
+    } catch (err) {
+      alert("Error saving details: " + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
   if (loading) {
-    return <div style={{padding: '50px', textAlign: 'center'}}>Loading unit details...</div>;
+    return <div style={{padding: '50px', textAlign: 'center', color: '#113629'}}>Loading unit details and registers...</div>;
   }
 
-  // Fallback if not found
   const displayUnit = unit || {
     unit_id: unitId,
     status: 'IN NEGOTIATION'
@@ -152,11 +264,11 @@ export default function UnitDetailsPage({ params }) {
               <div className="ud-hero-title">
                   <div className="ud-badges">
                     <span className="ud-badge">UNIT V-{displayUnit.unit_id}</span>
-                    <span className="ud-badge outline">{parseInt(displayUnit.unit_id) % 2 === 0 ? '3 BHK' : '2 BHK'} PREMIER</span>
+                    <span className="ud-badge outline">{displayUnit.type || (parseInt(displayUnit.unit_id) % 2 === 0 ? '3 BHK' : '2 BHK')} PREMIER</span>
                  </div>
-                 <h1>The Vanya<br/>{parseInt(displayUnit.unit_id) % 2 === 0 ? 'Heritage 3BHK' : 'Heritage 2BHK'}</h1>
+                 <h1>The Vanya<br/>{displayUnit.type || (parseInt(displayUnit.unit_id) % 2 === 0 ? 'Heritage 3BHK' : 'Heritage 2BHK')}</h1>
                  <p className="ud-hero-subtitle">
-                   Floor {displayUnit.unit_id ? displayUnit.unit_id.toString().charAt(0) : '14'}, West Wing • {parseInt(displayUnit.unit_id) % 2 === 0 ? '2,800' : '1,950'} Sq. Ft. • Sunset Orientation
+                   Floor {displayUnit.floor || (displayUnit.unit_id ? displayUnit.unit_id.toString().charAt(0) : '14')}, West Wing • {displayUnit.area || (parseInt(displayUnit.unit_id) % 2 === 0 ? '2,800' : '1,950')} Sq. Ft. • Sunset Orientation
                  </p>
               </div>
               <div className="ud-hero-actions">
@@ -169,23 +281,16 @@ export default function UnitDetailsPage({ params }) {
                  <div className="ud-btn-group" style={{width: '100%', position: 'relative'}}>
                     <button 
                        className="ud-btn-outline" 
-                       style={{flex: 1}}
-                       onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                       style={{flex: 1, backgroundColor: '#c2a661'}}
+                       onClick={() => setShowEditModal(true)}
                     >
-                       UPDATE<br/>STATUS
+                       ✏️ EDIT UNIT &<br/>REGISTRATION
                     </button>
-                    {isDropdownOpen && (
-                      <div className="ud-status-dropdown" style={{display: 'flex', top: '100%', left: 0, width: '50%'}}>
-                        <div className="ud-dropdown-item" onClick={() => updateStatus('AVAILABLE')}>AVAILABLE</div>
-                        <div className="ud-dropdown-item" onClick={() => updateStatus('IN NEGOTIATION')}>IN NEGOTIATION</div>
-                        <div className="ud-dropdown-item" onClick={() => updateStatus('SOLD OUT')}>SOLD OUT</div>
-                      </div>
-                    )}
                     <button 
                       className="ud-btn-outline clear" 
                       style={{flex: 1}}
                       onClick={() => {
-                        const content = `VANYA RESIDENCES - UNIT ${displayUnit.unit_id} BROCHURE\n\nConfiguration: ${parseInt(displayUnit.unit_id) % 2 === 0 ? '3 BHK' : '2 BHK'}\nArea: ${parseInt(displayUnit.unit_id) % 2 === 0 ? '2,800' : '1,950'} Sq. Ft.\nPrice: Negotiable\nStatus: ${displayUnit.status}`;
+                        const content = `VANYA RESIDENCES - UNIT ${displayUnit.unit_id} BROCHURE\n\nConfiguration: ${displayUnit.type || (parseInt(displayUnit.unit_id) % 2 === 0 ? '3 BHK' : '2 BHK')}\nArea: ${displayUnit.area || (parseInt(displayUnit.unit_id) % 2 === 0 ? '2,800' : '1,950')} Sq. Ft.\nPrice: ${displayUnit.price || 'Negotiable'}\nStatus: ${displayUnit.status}`;
                         const blob = new Blob([content], { type: 'text/plain' });
                         const url = URL.createObjectURL(blob);
                         const link = document.createElement('a');
@@ -209,11 +314,11 @@ export default function UnitDetailsPage({ params }) {
               <div className="ud-specs-grid">
                  <div className="ud-spec-item">
                     <p>TOTAL AREA</p>
-                    <h3>{parseInt(displayUnit.unit_id) % 2 === 0 ? '2,800' : '1,950'} <span>Sq. Ft.</span></h3>
+                    <h3>{displayUnit.area || (parseInt(displayUnit.unit_id) % 2 === 0 ? '2,800' : '1,950')} <span>Sq. Ft.</span></h3>
                  </div>
                  <div className="ud-spec-item">
-                    <p>CEILING HEIGHT</p>
-                    <h3>12.5 <span>Feet</span></h3>
+                    <p>BASE PRICE</p>
+                    <h3>{displayUnit.price || '₹ 14.25 Cr'}</h3>
                  </div>
                  <div className="ud-spec-item">
                     <p>CAR PARKS</p>
@@ -266,6 +371,46 @@ export default function UnitDetailsPage({ params }) {
                        Triple-height Entry Foyer
                     </div>
                  </div>
+              </div>
+
+              {/* Scheduled Site Visits Log */}
+              <div style={{ marginTop: '3rem', borderTop: '1px solid #eaeaea', paddingTop: '2rem' }}>
+                <h3 className="serif" style={{ fontSize: '1.5rem', color: '#113629', marginBottom: '1rem' }}>Scheduled Site Visits Log</h3>
+                {unitVisits.length === 0 ? (
+                  <p style={{ color: '#888', fontSize: '0.85rem', fontStyle: 'italic' }}>No visits scheduled for this unit yet.</p>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid #eee', color: '#888', textTransform: 'uppercase', fontSize: '0.68rem', letterSpacing: '1px' }}>
+                        <th style={{ padding: '0.5rem 0' }}>CLIENT NAME</th>
+                        <th style={{ padding: '0.5rem' }}>PHONE</th>
+                        <th style={{ padding: '0.5rem' }}>APPOINTMENT</th>
+                        <th style={{ padding: '0.5rem' }}>STATUS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {unitVisits.map((v, i) => (
+                        <tr key={v.id || i} style={{ borderBottom: '1px solid #eee' }}>
+                          <td style={{ padding: '0.8rem 0' }}><strong>{v.name}</strong></td>
+                          <td style={{ padding: '0.8rem' }}>{v.phone}</td>
+                          <td style={{ padding: '0.8rem' }}>{v.message?.includes('visit on') ? v.message.split('visit on')[1] : 'Scheduled time'}</td>
+                          <td style={{ padding: '0.8rem' }}>
+                            <span style={{
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '0.65rem',
+                              fontWeight: 'bold',
+                              background: v.status?.startsWith('SCHEDULED') ? '#fef3c7' : '#ecfdf5',
+                              color: v.status?.startsWith('SCHEDULED') ? '#b45309' : '#047857'
+                            }}>
+                              {v.status?.startsWith('SCHEDULED') ? 'UPCOMING' : 'COMPLETED'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
            </div>
 
@@ -344,49 +489,154 @@ export default function UnitDetailsPage({ params }) {
           <p>© 2026 VANYA RESIDENCES. ALL RIGHTS RESERVED.</p>
         </div>
 
-        {showClientModal && (
-          <div style={{position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}}>
-            <div style={{background: 'white', padding: '3rem', width: '100%', maxWidth: '500px', boxShadow: '0 20px 60px rgba(0,0,0,0.05)', border: '1px solid #eee', position: 'relative'}}>
-              <button onClick={() => setShowClientModal(false)} style={{position: 'absolute', top: '1rem', right: '1.5rem', background: 'transparent', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#888'}}>&times;</button>
-              <h2 className="serif" style={{color: '#113629', marginBottom: '0.5rem', fontSize: '1.8rem'}}>Client Registration</h2>
-              <p style={{color: '#888', fontSize: '0.8rem', marginBottom: '2rem', letterSpacing: '0.5px'}}>Complete the mandatory assignment details to update the Master Occupancy Grid.</p>
+        {showEditModal && (
+          <div style={{position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}}>
+            <div style={{background: 'white', padding: '2.5rem', width: '100%', maxWidth: '500px', borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', border: '1px solid #eee', position: 'relative', maxHeight: '90vh', overflowY: 'auto'}}>
+              <button onClick={() => setShowEditModal(false)} style={{position: 'absolute', top: '1rem', right: '1.5rem', background: 'transparent', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#888'}}>&times;</button>
+              <h2 className="serif" style={{color: '#113629', marginBottom: '0.5rem', fontSize: '1.6rem'}}>Edit Unit & Owner Details</h2>
+              <p style={{color: '#888', fontSize: '0.78rem', marginBottom: '1.5rem'}}>Modify unit specifications and update ownership credentials.</p>
               
-              <form onSubmit={submitClientDetails} style={{display: 'flex', flexDirection: 'column', gap: '0.8rem'}}>
-  <div>
-    <label style={{display: 'block', fontSize: '0.7rem', letterSpacing: '1px', color: '#888', marginBottom: '0.3rem'}}>FULL NAME *</label>
-    <input type="text" name="name" required style={{width: '100%', padding: '0.4rem 0', border: 'none', borderBottom: '1px solid #ddd', fontSize: '1rem', outline: 'none'}} />
-  </div>
-  <div>
-    <label style={{display: 'block', fontSize: '0.7rem', letterSpacing: '1px', color: '#888', marginBottom: '0.3rem'}}>PHONE NUMBER *</label>
-    <input type="tel" name="phone" required style={{width: '100%', padding: '0.4rem 0', border: 'none', borderBottom: '1px solid #ddd', fontSize: '1rem', outline: 'none'}} />
-  </div>
-  <div>
-    <label style={{display: 'block', fontSize: '0.7rem', letterSpacing: '1px', color: '#888', marginBottom: '0.3rem'}}>AADHAAR NUMBER *</label>
-    <input type="text" name="aadhaar" required style={{width: '100%', padding: '0.4rem 0', border: 'none', borderBottom: '1px solid #ddd', fontSize: '1rem', outline: 'none'}} />
-  </div>
-  <div>
-    <label style={{display: 'block', fontSize: '0.7rem', letterSpacing: '1px', color: '#888', marginBottom: '0.3rem'}}>RESIDENTIAL ADDRESS *</label>
-    <input type="text" name="address" required style={{width: '100%', padding: '0.4rem 0', border: 'none', borderBottom: '1px solid #ddd', fontSize: '1rem', outline: 'none'}} />
-  </div>
-  <div>
-    <label style={{display: 'block', fontSize: '0.7rem', letterSpacing: '1px', color: '#888', marginBottom: '0.3rem'}}>PINCODE *</label>
-    <input type="text" name="pincode" required style={{width: '100%', padding: '0.4rem 0', border: 'none', borderBottom: '1px solid #ddd', fontSize: '1rem', outline: 'none'}} />
-  </div>
-  <div>
-    <label style={{display: 'block', fontSize: '0.7rem', letterSpacing: '1px', color: '#888', marginBottom: '0.3rem'}}>UNIT TYPE *</label>
-    <select name="unit_type" required defaultValue="" style={{width: '100%', padding: '0.4rem 0', border: 'none', borderBottom: '1px solid #ddd', fontSize: '1rem', outline: 'none', background: 'transparent', color: '#222', cursor: 'pointer'}}>
-  <option value="" disabled>Select BHK Type</option>
-  <option value="2BHK">2 BHK</option>
-  <option value="3BHK">3 BHK</option>
-</select>
-  </div>
-  <button type="submit" style={{background: '#113629', color: 'white', border: 'none', padding: '0.8rem', fontSize: '0.8rem', letterSpacing: '2px', cursor: 'pointer', marginTop: '0.5rem'}}>
-    AUTHORIZE ASSIGNMENT
-  </button>
-</form>
-</div>
- </div>
-   )}
+              <form onSubmit={handleSaveDetails} style={{display: 'flex', flexDirection: 'column', gap: '0.8rem'}}>
+                <div>
+                  <label style={{display: 'block', fontSize: '0.65rem', fontWeight: 'bold', color: '#888', marginBottom: '0.3rem'}}>UNIT DESIGN / BHK *</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={editForm.type} 
+                    onChange={e => setEditForm({ ...editForm, type: e.target.value })} 
+                    style={{width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem'}} 
+                  />
+                </div>
+
+                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
+                  <div>
+                    <label style={{display: 'block', fontSize: '0.65rem', fontWeight: 'bold', color: '#888', marginBottom: '0.3rem'}}>AREA (SQ. FT.) *</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={editForm.area} 
+                      onChange={e => setEditForm({ ...editForm, area: e.target.value })} 
+                      style={{width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem'}} 
+                    />
+                  </div>
+                  <div>
+                    <label style={{display: 'block', fontSize: '0.65rem', fontWeight: 'bold', color: '#888', marginBottom: '0.3rem'}}>UNIT BASE PRICE *</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={editForm.price} 
+                      onChange={e => setEditForm({ ...editForm, price: e.target.value })} 
+                      style={{width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem'}} 
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{display: 'block', fontSize: '0.65rem', fontWeight: 'bold', color: '#888', marginBottom: '0.3rem'}}>UNIT STATUS *</label>
+                  <select 
+                    value={editForm.status} 
+                    onChange={e => setEditForm({ ...editForm, status: e.target.value })} 
+                    style={{width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem', background: 'white'}}
+                  >
+                    <option value="AVAILABLE">AVAILABLE</option>
+                    <option value="IN NEGOTIATION">IN NEGOTIATION</option>
+                    <option value="RESERVED">RESERVED</option>
+                    <option value="SOLD OUT">SOLD OUT</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{display: 'block', fontSize: '0.65rem', fontWeight: 'bold', color: '#888', marginBottom: '0.3rem'}}>CLIENT / OWNER FULL NAME</label>
+                  <input 
+                    type="text" 
+                    value={editForm.client_name} 
+                    onChange={e => setEditForm({ ...editForm, client_name: e.target.value })} 
+                    style={{width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem'}} 
+                  />
+                </div>
+
+                {editForm.status === 'SOLD OUT' && (
+                  <div style={{marginTop: '1rem', borderTop: '1px dashed #ddd', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem'}}>
+                    <h3 style={{fontSize: '0.85rem', color: '#113629', margin: '0 0 0.5rem 0'}}>Buyer Login & Details</h3>
+                    
+                    <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
+                      <div>
+                        <label style={{display: 'block', fontSize: '0.65rem', fontWeight: 'bold', color: '#888', marginBottom: '0.3rem'}}>PORTAL USERNAME *</label>
+                        <input 
+                          type="text" 
+                          required 
+                          value={editForm.username} 
+                          onChange={e => setEditForm({ ...editForm, username: e.target.value })} 
+                          style={{width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem'}} 
+                        />
+                      </div>
+                      <div>
+                        <label style={{display: 'block', fontSize: '0.65rem', fontWeight: 'bold', color: '#888', marginBottom: '0.3rem'}}>PORTAL PASSWORD *</label>
+                        <input 
+                          type="text" 
+                          required 
+                          value={editForm.password} 
+                          onChange={e => setEditForm({ ...editForm, password: e.target.value })} 
+                          style={{width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem'}} 
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
+                      <div>
+                        <label style={{display: 'block', fontSize: '0.65rem', fontWeight: 'bold', color: '#888', marginBottom: '0.3rem'}}>TOTAL PRICE *</label>
+                        <input 
+                          type="text" 
+                          required 
+                          value={editForm.total_amount} 
+                          onChange={e => setEditForm({ ...editForm, total_amount: e.target.value })} 
+                          style={{width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem'}} 
+                        />
+                      </div>
+                      <div>
+                        <label style={{display: 'block', fontSize: '0.65rem', fontWeight: 'bold', color: '#888', marginBottom: '0.3rem'}}>AMOUNT PAID *</label>
+                        <input 
+                          type="text" 
+                          required 
+                          value={editForm.amount_paid} 
+                          onChange={e => setEditForm({ ...editForm, amount_paid: e.target.value })} 
+                          style={{width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem'}} 
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
+                      <div>
+                        <label style={{display: 'block', fontSize: '0.65rem', fontWeight: 'bold', color: '#888', marginBottom: '0.3rem'}}>POSSESSION DATE</label>
+                        <input 
+                          type="date" 
+                          value={editForm.possession_date} 
+                          onChange={e => setEditForm({ ...editForm, possession_date: e.target.value })} 
+                          style={{width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem'}} 
+                        />
+                      </div>
+                      <div>
+                        <label style={{display: 'block', fontSize: '0.65rem', fontWeight: 'bold', color: '#888', marginBottom: '0.3rem'}}>CONSTRUCTION %</label>
+                        <input 
+                          type="number" 
+                          min="0" 
+                          max="100" 
+                          value={editForm.progress} 
+                          onChange={e => setEditForm({ ...editForm, progress: e.target.value })} 
+                          style={{width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem'}} 
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <button type="submit" style={{background: '#113629', color: 'white', border: 'none', padding: '0.8rem', fontSize: '0.8rem', letterSpacing: '2px', cursor: 'pointer', marginTop: '0.5rem', fontWeight: 'bold', borderRadius: '4px'}}>
+                  SAVE CHANGES
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
