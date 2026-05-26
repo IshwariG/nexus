@@ -60,6 +60,14 @@ export default function GridClient({ units, inquiries, project = 'vanya-residenc
     }
   }
 
+  // Ensure all units for Phase 2 (floors 6-10) are AVAILABLE to show "all green"
+  projectUnits = projectUnits.map(u => {
+    if (parseInt(u.floor) >= 6) {
+      return { ...u, status: 'AVAILABLE', tag_color: '' };
+    }
+    return u;
+  });
+
   const handleCellClick = (unitId) => {
     // Look for client details in the Inquiries side-channel
     const inquiry = inquiries.find(inq => inq.source === `UNIT_ASSIGNMENT_${unitId}`);
@@ -89,111 +97,257 @@ export default function GridClient({ units, inquiries, project = 'vanya-residenc
     <>
       {/* Analytical Performance Report */}
       <div className="performance-section mb-2">
-        <div style={{ textAlign: 'center' }}>
-          <div>
-            <h3 className="serif" style={{margin:0}}>Analytical Performance Report</h3>
-            <p className="text-muted" style={{margin:0, fontSize:'0.8rem'}}>Aggregate sales intelligence & velocity tracking (Phase {activePhase})</p>
-          </div>
+        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+          <h3 className="serif" style={{ fontSize: '2.2rem', color: '#113629', margin: '0 0 0.4rem 0' }}>Analytical Performance Report</h3>
+          <div style={{ width: '60px', height: '3px', background: '#c2a661', margin: '0 auto 0.5rem auto', borderRadius: '2px' }}></div>
+          <p style={{ fontSize: '0.8rem', color: '#9ca3af', margin: 0 }}>
+            Aggregate sales intelligence & velocity tracking (Phase {activePhase})
+          </p>
         </div>
 
-        <div className="perf-grid-top mt-2">
-          <div className="perf-card text-center">
-            <p className="perf-label">INVENTORY DISTRIBUTION</p>
-            <div className="donut-chart-mock" style={{
-              background: `conic-gradient(
-                #8b1c1c 0% ${(soldUnits/totalUnits)*100}%,
-                #1a4d8c ${(soldUnits/totalUnits)*100}% ${((soldUnits+reservedUnits)/totalUnits)*100}%,
-                #2e7d32 ${((soldUnits+reservedUnits)/totalUnits)*100}% 100%
-              )`
-            }}>
-               <div className="donut-inner">
-                 <h2 className="serif" style={{margin:0, fontSize:'2rem'}}>{totalUnits}</h2>
-                 <span style={{fontSize:'0.6rem', color:'#888', letterSpacing:'1px'}}>TOTAL UNITS</span>
-               </div>
-            </div>
-            <div className="donut-legend">
-              <span><span className="dot sold"></span> SOLD ({soldUnits}) <span className="p-val">{Math.round((soldUnits/totalUnits)*100)}%</span></span>
-              <span><span className="dot reserved"></span> RSVD ({reservedUnits}) <span className="p-val">{Math.round((reservedUnits/totalUnits)*100)}%</span></span>
-              <span><span className="dot available"></span> AVAL ({availableUnits}) <span className="p-val">{Math.round((availableUnits/totalUnits)*100)}%</span></span>
-            </div>
-          </div>
-          <div className="perf-card">
-            <div className="flex-between mb-1">
-              <p className="perf-label">MONTHLY SALES VELOCITY</p>
-              <div className="chart-legend">
-                <span><span className="dot" style={{background: '#113629'}}></span> REVENUE</span>
-                <span><span className="dot" style={{background: '#c62828'}}></span> TARGET</span>
+        {(() => {
+          const pSoldPerc = Math.round((soldUnits / totalUnits) * 100);
+          const pReservedPerc = Math.round((reservedUnits / totalUnits) * 100);
+          const pAvailablePerc = Math.max(0, 100 - pSoldPerc - pReservedPerc);
+
+          const pAvgPriceLakhs = project === 'vanya-estate' ? 650 : project === 'vanya-meadows' ? 820 : 480;
+          const pTotalPortfolioLakhs = project === 'vanya-estate' ? 65000 : project === 'vanya-meadows' ? 65600 : 45000;
+          const pTotalRevenueLakhs = project === 'vanya-estate' ? 9750 : project === 'vanya-meadows' ? 4100 : 18050;
+          const pConversionRate = project === 'vanya-estate' ? 18.2 : project === 'vanya-meadows' ? 12.4 : 28.4;
+          
+          const formatCr = (lakhs) => lakhs >= 100 ? `${(lakhs / 100).toFixed(1)} Cr` : `${lakhs.toFixed(0)} L`;
+          
+          return (
+            <>
+              {/* ===== MAIN GRID: Donut | Bar Chart | KPI Stack ===== */}
+              <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr 220px', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                
+                {/* LEFT: Inventory Distribution Donut */}
+                <div className="widget-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '1rem' }}>INVENTORY DISTRIBUTION</span>
+                  
+                  {/* Refined SVG Donut Chart */}
+                  <div style={{ position: 'relative', width: '160px', height: '160px', marginBottom: '1rem' }}>
+                    <svg width="160" height="160" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
+                      <circle cx="18" cy="18" r="14" fill="none" stroke="#f1f3f5" strokeWidth="3.8" />
+                      <circle cx="18" cy="18" r="14" fill="none" stroke="#137333" strokeWidth="4" pathLength="100"
+                        strokeDasharray={`${pAvailablePerc} ${100 - pAvailablePerc}`} strokeDashoffset="0"
+                        strokeLinecap="round" style={{ transition: 'stroke-dasharray 0.8s ease' }} />
+                      <circle cx="18" cy="18" r="14" fill="none" stroke="#1a73e8" strokeWidth="4" pathLength="100"
+                        strokeDasharray={`${pReservedPerc} ${100 - pReservedPerc}`} strokeDashoffset={`${-pAvailablePerc}`}
+                        strokeLinecap="round" style={{ transition: 'stroke-dasharray 0.8s ease' }} />
+                      <circle cx="18" cy="18" r="14" fill="none" stroke="#8B2500" strokeWidth="4" pathLength="100"
+                        strokeDasharray={`${pSoldPerc} ${100 - pSoldPerc}`} strokeDashoffset={`${-pAvailablePerc - pReservedPerc}`}
+                        strokeLinecap="round" style={{ transition: 'stroke-dasharray 0.8s ease' }} />
+                    </svg>
+                    <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                      <h2 className="serif" style={{ margin: 0, fontSize: '2.2rem', color: '#113629', fontWeight: 'bold', lineHeight: 1 }}>{totalUnits}</h2>
+                      <span style={{ fontSize: '0.58rem', color: '#9ca3af', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>TOTAL UNITS</span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '1rem', fontSize: '0.68rem', fontWeight: '600' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span style={{ width: '9px', height: '9px', background: '#8B2500', borderRadius: '50%', display: 'inline-block' }}></span>
+                      <span style={{ color: '#4b5563' }}>SOLD</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span style={{ width: '9px', height: '9px', background: '#1a73e8', borderRadius: '50%', display: 'inline-block' }}></span>
+                      <span style={{ color: '#4b5563' }}>RSVD</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span style={{ width: '9px', height: '9px', background: '#137333', borderRadius: '50%', display: 'inline-block' }}></span>
+                      <span style={{ color: '#4b5563' }}>AVAL</span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.6rem', fontSize: '0.62rem', color: '#6b7280', marginTop: '0.3rem', fontWeight: '500' }}>
+                    <span>({soldUnits}) {pSoldPerc}%</span>
+                    <span>({reservedUnits}) {pReservedPerc}%</span>
+                    <span>({availableUnits}) {pAvailablePerc}%</span>
+                  </div>
+                </div>
+
+                {/* CENTER: Monthly Sales Velocity Bar Chart */}
+                <div className="widget-card" style={{ padding: '1.5rem', background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                    <div>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#113629', letterSpacing: '0.5px' }}>MONTHLY SALES VELOCITY</span>
+                      <div style={{ display: 'flex', gap: '1rem', marginTop: '0.3rem', fontSize: '0.65rem', fontWeight: 'bold' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#137333' }}>
+                          <span style={{ width: '8px', height: '8px', background: '#137333', borderRadius: '50%', display: 'inline-block' }}></span> REVENUE
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#9ca3af' }}>
+                          <span style={{ width: '8px', height: '8px', background: 'none', border: '2px solid #9ca3af', borderRadius: '50%', display: 'inline-block' }}></span> TARGET
+                        </span>
+                      </div>
+                    </div>
+                    <select defaultValue={activePhase === 2 ? "H2" : "H1"} style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem', border: '1px solid #d1d5db', borderRadius: '6px', background: '#fff', color: '#374151', fontWeight: '600' }}>
+                      <option value="H1">Jan - Jun</option>
+                      <option value="H2">Jul - Dec</option>
+                    </select>
+                  </div>
+                  {/* SVG Bar chart */}
+                  {(() => {
+                    const months = [
+                      { label: 'JANUARY', value: project === 'vanya-estate' ? 1.5 : project === 'vanya-meadows' ? 0.8 : 2 },
+                      { label: 'FEBRUARY', value: project === 'vanya-estate' ? 2.2 : project === 'vanya-meadows' ? 1.0 : 2.6 },
+                      { label: 'MARCH', value: project === 'vanya-estate' ? 1.8 : project === 'vanya-meadows' ? 1.2 : 3.2 },
+                      { label: 'APRIL', value: project === 'vanya-estate' ? 3.5 : project === 'vanya-meadows' ? 2.0 : 3.8 },
+                      { label: 'MAY', value: project === 'vanya-estate' ? 3.0 : project === 'vanya-meadows' ? 1.8 : 4.4 },
+                      { label: 'JUNE', value: project === 'vanya-estate' ? 4.2 : project === 'vanya-meadows' ? 2.5 : 5.0 }
+                    ];
+                    if (activePhase === 2) {
+                      months.forEach(m => m.value = m.value * 1.5);
+                    }
+                    const maxVal = Math.max(...months.map(m => m.value), 1);
+                    const targetLine = maxVal * 0.55;
+                    
+                    return (
+                      <div style={{ position: 'relative', height: '220px', marginTop: '1rem' }}>
+                        <svg viewBox="0 0 600 220" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ overflow: 'visible' }}>
+                          {[0, 0.25, 0.5, 0.75, 1].map((perc, i) => {
+                            const val = (maxVal * 1.2 * perc).toFixed(1);
+                            const y = 195 - (perc * 170);
+                            return (
+                              <g key={i}>
+                                <line x1="40" y1={y} x2="580" y2={y} stroke="#f1f3f5" strokeWidth="1" />
+                                <text x="30" y={y + 4} textAnchor="end" style={{ fontSize: '0.6rem', fill: '#9ca3af', fontWeight: '600' }}>{val}</text>
+                              </g>
+                            );
+                          })}
+                          
+                          <line x1="40" y1={195 - (targetLine / (maxVal * 1.2)) * 170} x2="580" y2={195 - (targetLine / (maxVal * 1.2)) * 170} stroke="#137333" strokeWidth="1.5" strokeDasharray="8 4" opacity="0.4" />
+                          
+                          {months.map((m, idx) => {
+                            const barWidth = 55;
+                            const gap = (540 - barWidth * 6) / 7;
+                            const x = 40 + gap + idx * (barWidth + gap);
+                            const barHeight = Math.max(3, (m.value / (maxVal * 1.2)) * 170);
+                            const y = 195 - barHeight;
+                            const crLabel = `${m.value.toFixed(1)} Cr`;
+                            
+                            return (
+                              <g key={idx}>
+                                <rect x={x} y={y} width={barWidth} height={barHeight} rx="4" ry="4" fill="url(#barGradientGrid)" />
+                                <text x={x + barWidth / 2} y={y - 8} textAnchor="middle" style={{ fontSize: '0.62rem', fill: '#1f2937', fontWeight: '700' }}>{crLabel}</text>
+                                <text x={x + barWidth / 2} y={210} textAnchor="middle" style={{ fontSize: '0.55rem', fill: '#6b7280', fontWeight: '600' }}>{m.label}</text>
+                              </g>
+                            );
+                          })}
+                          <defs>
+                            <linearGradient id="barGradientGrid" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#2d7c5f" stopOpacity="0.9" />
+                              <stop offset="100%" stopColor="#b8d8c8" stopOpacity="0.6" />
+                            </linearGradient>
+                          </defs>
+                        </svg>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* RIGHT: 3 Stacked KPI Cards */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div className="widget-card" style={{ padding: '1.25rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px' }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: '700', color: '#4b5563', letterSpacing: '0.5px', marginBottom: '0.4rem' }}>AVG. PRICE PER UNIT</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#ecfdf5', border: '1.5px solid #bbf0d4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#137333" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                        </svg>
+                      </div>
+                      <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629', fontWeight: 'bold' }}>₹ {formatCr(pAvgPriceLakhs)}</h3>
+                    </div>
+                  </div>
+                  <div className="widget-card" style={{ padding: '1.25rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px' }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: '700', color: '#4b5563', letterSpacing: '0.5px', marginBottom: '0.4rem' }}>TOTAL PORTFOLIO VALUE</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#ecfdf5', border: '1.5px solid #bbf0d4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#137333" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 7V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3" />
+                        </svg>
+                      </div>
+                      <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629', fontWeight: 'bold' }}>₹ {formatCr(pTotalPortfolioLakhs)}</h3>
+                    </div>
+                    <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700', marginTop: '0.3rem', marginLeft: '0.1rem' }}>↑ +{project === 'vanya-estate' ? '18.4' : project === 'vanya-meadows' ? '21.0' : '15.2'}% INCREASE</span>
+                  </div>
+                  <div className="widget-card" style={{ padding: '1.25rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px' }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: '700', color: '#4b5563', letterSpacing: '0.5px', marginBottom: '0.4rem' }}>CONVERSION RATE</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#ecfdf5', border: '1.5px solid #bbf0d4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#137333" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                        </svg>
+                      </div>
+                      <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629', fontWeight: 'bold' }}>{pConversionRate}%</h3>
+                    </div>
+                    <span style={{ fontSize: '0.65rem', color: '#6b7280', fontWeight: '600', marginTop: '0.3rem', marginLeft: '0.1rem' }}>LEAD TO DEPOSIT</span>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="bar-chart-mock">
-              <div className="bar-col"><div className="bar" style={{height: project === 'vanya-estate' ? '30%' : project === 'vanya-meadows' ? '15%' : '40%'}}></div><span>JANUARY</span></div>
-              <div className="bar-col"><div className="bar" style={{height: project === 'vanya-estate' ? '45%' : project === 'vanya-meadows' ? '20%' : '55%'}}></div><span>FEBRUARY</span></div>
-              <div className="bar-col"><div className="bar" style={{height: project === 'vanya-estate' ? '35%' : project === 'vanya-meadows' ? '25%' : '50%'}}></div><span>MARCH</span></div>
-              <div className="bar-col"><div className="bar" style={{height: project === 'vanya-estate' ? '70%' : project === 'vanya-meadows' ? '40%' : '80%'}}></div><span>APRIL</span></div>
-              <div className="bar-col"><div className="bar" style={{height: project === 'vanya-estate' ? '60%' : project === 'vanya-meadows' ? '35%' : '65%'}}></div><span>MAY</span></div>
-              <div className="bar-col"><div className="bar" style={{height: project === 'vanya-estate' ? '85%' : project === 'vanya-meadows' ? '50%' : '95%'}}></div><span>JUNE</span></div>
-            </div>
-          </div>
-          <div className="perf-card-stack">
-            <div className="perf-card p-small">
-              <p className="perf-label">AVG. PRICE PER UNIT</p>
-              <h2 className="serif m-0">
-                {project === 'vanya-estate' ? '₹ 6.5 Cr' : project === 'vanya-meadows' ? '₹ 8.2 Cr' : '₹ 4.8 Cr'}
-              </h2>
-              <div className="progress-bar mt-1"><div className="progress" style={{width: project === 'vanya-estate' ? '80%' : project === 'vanya-meadows' ? '90%' : '70%', background:'#113629'}}></div></div>
-            </div>
-            <div className="perf-card p-small">
-              <p className="perf-label">TOTAL PORTFOLIO VALUE</p>
-              <h2 className="serif m-0">
-                {project === 'vanya-estate' ? '₹ 650 Cr' : project === 'vanya-meadows' ? '₹ 656 Cr' : '₹ 450 Cr'}
-              </h2>
-              <span className="text-green text-xs">
-                {project === 'vanya-estate' ? '+18.4% INCREASE' : project === 'vanya-meadows' ? '+21.0% INCREASE' : '+15.2% INCREASE'}
-              </span>
-            </div>
-            <div className="perf-card p-small">
-              <p className="perf-label">CONVERSION RATE</p>
-              <h2 className="serif text-blue m-0">
-                {project === 'vanya-estate' ? '18.2%' : project === 'vanya-meadows' ? '12.4%' : '28.4%'}
-              </h2>
-              <span className="text-muted text-xs">LEAD TO DEPOSIT</span>
-            </div>
-          </div>
-        </div>
 
-        <div className="perf-grid-bottom mt-1">
-          <div className="perf-card flex-center-left">
-            <div>
-              <p className="perf-label">TOTAL REVENUE</p>
-              <h2 className="serif m-0">
-                {project === 'vanya-estate' ? '₹ 97.5 Cr' : project === 'vanya-meadows' ? '₹ 41.0 Cr' : '₹ 180.5 Cr'}
-              </h2>
-              <span className="text-green text-xs font-bold">
-                {project === 'vanya-estate' ? '↗ +8.5% VS LAST QUARTER' : project === 'vanya-meadows' ? '↗ +5.2% VS LAST QUARTER' : '↗ +12.4% VS LAST QUARTER'}
-              </span>
-            </div>
-            <div className="icon-bg ml-auto">🏛️</div>
-          </div>
-          <div className="perf-card flex-center-left">
-            <div style={{width:'100%'}}>
-              <p className="perf-label">UNITS SOLD</p>
-              <h2 className="serif m-0">{soldUnits} <span className="text-muted" style={{fontSize:'1rem'}}>/ {totalUnits}</span></h2>
-              <div className="progress-bar mt-1"><div className="progress" style={{width:`${(soldUnits/totalUnits)*100}%`, background: '#113629'}} ></div></div>
-            </div>
-          </div>
-          <div className="perf-card flex-center-left">
-            <div>
-              <p className="perf-label">AVG. SALES CYCLE</p>
-              <h2 className="serif m-0">
-                {project === 'vanya-estate' ? '32 Days' : project === 'vanya-meadows' ? '45 Days' : '24 Days'}
-              </h2>
-              <span className="text-blue text-xs font-bold">
-                {project === 'vanya-estate' ? '◷ -2 DAYS IMPROVEMENT' : project === 'vanya-meadows' ? '◷ STABLE VELOCITY' : '◷ -4 DAYS IMPROVEMENT'}
-              </span>
-            </div>
-            <div className="icon-bg ml-auto">⏱️</div>
-          </div>
-        </div>
+              {/* ===== BOTTOM ROW: 3 KPI Cards ===== */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
+                <div className="widget-card" style={{ padding: '1.5rem', background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '0.5px' }}>TOTAL REVENUE</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.75rem' }}>
+                    <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: '#ecfdf5', border: '1.5px solid #bbf0d4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#137333" strokeWidth="2.5" strokeLinecap="round">
+                        <text x="7" y="18" fill="#137333" stroke="none" fontSize="18" fontWeight="bold" fontFamily="serif">₹</text>
+                      </svg>
+                    </div>
+                    <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>₹ {formatCr(pTotalRevenueLakhs)}</h3>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' }}>
+                    <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700' }}>↑ +{project === 'vanya-estate' ? '8.5' : project === 'vanya-meadows' ? '5.2' : '12.4'}% VS LAST QUARTER</span>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M9 21v-6h6v6" />
+                    </svg>
+                  </div>
+                </div>
+
+                <div className="widget-card" style={{ padding: '1.5rem', background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '0.5px' }}>UNITS SOLD</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.75rem' }}>
+                    <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: '#ecfdf5', border: '1.5px solid #bbf0d4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#137333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                      </svg>
+                    </div>
+                    <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>{soldUnits} <span style={{ fontSize: '1.05rem', color: '#9ca3af', fontWeight: 'normal' }}>/ {totalUnits}</span></h3>
+                  </div>
+                  <div style={{ marginTop: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                      <div style={{ background: '#137333', color: 'white', fontSize: '0.58rem', fontWeight: '700', padding: '2px 8px', borderRadius: '4px' }}>{pSoldPerc}%</div>
+                      <div style={{ flex: 1, height: '8px', background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pSoldPerc}%`, background: 'linear-gradient(90deg, #137333, #2d7c5f)', borderRadius: '4px', transition: 'width 0.6s ease' }}></div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '0.62rem', color: '#6b7280', fontWeight: '600' }}>{pSoldPerc}% of Total Inventory Sold</span>
+                  </div>
+                </div>
+
+                <div className="widget-card" style={{ padding: '1.5rem', background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '0.5px' }}>AVG. SALES CYCLE</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.75rem' }}>
+                    <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: '#ecfdf5', border: '1.5px solid #bbf0d4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#137333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+                      </svg>
+                    </div>
+                    <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>{project === 'vanya-estate' ? 32 : project === 'vanya-meadows' ? 45 : 24} Days</h3>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' }}>
+                    <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700' }}>{project === 'vanya-meadows' ? '◷ STABLE VELOCITY' : `↓ -${project === 'vanya-estate' ? 2 : 4} DAYS IMPROVEMENT`}</span>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       <div className="widget-card">

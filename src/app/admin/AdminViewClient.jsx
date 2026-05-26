@@ -53,6 +53,12 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
   // Dashboard view type (Analytical vs Executive)
   const [dashboardSubTab, setDashboardSubTab] = useState('analytical');
 
+  // Analytical Performance phase toggle (Phase 1 = overview, Phase 2 = detailed)
+  const [analyticalPhase, setAnalyticalPhase] = useState(1);
+
+  // Monthly Sales Velocity half-year filter
+  const [velocityHalf, setVelocityHalf] = useState('H1'); // 'H1' = Jan-Jun, 'H2' = Jul-Dec
+
   const handlePrevMonth = () => {
     setLeadsMonth(prev => {
       const d = new Date(prev);
@@ -75,16 +81,24 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
   // Helper to parse amount strings like "₹ 14.25 Cr" or "₹ 15.20 L" or "₹ 85,000" to Lakhs
   const parseAmountVal = (val) => {
     if (!val) return 0;
-    if (typeof val === 'number') return val;
-    const cleaned = val.replace(/[^\d.]/g, '');
+    
+    if (typeof val === 'number') {
+      return val < 1000 ? val * 100 : val / 100000;
+    }
+    
+    const lowerVal = val.toString().toLowerCase();
+    const cleaned = lowerVal.replace(/[^\d.]/g, '');
     let num = parseFloat(cleaned) || 0;
-    if (val.includes('Cr')) {
+    
+    if (lowerVal.includes('cr') || lowerVal.includes('crore')) {
       num = num * 100;
-    } else if (val.includes('L')) {
+    } else if (lowerVal.includes('l') || lowerVal.includes('lakh')) {
       // already in Lakhs
     } else {
-      num = num / 100000;
+      // If no unit is specified and the number is small, assume Crores. Otherwise Rupees.
+      num = num < 1000 ? num * 100 : num / 100000;
     }
+    
     return num;
   };
 
@@ -170,7 +184,44 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
     }
   };
 
-  // Calculate live database KPIs
+  // Helper to compute Monthly Sales Velocity data for H1 (Jan-Jun) or H2 (Jul-Dec)
+  const getVelocityData = (half) => {
+    const year = 2026;
+    const startMonth = half === 'H1' ? 0 : 6; // Jan=0 or Jul=6
+    const monthNames = half === 'H1'
+      ? ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE']
+      : ['JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+
+    const months = [];
+    for (let i = 0; i < 6; i++) {
+      months.push({ label: monthNames[i], monthIndex: startMonth + i, value: 0 });
+    }
+
+    buyers.forEach(buyer => {
+      const amt = parseAmountVal(buyer.amount_paid); // in Lakhs
+      const regDate = buyer.created_at ? new Date(buyer.created_at) : new Date("2026-05-01");
+
+      const activeMonths = months.filter(m => {
+        const mDate = new Date(year, m.monthIndex, 1);
+        const rDate = new Date(regDate.getFullYear(), regDate.getMonth(), 1);
+        return mDate >= rDate;
+      });
+
+      const count = activeMonths.length || 1;
+      const share = amt / count;
+
+      months.forEach(m => {
+        const mDate = new Date(year, m.monthIndex, 1);
+        const rDate = new Date(regDate.getFullYear(), regDate.getMonth(), 1);
+        if (mDate >= rDate) {
+          m.value += share;
+        }
+      });
+    });
+
+    // Convert to Cr for display
+    return months.map(m => ({ ...m, valueCr: m.value / 100 }));
+  };
   const totalLeadsCount = inquiries.filter(inq => !inq.source?.startsWith('UNIT_ASSIGNMENT_')).length;
   const soldUnitsCount = units.filter(u => u.status === 'SOLD OUT').length;
   const availableUnitsCount = units.filter(u => u.status === 'AVAILABLE').length;
@@ -186,17 +237,22 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
   const reservedPerc = Math.round((reservedUnitsCount / totalUnitsCount) * 100);
   const availablePerc = Math.max(0, 100 - soldPerc - reservedPerc);
 
+  const formatIndianCurrency = (amountInLakhs) => {
+    const val = Math.round(amountInLakhs * 100000);
+    return new Intl.NumberFormat('en-IN').format(val);
+  };
+
   const unitPrices = units.map(u => parseAmountVal(u.price)).filter(p => p > 0);
   const avgPriceLakhs = unitPrices.length > 0 ? unitPrices.reduce((sum, p) => sum + p, 0) / unitPrices.length : 480;
-  const avgPriceCr = (avgPriceLakhs / 100).toFixed(1);
+  const avgPriceFormatted = formatIndianCurrency(avgPriceLakhs);
 
   const totalPortfolioLakhs = units.map(u => parseAmountVal(u.price)).reduce((sum, p) => sum + p, 0);
-  const totalPortfolioCr = Math.round(totalPortfolioLakhs / 100) || 450;
+  const totalPortfolioFormatted = formatIndianCurrency(totalPortfolioLakhs || 45000);
 
   const totalRevenueLakhs = buyers.map(b => parseAmountVal(b.amount_paid)).reduce((sum, p) => sum + p, 0);
-  const totalRevenueCr = (totalRevenueLakhs / 100).toFixed(1);
+  const totalRevenueFormatted = formatIndianCurrency(totalRevenueLakhs);
 
-  const totalCollectionCr = totalRevenueCr;
+  const totalCollectionFormatted = totalRevenueFormatted;
   
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
@@ -207,15 +263,15 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
     }
     return sum;
   }, 0);
-  const collectedThisMonthCr = collectedThisMonthLakhs > 0 ? (collectedThisMonthLakhs / 100).toFixed(1) : (totalRevenueLakhs * 0.1 / 100).toFixed(1);
+  const collectedThisMonthFormatted = collectedThisMonthLakhs > 0 ? formatIndianCurrency(collectedThisMonthLakhs) : formatIndianCurrency(totalRevenueLakhs * 0.1);
 
   const totalPendingLakhs = buyers.reduce((sum, b) => {
     const total = parseAmountVal(b.total_amount);
     const paid = parseAmountVal(b.amount_paid);
     return sum + Math.max(0, total - paid);
   }, 0);
-  const pendingInstallmentsCr = (totalPendingLakhs / 100).toFixed(1);
-  const overdueAmountCr = (totalPendingLakhs * 0.375 / 100).toFixed(1);
+  const pendingInstallmentsFormatted = formatIndianCurrency(totalPendingLakhs);
+  const overdueAmountFormatted = formatIndianCurrency(totalPendingLakhs * 0.375);
 
   const handleDeleteUser = async (username, role) => {
     if (!confirm(`Are you sure you want to delete the user "${username}"?`)) return;
@@ -465,273 +521,580 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
         {activeTab === 'dashboard' && (
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem 2.5rem 2.5rem' }}>
             
-            {/* Dashboard Sub-tab Switcher */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', marginBottom: '1.5rem', gap: '1.5rem' }}>
-              <button 
-                onClick={() => setDashboardSubTab('analytical')}
-                className={`sub-tab-btn ${dashboardSubTab === 'analytical' ? 'active' : ''}`}
-                style={{
-                  padding: '0.75rem 0.25rem',
-                  fontSize: '0.85rem',
-                  fontWeight: '600',
-                  color: dashboardSubTab === 'analytical' ? '#113629' : '#6b7280',
-                  background: 'none',
-                  border: 'none',
-                  borderBottom: dashboardSubTab === 'analytical' ? '2.5px solid #113629' : 'none',
-                  cursor: 'pointer',
-                  outline: 'none',
-                  transition: 'all 0.2s',
-                  fontFamily: "'Playfair Display', serif"
-                }}
-              >
-                Analytical Performance
-              </button>
-              <button 
-                onClick={() => setDashboardSubTab('executive')}
-                className={`sub-tab-btn ${dashboardSubTab === 'executive' ? 'active' : ''}`}
-                style={{
-                  padding: '0.75rem 0.25rem',
-                  fontSize: '0.85rem',
-                  fontWeight: '600',
-                  color: dashboardSubTab === 'executive' ? '#113629' : '#6b7280',
-                  background: 'none',
-                  border: 'none',
-                  borderBottom: dashboardSubTab === 'executive' ? '2.5px solid #113629' : 'none',
-                  cursor: 'pointer',
-                  outline: 'none',
-                  transition: 'all 0.2s',
-                  fontFamily: "'Playfair Display', serif"
-                }}
-              >
-                Executive Performance
-              </button>
+            {/* Header section */}
+            <div className="flex-between mb-3" style={{ alignItems: 'flex-start' }}>
+              <div>
+                <h1 className="serif" style={{ fontSize: '1.6rem', color: '#113629', margin: '0 0 0.25rem 0', fontWeight: 'bold' }}>Welcome back, Admin! 👋</h1>
+                <p className="text-muted" style={{ margin: 0, fontSize: '0.72rem' }}>Here's what's happening in your business today.</p>
+                <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={() => setDashboardSubTab('analytical')} className={dashboardSubTab === 'analytical' ? 'btn-dark' : 'btn-outline'} style={{ padding: '0.4rem 1rem', fontSize: '0.7rem' }}>Analytical Performance</button>
+                  <button onClick={() => setDashboardSubTab('executive')} className={dashboardSubTab === 'executive' ? 'btn-dark' : 'btn-outline'} style={{ padding: '0.4rem 1rem', fontSize: '0.7rem' }}>Executive Portal</button>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#fff', border: '1px solid #f1f3f5', padding: '0.5rem 0.75rem', borderRadius: '8px', fontSize: '0.7rem', color: '#6b7280', fontWeight: '600', boxShadow: '0 1px 3px rgba(0,0,0,0.01)' }}>
+                <span>📅 20 May 2026 - 26 May 2026</span>
+              </div>
             </div>
 
-            {/* Sub-tab 1: Analytical Performance */}
-            {dashboardSubTab === 'analytical' && (
-              <div className="animate-fade-in">
-                {/* Title & Subtitle */}
-                <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                  <h1 className="serif" style={{ fontSize: '2rem', color: '#113629', margin: '0 0 0.25rem 0', fontWeight: 'bold' }}>Analytical Performance Report</h1>
-                  <span style={{ fontSize: '0.82rem', color: '#6b7280' }}>Aggregate sales intelligence & velocity tracking (Phase 1)</span>
-                </div>
+            {dashboardSubTab === 'analytical' ? (
+              <>
+            {/* ========== ANALYTICAL PERFORMANCE REPORT ========== */}
+            <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e8eaed', padding: '2.5rem 2rem', boxShadow: '0 2px 12px rgba(0,0,0,0.03)' }}>
 
-                {/* Grid layout for Donut, Bar chart, stack of cards */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 2fr 1.2fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
-                  
-                  {/* Card 1: Inventory Distribution Donut Chart */}
-                  <div className="widget-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', padding: '1.5rem', background: '#fff' }}>
-                    <span style={{ fontSize: '0.68rem', fontWeight: 'bold', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase', alignSelf: 'flex-start' }}>INVENTORY DISTRIBUTION</span>
-                    
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', margin: '2rem 0', position: 'relative', width: '130px', height: '130px' }}>
-                      {/* Custom SVG Donut Chart */}
-                      <svg width="130" height="130" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
-                        <circle cx="18" cy="18" r="15.915" fill="none" stroke="#e5f5ea" strokeWidth="3" />
-                        {/* AVAL (green) */}
-                        <circle cx="18" cy="18" r="15.915" fill="none" stroke="#137333" strokeWidth="3.2" 
-                          strokeDasharray={`${availablePerc} ${100 - availablePerc}`} strokeDashoffset="0" />
-                        {/* SOLD (red) */}
-                        <circle cx="18" cy="18" r="15.915" fill="none" stroke="#c5221f" strokeWidth="3.2" 
-                          strokeDasharray={`${soldPerc} ${100 - soldPerc}`} strokeDashoffset={`-${availablePerc}`} />
-                        {/* RESERVED (blue) */}
-                        <circle cx="18" cy="18" r="15.915" fill="none" stroke="#1a73e8" strokeWidth="3.2" 
-                          strokeDasharray={`${reservedPerc} ${100 - reservedPerc}`} strokeDashoffset={`-${availablePerc + soldPerc}`} />
-                      </svg>
-                      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                        <h2 className="serif" style={{ margin: 0, fontSize: '1.75rem', color: '#113629', fontWeight: 'bold' }}>{totalUnitsCount}</h2>
-                        <span style={{ fontSize: '0.52rem', color: '#9ca3af', letterSpacing: '0.5px', textTransform: 'uppercase', fontWeight: 'bold' }}>Total Units</span>
+              {/* Centered Report Header */}
+              <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                <h2 className="serif" style={{ fontSize: '2rem', color: '#113629', margin: '0 0 0.25rem 0', fontWeight: 'bold', letterSpacing: '-0.5px' }}>Analytical Performance Report</h2>
+                <div style={{ width: '50px', height: '2px', background: '#113629', margin: '0 auto 0.5rem auto' }}></div>
+                <p style={{ fontSize: '0.82rem', color: '#6b7280', margin: '0 0 1rem 0', fontWeight: '500' }}>
+                  Aggregate sales intelligence & velocity tracking (Phase {analyticalPhase})
+                </p>
+                {/* Phase Dots */}
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
+                  <button
+                    onClick={() => setAnalyticalPhase(1)}
+                    style={{
+                      width: analyticalPhase === 1 ? '10px' : '8px',
+                      height: analyticalPhase === 1 ? '10px' : '8px',
+                      borderRadius: '50%',
+                      background: analyticalPhase === 1 ? '#113629' : '#d1d5db',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      padding: 0
+                    }}
+                    aria-label="Phase 1"
+                  />
+                  <button
+                    onClick={() => setAnalyticalPhase(2)}
+                    style={{
+                      width: analyticalPhase === 2 ? '10px' : '8px',
+                      height: analyticalPhase === 2 ? '10px' : '8px',
+                      borderRadius: '50%',
+                      background: analyticalPhase === 2 ? '#113629' : '#d1d5db',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      padding: 0
+                    }}
+                    aria-label="Phase 2"
+                  />
+                </div>
+              </div>
+
+              {/* ===== PHASE 1: Overview ===== */}
+              {analyticalPhase === 1 && (() => {
+                const velocityData = getVelocityData(velocityHalf);
+                const maxVelocity = Math.max(...velocityData.map(d => d.valueCr), 1);
+                const targetLine = maxVelocity * 0.55; // target line at ~55% of max
+                const yAxisMax = Math.ceil(maxVelocity * 1.2);
+                const ySteps = [0, 2, 4, 6, 8];
+                const effectiveMax = Math.max(yAxisMax, 8);
+                const totalUnits = units.length || 50;
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+                    {/* TOP ROW: Inventory Donut | Monthly Sales Velocity | Right KPI Stack */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr 220px', gap: '1.5rem', alignItems: 'stretch' }}>
+
+                      {/* LEFT: Inventory Distribution Donut */}
+                      <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '1rem' }}>INVENTORY DISTRIBUTION</span>
+
+                        {/* Donut Chart */}
+                        <div style={{ position: 'relative', width: '160px', height: '160px', marginBottom: '1rem' }}>
+                          <svg width="160" height="160" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
+                            <circle cx="18" cy="18" r="14" fill="none" stroke="#f1f3f5" strokeWidth="3.8" />
+                            {/* AVAILABLE (green) - drawn first as background arc */}
+                            <circle cx="18" cy="18" r="14" fill="none" stroke="#137333" strokeWidth="4"
+                              strokeDasharray={`${availablePerc} ${100 - availablePerc}`} strokeDashoffset="0"
+                              strokeLinecap="round"
+                              style={{ transition: 'stroke-dasharray 0.8s ease' }} />
+                            {/* RESERVED (blue) */}
+                            <circle cx="18" cy="18" r="14" fill="none" stroke="#1a73e8" strokeWidth="4"
+                              strokeDasharray={`${reservedPerc} ${100 - reservedPerc}`} strokeDashoffset={`${-availablePerc}`}
+                              strokeLinecap="round"
+                              style={{ transition: 'stroke-dasharray 0.8s ease' }} />
+                            {/* SOLD (dark red/maroon) */}
+                            <circle cx="18" cy="18" r="14" fill="none" stroke="#8B2500" strokeWidth="4"
+                              strokeDasharray={`${soldPerc} ${100 - soldPerc}`} strokeDashoffset={`${-availablePerc - reservedPerc}`}
+                              strokeLinecap="round"
+                              style={{ transition: 'stroke-dasharray 0.8s ease' }} />
+                          </svg>
+                          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                            <h2 className="serif" style={{ margin: 0, fontSize: '2.2rem', color: '#113629', fontWeight: 'bold', lineHeight: 1 }}>{totalUnits}</h2>
+                            <span style={{ fontSize: '0.58rem', color: '#9ca3af', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>TOTAL UNITS</span>
+                          </div>
+                        </div>
+
+                        {/* Legend */}
+                        <div style={{ display: 'flex', gap: '1rem', fontSize: '0.68rem', fontWeight: '600' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <span style={{ width: '9px', height: '9px', background: '#8B2500', borderRadius: '50%', display: 'inline-block' }}></span>
+                            <span style={{ color: '#4b5563' }}>SOLD</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <span style={{ width: '9px', height: '9px', background: '#1a73e8', borderRadius: '50%', display: 'inline-block' }}></span>
+                            <span style={{ color: '#4b5563' }}>RSVD</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <span style={{ width: '9px', height: '9px', background: '#137333', borderRadius: '50%', display: 'inline-block' }}></span>
+                            <span style={{ color: '#4b5563' }}>AVAL</span>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.6rem', fontSize: '0.62rem', color: '#6b7280', marginTop: '0.3rem', fontWeight: '500' }}>
+                          <span>({soldUnitsCount}) {soldPerc}%</span>
+                          <span>({reservedUnitsCount}) {reservedPerc}%</span>
+                          <span>({availableUnitsCount}) {availablePerc}%</span>
+                        </div>
+                      </div>
+
+                      {/* CENTER: Monthly Sales Velocity Bar Chart */}
+                      <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem 1.75rem' }}>
+
+                        {/* Chart Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                          <div>
+                            <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#1f2937', letterSpacing: '0.5px' }}>MONTHLY SALES VELOCITY</span>
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.35rem' }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.65rem', color: '#4b5563', fontWeight: '600' }}>
+                                <span style={{ width: '8px', height: '8px', background: '#137333', borderRadius: '50%', display: 'inline-block' }}></span>
+                                REVENUE
+                              </span>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.65rem', color: '#4b5563', fontWeight: '600' }}>
+                                <span style={{ width: '8px', height: '8px', background: 'transparent', border: '2px solid #137333', borderRadius: '50%', display: 'inline-block', boxSizing: 'border-box' }}></span>
+                                TARGET
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Half-Year Filter Dropdown */}
+                          <select
+                            value={velocityHalf}
+                            onChange={(e) => setVelocityHalf(e.target.value)}
+                            style={{
+                              padding: '0.4rem 0.75rem',
+                              fontSize: '0.75rem',
+                              border: '1px solid #d1d5db',
+                              borderRadius: '6px',
+                              background: '#fff',
+                              color: '#374151',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              outline: 'none'
+                            }}
+                          >
+                            <option value="H1">Jan - Jun</option>
+                            <option value="H2">Jul - Dec</option>
+                          </select>
+                        </div>
+
+                        {/* Y-Axis label */}
+                        <span style={{ fontSize: '0.6rem', color: '#9ca3af', fontWeight: '600' }}>₹ Cr</span>
+
+                        {/* SVG Bar Chart */}
+                        <div style={{ position: 'relative', height: '220px', marginTop: '0.25rem' }}>
+                          <svg viewBox="0 0 600 220" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ overflow: 'visible' }}>
+                            {/* Horizontal grid lines + Y-axis labels */}
+                            {[0, 2, 4, 6, 8].map((val, i) => {
+                              const y = 195 - (val / effectiveMax) * 170;
+                              return (
+                                <g key={i}>
+                                  <line x1="40" y1={y} x2="580" y2={y} stroke="#f1f3f5" strokeWidth="1" />
+                                  <text x="30" y={y + 4} textAnchor="end" style={{ fontSize: '0.6rem', fill: '#9ca3af', fontWeight: '600' }}>{val}</text>
+                                </g>
+                              );
+                            })}
+
+                            {/* Target dashed line */}
+                            <line
+                              x1="40" y1={195 - (targetLine / effectiveMax) * 170}
+                              x2="580" y2={195 - (targetLine / effectiveMax) * 170}
+                              stroke="#137333" strokeWidth="1.5" strokeDasharray="8 4" opacity="0.4"
+                            />
+
+                            {/* Bars */}
+                            {velocityData.map((d, idx) => {
+                              const barWidth = 55;
+                              const gap = (540 - barWidth * 6) / 7;
+                              const x = 40 + gap + idx * (barWidth + gap);
+                              const barHeight = Math.max(3, (d.valueCr / effectiveMax) * 170);
+                              const y = 195 - barHeight;
+                              const crLabel = d.valueCr >= 0.1 ? `${d.valueCr.toFixed(1)} Cr` : d.valueCr > 0 ? `${(d.valueCr * 100).toFixed(0)} L` : '0';
+
+                              return (
+                                <g key={idx}>
+                                  {/* Bar */}
+                                  <rect
+                                    x={x} y={y} width={barWidth} height={barHeight}
+                                    rx="4" ry="4"
+                                    fill="url(#barGradient)"
+                                    style={{ transition: 'height 0.5s ease, y 0.5s ease' }}
+                                  />
+                                  {/* Value label */}
+                                  <text x={x + barWidth / 2} y={y - 8} textAnchor="middle" style={{ fontSize: '0.62rem', fill: '#1f2937', fontWeight: '700' }}>
+                                    {crLabel}
+                                  </text>
+                                  {/* Month label */}
+                                  <text x={x + barWidth / 2} y={210} textAnchor="middle" style={{ fontSize: '0.55rem', fill: '#6b7280', fontWeight: '600' }}>
+                                    {d.label}
+                                  </text>
+                                </g>
+                              );
+                            })}
+
+                            {/* Gradient Definition */}
+                            <defs>
+                              <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#2d7c5f" stopOpacity="0.9" />
+                                <stop offset="100%" stopColor="#b8d8c8" stopOpacity="0.6" />
+                              </linearGradient>
+                            </defs>
+                          </svg>
+                        </div>
+                      </div>
+
+                      {/* RIGHT: 3 Stacked KPI Cards */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+                        {/* Avg Price Per Unit */}
+                        <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.25rem 1.25rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                          <span style={{ fontSize: '0.68rem', fontWeight: '700', color: '#4b5563', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '0.4rem' }}>AVG. PRICE PER UNIT</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                            <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#ecfdf5', border: '1.5px solid #bbf0d4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#137333" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                              </svg>
+                            </div>
+                            <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629', fontWeight: 'bold' }}>
+                              ₹ {avgPriceLakhs >= 100 ? `${(avgPriceLakhs / 100).toFixed(1)} Cr` : `${avgPriceLakhs.toFixed(0)} L`}
+                            </h3>
+                          </div>
+                        </div>
+
+                        {/* Total Portfolio Value */}
+                        <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.25rem 1.25rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                          <span style={{ fontSize: '0.68rem', fontWeight: '700', color: '#4b5563', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '0.4rem' }}>TOTAL PORTFOLIO VALUE</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                            <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#ecfdf5', border: '1.5px solid #bbf0d4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#137333" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 7V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3" />
+                              </svg>
+                            </div>
+                            <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629', fontWeight: 'bold' }}>
+                              ₹ {totalPortfolioLakhs >= 100 ? `${(totalPortfolioLakhs / 100).toFixed(1)} Cr` : `${totalPortfolioLakhs.toFixed(0)} L`}
+                            </h3>
+                          </div>
+                          <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700', marginTop: '0.3rem', marginLeft: '0.1rem' }}>↑ +15.2% INCREASE</span>
+                        </div>
+
+                        {/* Conversion Rate */}
+                        <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.25rem 1.25rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                          <span style={{ fontSize: '0.68rem', fontWeight: '700', color: '#4b5563', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '0.4rem' }}>CONVERSION RATE</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                            <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#ecfdf5', border: '1.5px solid #bbf0d4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#137333" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                              </svg>
+                            </div>
+                            <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629', fontWeight: 'bold' }}>
+                              {conversionRate > 0 ? `${conversionRate}%` : `${totalLeadsCount > 0 ? ((soldUnitsCount / totalLeadsCount) * 100).toFixed(1) : '0'}%`}
+                            </h3>
+                          </div>
+                          <span style={{ fontSize: '0.65rem', color: '#6b7280', fontWeight: '600', marginTop: '0.3rem', marginLeft: '0.1rem' }}>LEAD TO DEPOSIT</span>
+                        </div>
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.72rem', justifyContent: 'center', width: '100%', borderTop: '1px solid #f1f3f5', paddingTop: '0.75rem' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><span className="dot sold" style={{ width: '8px', height: '8px', background: '#c5221f', borderRadius: '50%', display: 'inline-block' }}></span> SOLD ({soldUnitsCount}) {soldPerc}%</span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><span className="dot reserved" style={{ width: '8px', height: '8px', background: '#1a73e8', borderRadius: '50%', display: 'inline-block' }}></span> RSVD ({reservedUnitsCount}) {reservedPerc}%</span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}><span className="dot available" style={{ width: '8px', height: '8px', background: '#137333', borderRadius: '50%', display: 'inline-block' }}></span> AVAL ({availableUnitsCount}) {availablePerc}%</span>
+                    {/* BOTTOM ROW: Total Revenue | Units Sold | Avg Sales Cycle */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>
+
+                      {/* Total Revenue */}
+                      <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '0.5px', textTransform: 'uppercase' }}>TOTAL REVENUE</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.75rem' }}>
+                          <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: '#ecfdf5', border: '1.5px solid #bbf0d4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#137333" strokeWidth="2.5" strokeLinecap="round">
+                              <text x="7" y="18" fill="#137333" stroke="none" fontSize="18" fontWeight="bold" fontFamily="serif">₹</text>
+                            </svg>
+                          </div>
+                          <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>
+                            ₹ {totalRevenueLakhs >= 100 ? `${(totalRevenueLakhs / 100).toFixed(1)} Cr` : totalRevenueFormatted}
+                          </h3>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' }}>
+                          <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700' }}>↑ +12.4% VS LAST QUARTER</span>
+                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M9 21v-6h6v6" />
+                          </svg>
+                        </div>
+                      </div>
+
+                      {/* Units Sold */}
+                      <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '0.5px', textTransform: 'uppercase' }}>UNITS SOLD</span>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', marginTop: '0.75rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: '#ecfdf5', border: '1.5px solid #bbf0d4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#137333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                              </svg>
+                            </div>
+                            <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>
+                              {soldUnitsCount} <span style={{ fontSize: '1.05rem', color: '#9ca3af', fontWeight: 'normal' }}>/ {totalUnits}</span>
+                            </h3>
+                          </div>
+                        </div>
+                        {/* Progress Bar */}
+                        <div style={{ marginTop: '1rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                            <div style={{
+                              background: '#137333',
+                              color: 'white',
+                              fontSize: '0.58rem',
+                              fontWeight: '700',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              lineHeight: '1.4'
+                            }}>{soldPerc}%</div>
+                            <div style={{ flex: 1, height: '8px', background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${soldPerc}%`, background: 'linear-gradient(90deg, #137333, #2d7c5f)', borderRadius: '4px', transition: 'width 0.6s ease' }}></div>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: '0.62rem', color: '#6b7280', fontWeight: '600' }}>{soldPerc}% of Total Inventory Sold</span>
+                        </div>
+                      </div>
+
+                      {/* Avg Sales Cycle */}
+                      <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '0.5px', textTransform: 'uppercase' }}>AVG. SALES CYCLE</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.75rem' }}>
+                          <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: '#ecfdf5', border: '1.5px solid #bbf0d4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#137333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+                            </svg>
+                          </div>
+                          <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>
+                            {(() => {
+                              const cycles = buyers.map(b => {
+                                const buyerDate = new Date(b.created_at || '2026-05-01');
+                                const matchingInq = inquiries.find(inq => inq.name && b.username && inq.name.toLowerCase().replace(/\s+/g, '') === b.username.toLowerCase());
+                                if (matchingInq) {
+                                  const inqDate = new Date(matchingInq.created_at);
+                                  return Math.max(1, Math.round((buyerDate - inqDate) / (1000 * 60 * 60 * 24)));
+                                }
+                                return 24;
+                              });
+                              return cycles.length > 0 ? Math.round(cycles.reduce((a, b) => a + b, 0) / cycles.length) : 24;
+                            })()} Days
+                          </h3>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' }}>
+                          <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700' }}>↓ -4 DAYS IMPROVEMENT</span>
+                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                          </svg>
+                        </div>
+                      </div>
                     </div>
                   </div>
+                );
+              })()}
 
-                  {/* Card 2: Monthly Sales Velocity Bar Chart */}
-                  <div className="widget-card" style={{ padding: '1.5rem', background: '#fff', position: 'relative' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                      <span style={{ fontSize: '0.68rem', fontWeight: 'bold', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase' }}>MONTHLY SALES VELOCITY</span>
-                      <select style={{ padding: '4px 8px', fontSize: '0.72rem', border: '1px solid #e5e7eb', borderRadius: '6px', background: 'white' }}>
-                        <option>Jan - Jun</option>
-                      </select>
+              {/* ===== PHASE 2: Detailed Analytics ===== */}
+              {analyticalPhase === 2 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+                  {/* Row 1: Leads Overview + Bookings by Status */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '1.5rem' }}>
+
+                    {/* Leads Overview Curve Chart */}
+                    <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase' }}>Leads Overview</span>
+                        <div style={{ display: 'flex', gap: '1rem', fontSize: '0.68rem', fontWeight: 'bold' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#b08e40' }}>
+                            <span style={{ width: '8px', height: '8px', background: '#b08e40', borderRadius: '50%', display: 'inline-block' }}></span> This Month
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#1a73e8' }}>
+                            <span style={{ width: '8px', height: '8px', background: '#1a73e8', borderRadius: '50%', display: 'inline-block' }}></span> Last Month
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ height: '180px', width: '100%', position: 'relative' }}>
+                        <svg viewBox="0 0 500 150" width="100%" height="100%" style={{ overflow: 'visible' }}>
+                          <line x1="30" y1="20" x2="470" y2="20" stroke="#f1f3f5" strokeDasharray="3 3" />
+                          <line x1="30" y1="65" x2="470" y2="65" stroke="#f1f3f5" strokeDasharray="3 3" />
+                          <line x1="30" y1="110" x2="470" y2="110" stroke="#f1f3f5" strokeDasharray="3 3" />
+                          <line x1="30" y1="130" x2="470" y2="130" stroke="#e9ecef" strokeWidth="1" />
+                          <path d="M 30 110 C 100 80, 150 120, 220 70 C 290 30, 360 90, 420 50 C 450 35, 460 40, 470 45" fill="none" stroke="#1a73e8" strokeWidth="2.5" strokeLinecap="round" opacity="0.65" />
+                          <path d="M 30 95 C 100 65, 140 100, 220 50 C 300 10, 350 70, 420 30 C 445 15, 460 20, 470 15" fill="none" stroke="#b08e40" strokeWidth="3.5" strokeLinecap="round" />
+                          {[{ x: 30, y: 95 }, { x: 103, y: 73 }, { x: 176, y: 80 }, { x: 249, y: 35 }, { x: 322, y: 48 }, { x: 395, y: 38 }, { x: 470, y: 15 }].map((node, i) => (
+                            <circle key={i} cx={node.x} cy={node.y} r="4.5" fill="#b08e40" stroke="#fff" strokeWidth="2.5" />
+                          ))}
+                          {['20 May', '21 May', '22 May', '23 May', '24 May', '25 May', '26 May'].map((label, idx) => {
+                            const x = 30 + idx * 73.3;
+                            return (<text key={idx} x={x} y="148" textAnchor="middle" style={{ fontSize: '0.62rem', fill: '#888', fontWeight: 'bold' }}>{label}</text>);
+                          })}
+                        </svg>
+                      </div>
                     </div>
 
-                    {/* Bars Container */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', height: '150px', alignItems: 'flex-end', gap: '1rem', position: 'relative', marginTop: '1.5rem' }}>
-                      {/* Target Dotted Line */}
-                      <div style={{ position: 'absolute', bottom: '65%', left: 0, right: 0, borderTop: '2px dashed #b08e40', opacity: 0.45, zIndex: 1 }}></div>
-                      
-                      {revMonths.map((m, idx) => {
-                        const valCr = (m.value / 100).toFixed(1);
-                        const hPerc = Math.max(10, Math.round((m.value / maxRev) * 100));
+                    {/* Bookings by Status Donut Chart */}
+                    <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '1.25rem' }}>Bookings by Status</span>
+                      {(() => {
+                        const totalBk = buyers.length || 562;
+                        const confirmedBk = Math.round(totalBk * 0.49);
+                        const pendingBk = Math.round(totalBk * 0.28);
+                        const cancelledBk = Math.round(totalBk * 0.13);
+                        const onHoldBk = Math.max(0, totalBk - confirmedBk - pendingBk - cancelledBk);
+                        const confPct = Math.round((confirmedBk / totalBk) * 100);
+                        const pendPct = Math.round((pendingBk / totalBk) * 100);
+                        const cancPct = Math.round((cancelledBk / totalBk) * 100);
+                        const holdPct = Math.max(0, 100 - confPct - pendPct - cancPct);
                         return (
-                          <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, height: '100%', justifyContent: 'flex-end', zIndex: 2 }}>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: '#113629', marginBottom: '4px' }}>{valCr} Cr</span>
-                            <div style={{ height: `${hPerc}%`, width: '100%', background: 'linear-gradient(to top, #113629, #34d399)', borderRadius: '6px 6px 0 0', opacity: 0.85 }}></div>
-                            <span style={{ fontSize: '0.58rem', fontWeight: '600', color: '#6b7280', marginTop: '6px' }}>{m.label}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around', flexGrow: 1 }}>
+                            <div style={{ position: 'relative', width: '120px', height: '120px' }}>
+                              <svg width="120" height="120" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
+                                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#f1f3f5" strokeWidth="4.2" />
+                                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#137333" strokeWidth="4.5" strokeDasharray={`${confPct} ${100 - confPct}`} strokeDashoffset="0" />
+                                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#c2a661" strokeWidth="4.5" strokeDasharray={`${pendPct} ${100 - pendPct}`} strokeDashoffset={`-${confPct}`} />
+                                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#c5221f" strokeWidth="4.5" strokeDasharray={`${cancPct} ${100 - cancPct}`} strokeDashoffset={`-${confPct + pendPct}`} />
+                                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#1a73e8" strokeWidth="4.5" strokeDasharray={`${holdPct} ${100 - holdPct}`} strokeDashoffset={`-${confPct + pendPct + cancPct}`} />
+                              </svg>
+                              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                                <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629', fontWeight: 'bold' }}>{totalBk}</h2>
+                                <span style={{ fontSize: '0.45rem', color: '#9ca3af', letterSpacing: '0.5px', textTransform: 'uppercase', fontWeight: 'bold' }}>Total</span>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', minWidth: '130px' }}>
+                              {[
+                                { label: 'Confirmed', count: confirmedBk, pct: confPct, color: '#137333' },
+                                { label: 'Pending', count: pendingBk, pct: pendPct, color: '#c2a661' },
+                                { label: 'Cancelled', count: cancelledBk, pct: cancPct, color: '#c5221f' },
+                                { label: 'On Hold', count: onHoldBk, pct: holdPct, color: '#1a73e8' }
+                              ].map((item, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                    <span style={{ width: '8px', height: '8px', background: item.color, borderRadius: '50%', display: 'inline-block' }}></span>
+                                    <span style={{ fontWeight: '500', color: '#4b5563' }}>{item.label}</span>
+                                  </div>
+                                  <span style={{ fontWeight: 'bold', color: '#113' }}>{item.count} <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'normal' }}>({item.pct}%)</span></span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         );
-                      })}
-                    </div>
-
-                    {/* Chart Legend */}
-                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.68rem', marginTop: '1.25rem', justifyContent: 'center' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ width: '10px', height: '10px', background: '#113629', borderRadius: '2px', display: 'inline-block' }}></span> REVENUE</span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ borderTop: '2px dashed #b08e40', width: '16px', display: 'inline-block' }}></span> TARGET</span>
+                      })()}
                     </div>
                   </div>
 
-                  {/* Card 3: Stack of 3 KPI Cards */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {/* AVG Price */}
-                    <div className="kpi-card" style={{ flex: 1, padding: '1rem 1.25rem', display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1rem' }}>
-                      <div style={{ width: '40px', height: '40px', background: '#e6f4ea', color: '#137333', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>🏷️</div>
-                      <div>
-                        <span style={{ fontSize: '0.6rem', color: '#9ca3af', fontWeight: 'bold', letterSpacing: '0.5px' }}>AVG. PRICE PER UNIT</span>
-                        <h2 style={{ fontSize: '1.35rem', margin: '2px 0 0 0', color: '#113629' }}>₹ {avgPriceCr} Cr</h2>
+                  {/* Row 2: Revenue Overview + Top Projects */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '1.5rem' }}>
+
+                    {/* Revenue Overview Bar Chart */}
+                    <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase' }}>Revenue Overview</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '1rem' }}>
+                        <h2 className="serif" style={{ margin: 0, fontSize: '1.6rem', color: '#113629', fontWeight: 'bold' }}>₹ {totalRevenueFormatted}</h2>
+                        <span style={{ fontSize: '0.68rem', color: '#137333', fontWeight: 'bold' }}>↑ 15% from last month</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', height: '140px', alignItems: 'flex-end', gap: '1rem', position: 'relative', marginTop: '1.5rem' }}>
+                        <div style={{ position: 'absolute', bottom: '70%', left: 0, right: 0, borderTop: '2px dashed #c2a661', opacity: 0.45, zIndex: 1 }}></div>
+                        {revMonths.map((m, idx) => {
+                          const valFormatted = new Intl.NumberFormat('en-IN').format(Math.round(m.value * 100000));
+                          const maxVal = Math.max(...revMonths.map(d => d.value));
+                          const hPerc = Math.max(10, Math.round((m.value / maxVal) * 100));
+                          return (
+                            <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, height: '100%', justifyContent: 'flex-end', zIndex: 2 }}>
+                              <span style={{ fontSize: '0.65rem', fontWeight: 'bold', color: '#113629', marginBottom: '4px' }}>{valFormatted}</span>
+                              <div style={{ height: `${hPerc}%`, width: '70%', background: 'linear-gradient(180deg, #2d7c5f, #b8d8c8)', borderRadius: '4px 4px 0 0', opacity: 0.85 }}></div>
+                              <span style={{ fontSize: '0.58rem', fontWeight: '600', color: '#6b7280', marginTop: '6px' }}>{m.label.toUpperCase()}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
 
-                    {/* Portfolio Value */}
-                    <div className="kpi-card" style={{ flex: 1, padding: '1rem 1.25rem', display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1rem' }}>
-                      <div style={{ width: '40px', height: '40px', background: '#e6f4ea', color: '#137333', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>💼</div>
-                      <div>
-                        <span style={{ fontSize: '0.6rem', color: '#9ca3af', fontWeight: 'bold', letterSpacing: '0.5px' }}>TOTAL PORTFOLIO VALUE</span>
-                        <h2 style={{ fontSize: '1.35rem', margin: '2px 0 0 0', color: '#113629' }}>₹ {totalPortfolioCr} Cr</h2>
-                        <div style={{ fontSize: '0.62rem', color: '#137333', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '2px' }}>↑ +15.2% INCREASE</div>
+                    {/* Top Projects by Revenue */}
+                    <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '1.25rem' }}>Top Projects by Revenue</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', flexGrow: 1, justifyContent: 'center' }}>
+                        {[
+                          { rank: 1, name: 'Skyvue Tower A', amount: '₹ 3,25,00,000', pct: '26%' },
+                          { rank: 2, name: 'Golden Heights', amount: '₹ 2,75,00,000', pct: '22%' },
+                          { rank: 3, name: 'Maple Residences', amount: '₹ 2,25,00,000', pct: '18%' },
+                          { rank: 4, name: 'Sunshine Bay', amount: '₹ 1,85,00,000', pct: '15%' },
+                          { rank: 5, name: 'Green Valley', amount: '₹ 1,35,00,000', pct: '11%' }
+                        ].map((p, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: i < 4 ? '1px solid #f8f9fa' : 'none', paddingBottom: i < 4 ? '0.5rem' : '0' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#888', width: '15px' }}>{p.rank}</span>
+                              <div>
+                                <strong style={{ fontSize: '0.8rem', color: '#113629' }}>{p.name}</strong>
+                                <div style={{ fontSize: '0.6rem', color: '#9ca3af' }}>Contribution: {p.pct}</div>
+                              </div>
+                            </div>
+                            <strong style={{ fontSize: '0.8rem', color: '#137333' }}>{p.amount}</strong>
+                          </div>
+                        ))}
                       </div>
                     </div>
-
-                    {/* Conversion Rate */}
-                    <div className="kpi-card" style={{ flex: 1, padding: '1rem 1.25rem', display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1rem' }}>
-                      <div style={{ width: '40px', height: '40px', background: '#e6f4ea', color: '#137333', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>👥</div>
-                      <div>
-                        <span style={{ fontSize: '0.6rem', color: '#9ca3af', fontWeight: 'bold', letterSpacing: '0.5px' }}>CONVERSION RATE</span>
-                        <h2 style={{ fontSize: '1.35rem', margin: '2px 0 0 0', color: '#113629' }}>{conversionRate}%</h2>
-                        <div style={{ fontSize: '0.62rem', color: '#4b5563', fontWeight: 'bold' }}>LEAD TO DEPOSIT</div>
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* Bottom Row of 3 KPI Cards */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '1.25rem', marginBottom: '1.5rem' }}>
-                  {/* Total Revenue */}
-                  <div className="kpi-card" style={{ padding: '1.25rem 1.5rem', position: 'relative' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: 'bold', letterSpacing: '0.5px' }}>TOTAL REVENUE</span>
-                        <h2 style={{ fontSize: '1.8rem', color: '#113629', margin: '0.25rem 0' }}>₹ {totalRevenueCr} Cr</h2>
-                        <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: 'bold' }}>↑ +12.4% VS LAST QUARTER</span>
-                      </div>
-                      <div style={{ width: '44px', height: '44px', background: '#e6f4ea', color: '#137333', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>₹</div>
-                    </div>
-                    <div style={{ fontSize: '1.2rem', position: 'absolute', bottom: '10px', left: '15px', opacity: 0.15 }}>🏦</div>
-                  </div>
-
-                  {/* Units Sold */}
-                  <div className="kpi-card" style={{ padding: '1.25rem 1.5rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ flex: 1 }}>
-                        <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: 'bold', letterSpacing: '0.5px' }}>UNITS SOLD</span>
-                        <h2 style={{ fontSize: '1.8rem', color: '#113629', margin: '0.25rem 0' }}>{soldUnitsCount} <span style={{ fontSize: '1.1rem', color: '#9ca3af', fontWeight: 'normal' }}>/ {totalUnitsCount}</span></h2>
-                        <div style={{ background: '#e5e7eb', height: '6px', borderRadius: '3px', overflow: 'hidden', margin: '8px 0 4px 0' }}>
-                          <div style={{ background: '#137333', width: `${soldPerc}%`, height: '100%' }}></div>
-                        </div>
-                        <span style={{ fontSize: '0.65rem', color: '#6b7280' }}>{soldPerc}% of Total Inventory Sold</span>
-                      </div>
-                      <div style={{ width: '44px', height: '44px', background: '#e6f4ea', color: '#137333', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', marginLeft: '10px' }}>🛒</div>
-                    </div>
-                  </div>
-
-                  {/* Avg Sales Cycle */}
-                  <div className="kpi-card" style={{ padding: '1.25rem 1.5rem', position: 'relative' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: 'bold', letterSpacing: '0.5px' }}>AVG. SALES CYCLE</span>
-                        <h2 style={{ fontSize: '1.8rem', color: '#113629', margin: '0.25rem 0' }}>24 Days</h2>
-                        <span style={{ fontSize: '0.65rem', color: '#b06000', fontWeight: 'bold' }}>↓ -4 DAYS IMPROVEMENT</span>
-                      </div>
-                      <div style={{ width: '44px', height: '44px', background: '#e6f4ea', color: '#137333', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>📅</div>
-                    </div>
-                    <div style={{ fontSize: '1.2rem', position: 'absolute', bottom: '10px', left: '15px', opacity: 0.15 }}>⏰</div>
                   </div>
                 </div>
+              )}
 
-                {/* Master Occupancies Grid */}
-                <div style={{ background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px', padding: '2rem', marginTop: '2.5rem' }}>
-                  <h3 className="serif" style={{ fontSize: '1.25rem', margin: '0 0 1.5rem 0', color: '#113629' }}>Master Occupancies Grid</h3>
-                  <GridClient units={units} inquiries={inquiries} project={project} />
+            </div>
+              </>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                {/* Executive Performance Portal Header */}
+                <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+                  <h2 className="serif" style={{ fontSize: '2rem', color: '#113629', marginBottom: '0.5rem' }}>Executive Performance Portal</h2>
+                  <div style={{ width: '60px', height: '3px', background: '#c2a661', margin: '0 auto 0.5rem auto', borderRadius: '2px' }}></div>
+                  <p style={{ fontSize: '0.8rem', color: '#9ca3af', margin: 0 }}>Strategic overview and dashboard access for senior representatives</p>
                 </div>
 
-              </div>
-            )}
-
-            {/* Sub-tab 2: Executive Performance */}
-            {dashboardSubTab === 'executive' && (
-              <div className="animate-fade-in">
-                {/* Title & Subtitle */}
-                <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                  <h1 className="serif" style={{ fontSize: '2rem', color: '#113629', margin: '0 0 0.25rem 0', fontWeight: 'bold' }}>Executive Performance Portal</h1>
-                  <span style={{ fontSize: '0.82rem', color: '#6b7280' }}>Strategic overview and dashboard access for senior representatives</span>
-                </div>
-
-                {/* Sales representative cards */}
-                <div className="exec-portal-grid" style={{ marginBottom: '2rem' }}>
+                {/* Salesman Cards Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1.25rem' }}>
                   {[
-                    { id: 'SR-9999', name: 'VIKRAM SETHI', role: 'SNR. VICE PRESIDENT', rev: '₹ 35.5 Cr', init: 'VS' },
-                    { id: 'SR-1111', name: 'ANANYA RAO', role: 'REGIONAL DIRECTOR', rev: '₹ 32.4 Cr', init: 'AR' },
-                    { id: 'SR-2222', name: 'KARAN MALHOTRA', role: 'SALES DIRECTOR', rev: '₹ 24.8 Cr', init: 'KM' },
-                    { id: 'SR-3333', name: 'PRIYA SHARMA', role: 'LEAD BROKER', rev: '₹ 15.3 Cr', init: 'PS' },
-                    { id: 'SR-4444', name: 'ROHAN VERMA', role: 'SENIOR ASSOCIATE', rev: '₹ 10.4 Cr', init: 'RV' }
-                  ].map(exec => (
-                    <div key={exec.id} className="exec-card" style={{ background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px', padding: '1.5rem', textAlign: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.02)' }}>
-                      <div style={{ 
-                        width: '56px', 
-                        height: '56px', 
-                        margin: '0 auto 1rem auto', 
-                        borderRadius: '50%', 
-                        border: '1px solid #113629', 
-                        color: '#113629', 
-                        background: '#fafafa',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 'bold',
-                        fontSize: '1.2rem',
-                        fontFamily: "'Playfair Display', serif"
-                      }}>{exec.init}</div>
-                      <h4 style={{ margin: '0 0 0.25rem 0', fontSize: '0.9rem', color: '#113629', fontWeight: 'bold' }}>{exec.name}</h4>
-                      <p style={{ margin: '0 0 1rem 0', fontSize: '0.62rem', color: '#9ca3af', fontWeight: 'bold', letterSpacing: '0.5px' }}>{exec.role}</p>
-                      
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', borderTop: '1px solid #f1f3f5', paddingTop: '0.75rem', marginBottom: '1rem' }}>
-                        <span style={{ color: '#6b7280', fontWeight: '600' }}>REVENUE</span>
-                        <strong style={{ color: '#113629' }}>{exec.rev}</strong>
+                    { initials: 'VS', name: 'VIKRAM SETHI', title: 'SNR. VICE PRESIDENT', id: 'SR-9999', revenue: '35,50,00,000' },
+                    { initials: 'AR', name: 'ANANYA RAO', title: 'REGIONAL DIRECTOR', id: 'SR-1111', revenue: '32,40,00,000' },
+                    { initials: 'RV', name: 'RAHUL VERMA', title: 'SALES DIRECTOR', id: 'SR-2222', revenue: '24,80,00,000' },
+                    { initials: 'SP', name: 'SNEHA PATIL', title: 'LEAD BROKER', id: 'SR-3333', revenue: '15,30,00,000' },
+                    { initials: 'AS', name: 'ADITYA SHARMA', title: 'SENIOR ASSOCIATE', id: 'SR-4444', revenue: '10,40,00,000' }
+                  ].map((exec, idx) => (
+                    <div key={idx} style={{ background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', transition: 'box-shadow 0.2s' }}>
+                      <div style={{ width: '64px', height: '64px', borderRadius: '50%', border: '2px solid #113629', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.75rem' }}>
+                        <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#113629' }}>{exec.initials}</span>
                       </div>
-                      
+                      <strong style={{ fontSize: '0.78rem', color: '#113629', letterSpacing: '0.5px' }}>{exec.name}</strong>
+                      <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: '600', letterSpacing: '0.5px', marginTop: '2px', marginBottom: '1rem' }}>{exec.title}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', marginBottom: '1rem' }}>
+                        <span style={{ fontSize: '0.65rem', color: '#6b7280', fontWeight: '600' }}>REVENUE</span>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#113629' }}>₹ {exec.revenue}</span>
+                      </div>
                       <button 
-                        onClick={() => impersonateSales(exec.id)} 
-                        className="btn-outline" 
-                        style={{ width: '100%', margin: 0, borderColor: '#113629', color: '#113629', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', height: '36px' }}
+                        onClick={() => impersonateSales(exec.id)}
+                        style={{ width: '100%', padding: '0.5rem', fontSize: '0.72rem', fontWeight: 'bold', border: '1px solid #113629', background: '#fff', color: '#113629', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', transition: 'all 0.2s' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = '#113629'; e.currentTarget.style.color = '#fff'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = '#113629'; }}
                       >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
-                        OPEN PORTAL
+                        ↗ OPEN PORTAL
                       </button>
                     </div>
                   ))}
                 </div>
 
-                {/* Global Client Site Visits Tracker */}
-                <div style={{ marginTop: '1.5rem' }}>
+                {/* Project-wide Scheduled Visits */}
+                <div style={{ marginTop: '0.5rem' }}>
                   <GlobalVisitsClient inquiries={inquiries} />
                 </div>
               </div>
             )}
-
           </div>
         )}
 
@@ -779,22 +1142,6 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
         {activeTab === 'leads' && (
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem 2.5rem 2.5rem' }}>
             
-            {/* Leads Tabs Sub-filter */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #f1f3f5', marginBottom: '1.25rem', gap: '1rem' }}>
-              {['all', 'new', 'contacted', 'qualified', 'site visit', 'negotiation', 'lost'].map(tab => (
-                <button 
-                  key={tab} 
-                  onClick={() => setLeadSubTab(tab)} 
-                  style={{
-                    background: 'none', border: 'none', borderBottom: leadSubTab === tab ? '2px solid #c2a661' : 'none',
-                    color: leadSubTab === tab ? '#c2a661' : '#4b5563', padding: '0.6rem 0.5rem', fontWeight: leadSubTab === tab ? 'bold' : 'normal',
-                    fontSize: '0.78rem', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px'
-                  }}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
 
             {/* Quick Leads assign row */}
             <div className="widget-card mb-2">
@@ -812,14 +1159,25 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                 <tbody>
                   {inquiries
                     .filter(inq => !inq.source?.startsWith('UNIT_ASSIGNMENT_') && !inq.status?.startsWith('SCHEDULED|'))
-                    .slice(0, 4)
                     .map((inq, i) => {
                       const repId = inq.status && inq.status.includes('|') ? inq.status.split('|')[1] : 'unassigned';
+                      
+                      const getRepName = (id) => {
+                        const map = {
+                          'SR-9999': 'Vikram Sethi',
+                          'SR-1111': 'Ananya Rao',
+                          'SR-2222': 'Rahul Verma',
+                          'SR-3333': 'Sneha Patil',
+                          'SR-4444': 'Aditya Sharma',
+                        };
+                        return map[id] || 'Awaiting Alloc';
+                      };
+
                       return (
                         <tr key={inq.id || i}>
                           <td><strong>{inq.name}</strong><br/><span className="text-muted" style={{ fontSize: '0.7rem' }}>{inq.phone}</span></td>
                           <td><span className="source-pill">{inq.source || 'PORTAL'}</span></td>
-                          <td><strong>{repId === 'SR-9999' ? 'Vikram Sethi' : repId === 'SR-1111' ? 'Ananya Rao' : 'Awaiting Alloc'}</strong></td>
+                          <td><strong>{getRepName(repId)}</strong></td>
                           <td><span className={`badge ${repId === 'unassigned' ? 'sold' : 'available'}`}>{repId === 'unassigned' ? 'UNASSIGNED' : 'ASSIGNED'}</span></td>
                           <td>
                             <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -831,6 +1189,9 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                 <option value="unassigned">Select Rep...</option>
                                 <option value="SR-9999">Vikram Sethi (SR-9999)</option>
                                 <option value="SR-1111">Ananya Rao (SR-1111)</option>
+                                <option value="SR-2222">Rahul Verma (SR-2222)</option>
+                                <option value="SR-3333">Sneha Patil (SR-3333)</option>
+                                <option value="SR-4444">Aditya Sharma (SR-4444)</option>
                               </select>
                               <button onClick={() => handleAssignLead(inq.id, leadAssignState.salesmanId)} className="btn-dark" style={{ padding: '4px 10px', fontSize: '0.65rem' }}>ALLOCATE</button>
                             </div>
@@ -883,32 +1244,9 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
 
         {/* ==================== 5. INVENTORY PAGE ==================== */}
         {activeTab === 'inventory' && (
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem 2.5rem 2.5rem' }}>
             
-            {/* Top Inventory Stat Cards */}
-            <div style={{ padding: '0 2.5rem 1.25rem 2.5rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem' }}>
-                <div style={{ background: '#fff', border: '1px solid #f1f3f5', padding: '1rem', borderRadius: '10px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.01)' }}>
-                  <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'bold' }}>TOTAL UNITS</span>
-                  <h3 className="serif" style={{ margin: '0.2rem 0', color: '#113629' }}>100</h3>
-                </div>
-                <div style={{ background: '#fff', border: '1px solid #f1f3f5', padding: '1rem', borderRadius: '10px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.01)' }}>
-                  <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'bold' }}>AVAILABLE STOCK</span>
-                  <h3 className="serif" style={{ margin: '0.2rem 0', color: '#137333' }}>{availableUnitsCount}</h3>
-                </div>
-                <div style={{ background: '#fff', border: '1px solid #f1f3f5', padding: '1rem', borderRadius: '10px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.01)' }}>
-                  <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'bold' }}>SOLD OUT</span>
-                  <h3 className="serif" style={{ margin: '0.2rem 0', color: '#c62828' }}>{soldUnitsCount}</h3>
-                </div>
-                <div style={{ background: '#fff', border: '1px solid #f1f3f5', padding: '1rem', borderRadius: '10px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.01)' }}>
-                  <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'bold' }}>ON HOLD</span>
-                  <h3 className="serif" style={{ margin: '0.2rem 0', color: '#ef6c00' }}>{reservedUnitsCount}</h3>
-                </div>
-              </div>
-            </div>
-
-            {/* Reusable Interactive Occupancies Grid */}
-            <div style={{ padding: '0 2.5rem 2.5rem 2.5rem' }}>
+            <div style={{ background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px', padding: '1rem' }}>
               <GridClient units={units} inquiries={inquiries} project={project} />
             </div>
           </div>
@@ -918,28 +1256,38 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
         {activeTab === 'finance' && (
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem 2.5rem 2.5rem' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
-              <div style={{ background: '#fff', border: '1px solid #f1f3f5', padding: '1.25rem', borderRadius: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.01)' }}>
+              <div className="widget-card">
                 <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'bold' }}>TOTAL COLLECTION</span>
-                <h3 className="serif" style={{ margin: '0.2rem 0', color: '#137333', fontSize: '1.6rem' }}>₹ {totalCollectionCr} Cr</h3>
+                <h3 className="serif" style={{ margin: '0.2rem 0', color: '#137333', fontSize: '1.6rem' }}>₹ {totalCollectionFormatted}</h3>
               </div>
-              <div style={{ background: '#fff', border: '1px solid #f1f3f5', padding: '1.25rem', borderRadius: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.01)' }}>
+              <div className="widget-card">
                 <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'bold' }}>COLLECTED THIS MONTH</span>
-                <h3 className="serif" style={{ margin: '0.2rem 0', color: '#137333', fontSize: '1.6rem' }}>₹ {collectedThisMonthCr} Cr</h3>
+                <h3 className="serif" style={{ margin: '0.2rem 0', color: '#137333', fontSize: '1.6rem' }}>₹ {collectedThisMonthFormatted}</h3>
               </div>
-              <div style={{ background: '#fff', border: '1px solid #f1f3f5', padding: '1.25rem', borderRadius: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.01)' }}>
+              <div className="widget-card">
                 <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'bold' }}>PENDING INSTALMENTS</span>
-                <h3 className="serif" style={{ margin: '0.2rem 0', color: '#c2a661', fontSize: '1.6rem' }}>₹ {pendingInstallmentsCr} Cr</h3>
+                <h3 className="serif" style={{ margin: '0.2rem 0', color: '#c2a661', fontSize: '1.6rem' }}>₹ {pendingInstallmentsFormatted}</h3>
               </div>
-              <div style={{ background: '#fff', border: '1px solid #f1f3f5', padding: '1.25rem', borderRadius: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.01)' }}>
+              <div className="widget-card">
                 <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'bold' }}>OVERDUE AMOUNT</span>
-                <h3 className="serif" style={{ margin: '0.2rem 0', color: '#c62828', fontSize: '1.6rem' }}>₹ {overdueAmountCr} Cr</h3>
+                <h3 className="serif" style={{ margin: '0.2rem 0', color: '#c62828', fontSize: '1.6rem' }}>₹ {overdueAmountFormatted}</h3>
               </div>
             </div>
 
             {/* Finance Charts */}
             <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
               <div className="widget-card">
-                <h3 className="serif" style={{ margin: '0 0 1rem 0' }}>Instalment Payment Trend</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h3 className="serif" style={{ margin: 0 }}>Instalment Payment Trend</h3>
+                  <select 
+                    value={revenueViewType}
+                    onChange={(e) => setRevenueViewType(e.target.value)}
+                    style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem', border: '1px solid #d1d5db', borderRadius: '6px', background: '#fff', color: '#374151', fontWeight: '600', cursor: 'pointer' }}
+                  >
+                    <option value="past">Last 6 Months</option>
+                    <option value="projection">Next 6 Months</option>
+                  </select>
+                </div>
                 <div style={{ height: '180px', width: '100%' }}>
                   <svg viewBox="0 0 500 150" width="100%" height="100%" style={{ overflow: 'visible' }}>
                     <defs>
@@ -949,27 +1297,9 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                       </linearGradient>
                     </defs>
                     {(() => {
-                      const baseDate = new Date("2026-05-25");
-                      const monthlyCollections = [];
-                      const monthLabels = [];
-                      for (let i = 5; i >= 0; i--) {
-                        const d = new Date(baseDate);
-                        d.setMonth(d.getMonth() - i);
-                        const m = d.getMonth();
-                        const y = d.getFullYear();
-                        
-                        const label = d.toLocaleString('default', { month: 'short' });
-                        monthLabels.push(label);
-
-                        const totalForMonth = buyers.reduce((sum, b) => {
-                          const pDate = b.created_at ? new Date(b.created_at) : new Date("2026-05-01");
-                          if (pDate.getMonth() === m && pDate.getFullYear() === y) {
-                            return sum + parseAmountVal(b.amount_paid);
-                          }
-                          return sum;
-                        }, 0);
-                        monthlyCollections.push(totalForMonth);
-                      }
+                      const data = getRevenueData();
+                      const monthlyCollections = data.map(d => d.value);
+                      const monthLabels = data.map(d => d.label);
                       
                       const maxColl = Math.max(...monthlyCollections, 1);
                       const points = monthlyCollections.map((coll, idx) => {
@@ -983,8 +1313,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
 
                       const formatTrendAmount = (lakhs) => {
                         if (lakhs === 0) return '₹0';
-                        if (lakhs >= 100) return `₹${(lakhs / 100).toFixed(1)} Cr`;
-                        return `₹${lakhs.toFixed(0)} L`;
+                        return `₹${new Intl.NumberFormat('en-IN', { notation: 'compact' }).format(Math.round(lakhs * 100000))}`;
                       };
 
                       return (
@@ -1154,35 +1483,6 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                       <td>
                         <button 
                           onClick={() => handleDeleteUser(b.username, 'Buyer')}
-                          style={{
-                            background: '#fee2e2',
-                            color: '#dc2626',
-                            border: 'none',
-                            padding: '0.35rem 0.75rem',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '0.7rem',
-                            fontWeight: 'bold',
-                            transition: 'all 0.2s'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = '#fecaca'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
-                        >
-                          ❌ Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {/* CP list */}
-                  {cpPartners.map((cp, idx) => (
-                    <tr key={`cp-${idx}`}>
-                      <td><strong>{cp.username}</strong></td>
-                      <td><span className="source-pill" style={{ color: '#b06000', background: '#fef7e0' }}>CP Broker</span></td>
-                      <td style={{ fontStyle: 'italic', fontSize: '0.75rem', color: '#9ca3af' }}>Firm: {cp.firm_name}</td>
-                      <td><span className="badge available">Active Portal</span></td>
-                      <td>
-                        <button 
-                          onClick={() => handleDeleteUser(cp.username, 'CP')}
                           style={{
                             background: '#fee2e2',
                             color: '#dc2626',

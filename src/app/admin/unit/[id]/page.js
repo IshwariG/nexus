@@ -68,12 +68,12 @@ export default function UnitDetailsPage({ params }) {
         setEditForm({
           type: uData.type || (parseInt(uData.unit_id) % 2 === 0 ? '3BHK PENTHOUSE' : '2BHK PENTHOUSE'),
           area: uData.area || '5400',
-          price: uData.price || '₹ 14.25 Cr',
+          price: uData.price || '₹ 14,25,00,000',
           status: uData.status || 'AVAILABLE',
           client_name: uData.status === 'SOLD OUT' ? (bData?.username || uData.tag_color || '') : (uData.tag_color || ''),
           username: bData?.username || '',
           password: usrData?.password || 'password123',
-          total_amount: bData?.total_amount || uData.price || '₹ 14.25 Cr',
+          total_amount: bData?.total_amount || uData.price || '₹ 14,25,00,000',
           amount_paid: bData?.amount_paid || '₹ 0.00',
           progress: bData?.construction_progress ? bData.construction_progress.replace('%', '') : '72',
           possession_date: bData?.possession_date || '2027-12-31'
@@ -127,7 +127,8 @@ export default function UnitDetailsPage({ params }) {
         const password = editForm.password || 'password123';
         const totalAmount = editForm.total_amount || editForm.price;
         const amountPaid = editForm.amount_paid || '₹ 0.00';
-        const progress = editForm.progress || '72';
+        // Strip % sign and parse as integer for the database column (type: integer)
+        const progress = parseInt(String(editForm.progress || '72').replace('%', ''), 10) || 72;
         const possessionDate = editForm.possession_date || '2027-12-31';
 
         // Check if there was an old buyer with a different username
@@ -167,7 +168,7 @@ export default function UnitDetailsPage({ params }) {
           unit_id: unitId,
           total_amount: totalAmount,
           amount_paid: amountPaid,
-          construction_progress: `${progress}%`,
+          construction_progress: progress,
           possession_date: possessionDate,
           milestones: [
             { step: "Foundation", status: "COMPLETED" },
@@ -318,7 +319,7 @@ export default function UnitDetailsPage({ params }) {
                  </div>
                  <div className="ud-spec-item">
                     <p>BASE PRICE</p>
-                    <h3>{displayUnit.price || '₹ 14.25 Cr'}</h3>
+                    <h3>{displayUnit.price || '₹ 14,25,00,000'}</h3>
                  </div>
                  <div className="ud-spec-item">
                     <p>CAR PARKS</p>

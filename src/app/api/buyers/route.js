@@ -5,6 +5,10 @@ export async function POST(request) {
   try {
     const body = await request.json();
     const { username, password, role, unit_id, total_amount, amount_paid, construction_progress, possession_date } = body;
+    // Strip '%' sign and ensure construction_progress is stored as integer
+    const progressInt = construction_progress !== undefined && construction_progress !== null
+      ? parseInt(String(construction_progress).replace('%', ''), 10) || 0
+      : 0;
 
     // Check if unit is already taken
     const { data: existingUnit } = await supabase
@@ -37,7 +41,7 @@ export async function POST(request) {
           unit_id, 
           total_amount, 
           amount_paid, 
-          construction_progress, 
+          construction_progress: progressInt, 
           possession_date,
           milestones: [
             { step: "Foundation", status: "COMPLETED" },
@@ -77,7 +81,10 @@ export async function PATCH(request) {
     if (unit_id !== undefined) updateObj.unit_id = unit_id;
     if (total_amount !== undefined) updateObj.total_amount = total_amount;
     if (amount_paid !== undefined) updateObj.amount_paid = amount_paid;
-    if (construction_progress !== undefined) updateObj.construction_progress = construction_progress;
+    if (construction_progress !== undefined) {
+      // Strip '%' sign and ensure it is stored as integer
+      updateObj.construction_progress = parseInt(String(construction_progress).replace('%', ''), 10) || 0;
+    }
     if (possession_date !== undefined) updateObj.possession_date = possession_date;
 
     const { error } = await supabase

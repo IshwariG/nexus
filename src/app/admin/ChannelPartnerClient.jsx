@@ -19,6 +19,9 @@ export default function ChannelPartnerClient({ username }) {
   const [error, setError] = useState(null);
   const [formMsg, setFormMsg] = useState(null);
 
+  // Earnings Velocity view type ('past' vs 'projection')
+  const [velocityViewType, setVelocityViewType] = useState('past');
+
   // My Leads page states
   const [myLeadsSubTab, setMyLeadsSubTab] = useState('all');
   const [myLeadsSearchQuery, setMyLeadsSearchQuery] = useState('');
@@ -200,6 +203,51 @@ export default function ChannelPartnerClient({ username }) {
   const totalEarningsVal = commissions.reduce((acc, c) => acc + parseAmount(c.amount), 0);
   const paidAmountVal = payouts.reduce((acc, p) => acc + parseAmount(p.amount), 0);
   const pendingAmountVal = totalEarningsVal - paidAmountVal;
+
+  const getEarningsVelocityData = () => {
+    const baseDate = new Date("2026-05-25");
+    
+    if (velocityViewType === 'past') {
+      const months = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(baseDate);
+        d.setMonth(d.getMonth() - i);
+        months.push({
+          label: d.toLocaleString('default', { month: 'short' }).toUpperCase(),
+          year: d.getFullYear(),
+          monthIndex: d.getMonth(),
+          value: 0
+        });
+      }
+      
+      commissions.forEach(c => {
+        const amt = parseAmount(c.amount);
+        const cDate = c.created_at ? new Date(c.created_at) : new Date("2026-05-01");
+        const m = months.find(m => m.year === cDate.getFullYear() && m.monthIndex === cDate.getMonth());
+        if (m) m.value += amt;
+      });
+      return months;
+    } else {
+      const months = [];
+      for (let i = 1; i <= 6; i++) {
+        const d = new Date(baseDate);
+        d.setMonth(d.getMonth() + i);
+        months.push({
+          label: d.toLocaleString('default', { month: 'short' }).toUpperCase(),
+          year: d.getFullYear(),
+          monthIndex: d.getMonth(),
+          value: 0
+        });
+      }
+      const pendingAmt = pendingAmountVal;
+      if (pendingAmt > 0) {
+        months[0].value += pendingAmt * 0.5;
+        months[1].value += pendingAmt * 0.3;
+        months[2].value += pendingAmt * 0.2;
+      }
+      return months;
+    }
+  };
 
   // Selected Lead details
   const selectedLead = leads.find(l => l.id === selectedLeadId) || leads[0] || null;
@@ -712,14 +760,34 @@ export default function ChannelPartnerClient({ username }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
               {/* Earnings velocity bar chart */}
               <div className="widget-card">
-                <h3 className="serif" style={{ margin: '0 0 1rem 0' }}>Earnings Velocity</h3>
-                <div className="bar-chart-mock" style={{ height: '160px' }}>
-                  <div className="bar-col"><div className="bar" style={{ height: '40%', background: '#c2a661' }}></div><span>JAN</span></div>
-                  <div className="bar-col"><div className="bar" style={{ height: '55%', background: '#c2a661' }}></div><span>FEB</span></div>
-                  <div className="bar-col"><div className="bar" style={{ height: '50%', background: '#c2a661' }}></div><span>MAR</span></div>
-                  <div className="bar-col"><div className="bar" style={{ height: '80%', background: '#c2a661' }}></div><span>APR</span></div>
-                  <div className="bar-col"><div className="bar" style={{ height: '90%', background: '#c2a661' }}></div><span>MAY</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h3 className="serif" style={{ margin: 0 }}>Earnings Velocity</h3>
+                  <select 
+                    value={velocityViewType}
+                    onChange={(e) => setVelocityViewType(e.target.value)}
+                    style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem', border: '1px solid #d1d5db', borderRadius: '6px', background: '#fff', color: '#374151', fontWeight: '600', cursor: 'pointer' }}
+                  >
+                    <option value="past">Last 6 Months</option>
+                    <option value="projection">Next 6 Months</option>
+                  </select>
                 </div>
+                {(() => {
+                  const data = getEarningsVelocityData();
+                  const maxVal = Math.max(...data.map(d => d.value), 100000); // Min 1 Lakh to avoid giant bars for tiny amounts
+                  return (
+                    <div className="bar-chart-mock" style={{ height: '160px' }}>
+                      {data.map((d, idx) => {
+                        const heightPerc = Math.max((d.value / maxVal) * 100, 2);
+                        return (
+                          <div key={idx} className="bar-col">
+                            <div className="bar" title={formatAmountINR(d.value)} style={{ height: `${heightPerc}%`, background: '#c2a661' }}></div>
+                            <span>{d.label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Top Performing Projects */}

@@ -133,6 +133,31 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
   const possessionDate = formatPossDate(rawPossDate);
   const progressPercent = buyerDetails?.construction_progress || 15;
 
+  // Dynamic Journey Generation
+  const formatShortDate = (d) => {
+    return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  
+  let userInquiry = (inquiries || []).find(i => i.name?.toLowerCase().includes(username?.toLowerCase()) || i.phone === username);
+  let baseBookingDate = buyerDetails?.created_at ? new Date(buyerDetails.created_at) : new Date("2026-01-20");
+  
+  let inquiryDate = userInquiry?.created_at ? new Date(userInquiry.created_at) : new Date(baseBookingDate.getTime() - 10 * 24 * 60 * 60 * 1000);
+  let siteVisitDate = new Date(inquiryDate.getTime() + 8 * 24 * 60 * 60 * 1000);
+  if (siteVisitDate > baseBookingDate) siteVisitDate = new Date(baseBookingDate.getTime() - 2 * 24 * 60 * 60 * 1000);
+  let agreementDate = new Date(baseBookingDate.getTime() + 8 * 24 * 60 * 60 * 1000);
+  
+  const now = new Date();
+  
+  const journeySteps = [
+    { step: "Inquiry", date: formatShortDate(inquiryDate), status: inquiryDate <= now ? "completed" : "pending" },
+    { step: "Site Visit", date: formatShortDate(siteVisitDate), status: siteVisitDate <= now ? "completed" : "pending" },
+    { step: "Booking", date: formatShortDate(baseBookingDate), status: baseBookingDate <= now ? "completed" : "pending" },
+    { step: "Agreement", date: formatShortDate(agreementDate), status: agreementDate <= now ? "completed" : "pending" },
+    { step: "Construction", date: "In Progress", status: "active" },
+    { step: "Possession", date: possessionDate, status: "pending" },
+    { step: "Registration", date: "Upcoming", status: "pending" }
+  ];
+
   // Helper to parse database values like '13', '14 cr', '2.50' to raw numbers
   const parseVal = (str) => {
     if (!str) return 0;
@@ -211,13 +236,29 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
     rzp.open();
   };
 
+  const getRelativeDateStr = (baseDate, monthsToAdd, targetDay) => {
+    const d = new Date(baseDate.getTime());
+    d.setMonth(d.getMonth() + monthsToAdd);
+    if (targetDay) {
+      d.setDate(targetDay);
+    }
+    return formatShortDate(d);
+  };
+
+  const bookingAmt = Math.round(totalNum * 0.10);
+  const foundationAmt = Math.round(totalNum * 0.15);
+  const slab1Amt = Math.round(totalNum * 0.15);
+  const slab5Amt = Math.round(totalNum * 0.15);
+  const slab12Amt = Math.round(totalNum * 0.15);
+  const finishingAmt = totalNum - (bookingAmt + foundationAmt + slab1Amt + slab5Amt + slab12Amt);
+
   const installments = [
-    { id: 1, inst: "Booking Amount", due: "20 Jan 2026", amount: 500000 },
-    { id: 2, inst: "1st Installment (Foundation)", due: "25 Feb 2026", amount: 1000000 },
-    { id: 3, inst: "2nd Installment (Slab 1)", due: "25 Mar 2026", amount: 1000000 },
-    { id: 4, inst: "3rd Installment (Slab 5)", due: "25 Apr 2026", amount: 1000000 },
-    { id: 5, inst: "4th Installment (Slab 12)", due: "25 May 2026", amount: 245000 },
-    { id: 6, inst: "5th Installment (Finishing)", due: "25 Jul 2026", amount: 5405000 }
+    { id: 1, inst: "Booking Amount", due: formatShortDate(baseBookingDate), amount: bookingAmt },
+    { id: 2, inst: "1st Installment (Foundation)", due: getRelativeDateStr(baseBookingDate, 1, 25), amount: foundationAmt },
+    { id: 3, inst: "2nd Installment (Slab 1)", due: getRelativeDateStr(baseBookingDate, 2, 25), amount: slab1Amt },
+    { id: 4, inst: "3rd Installment (Slab 5)", due: getRelativeDateStr(baseBookingDate, 3, 25), amount: slab5Amt },
+    { id: 5, inst: "4th Installment (Slab 12)", due: getRelativeDateStr(baseBookingDate, 4, 25), amount: slab12Amt },
+    { id: 6, inst: "5th Installment (Finishing)", due: getRelativeDateStr(baseBookingDate, 6, 25), amount: finishingAmt }
   ];
 
   let cumulative = 0;
@@ -242,13 +283,31 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
       id: inst.id,
       inst: inst.inst,
       due: inst.due,
-      dueAmt: '₹ ' + inst.amount.toLocaleString('en-IN'),
-      paidAmt: '₹ ' + paidAmt.toLocaleString('en-IN'),
+      dueAmt: formatINR(inst.amount),
+      paidAmt: formatINR(paidAmt),
       status: status,
       rawAmount: inst.amount,
       rawPaid: paidAmt
     };
   });
+
+  const paidReceipts = calculatedInstallments
+    .filter(p => p.status === 'paid')
+    .map(p => ({
+      name: `Payment Receipt - ${p.inst.split(' (')[0]}`,
+      type: "receipts",
+      size: "1.2 MB",
+      date: p.due
+    }));
+
+  const allDocuments = [
+    { name: "Booking Agreement", type: "agreements", size: "2.4 MB", date: formatShortDate(baseBookingDate) },
+    { name: "Builder Buyer Agreement", type: "agreements", size: "12.8 MB", date: formatShortDate(agreementDate) },
+    ...paidReceipts,
+    { name: "Allotment Letter", type: "legal", size: "3.5 MB", date: formatShortDate(agreementDate) },
+    { name: "RERA Registration", type: "legal", size: "5.8 MB", date: formatShortDate(inquiryDate) },
+    { name: "Project Brochure", type: "other", size: "15.4 MB", date: formatShortDate(inquiryDate) }
+  ];
 
   const nextPendingInstallment = calculatedInstallments.find(p => p.status === 'pending') || {
     inst: "No Pending Dues",
@@ -359,15 +418,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                 <div style={{ position: 'absolute', top: '16px', left: '2rem', right: '2rem', height: '3px', background: '#e2e8f0', zIndex: 1 }}>
                   <div style={{ width: '68%', height: '100%', background: '#c2a661' }}></div>
                 </div>
-                {[
-                  { step: "Inquiry", date: "10 Jan 2026", status: "completed" },
-                  { step: "Site Visit", date: "18 Jan 2026", status: "completed" },
-                  { step: "Booking", date: "20 Jan 2026", status: "completed" },
-                  { step: "Agreement", date: "28 Jan 2026", status: "completed" },
-                  { step: "Construction", date: "In Progress", status: "active" },
-                  { step: "Possession", date: possessionDate, status: "pending" },
-                  { step: "Registration", date: "Upcoming", status: "pending" }
-                ].map((s, idx) => (
+                {journeySteps.map((s, idx) => (
                   <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', zIndex: 2 }}>
                     <div style={{
                       width: '32px',
@@ -422,15 +473,15 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', fontSize: '0.82rem' }}>
                     <div>
                       <span style={{ fontSize: '0.65rem', color: '#9ca3af', display: 'block', fontWeight: 'bold' }}>BOOKING DATE</span>
-                      <strong style={{ color: '#113629' }}>20 Jan 2026</strong>
+                      <strong style={{ color: '#113629' }}>{formatShortDate(baseBookingDate)}</strong>
                     </div>
                     <div>
                       <span style={{ fontSize: '0.65rem', color: '#9ca3af', display: 'block', fontWeight: 'bold' }}>BOOKING AMOUNT</span>
-                      <strong style={{ color: '#113629' }}>₹ 5,00,000</strong>
+                      <strong style={{ color: '#113629' }}>{formatINR(bookingAmt)}</strong>
                     </div>
                     <div>
                       <span style={{ fontSize: '0.65rem', color: '#9ca3af', display: 'block', fontWeight: 'bold' }}>BOOKING NO.</span>
-                      <strong style={{ color: '#113629' }}>BK-1021</strong>
+                      <strong style={{ color: '#113629' }}>BK-{rawUnitId}</strong>
                     </div>
                   </div>
                 </div>
@@ -788,16 +839,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
 
               {/* Documents grid */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginTop: '1.5rem' }}>
-                {[
-                  { name: "Booking Agreement", type: "agreements", size: "2.4 MB", date: "20 Jan 2026" },
-                  { name: "Builder Buyer Agreement", type: "agreements", size: "12.8 MB", date: "28 Jan 2026" },
-                  { name: "Payment Receipt - Jan", type: "receipts", size: "1.2 MB", date: "20 Jan 2026" },
-                  { name: "Payment Receipt - Feb", type: "receipts", size: "1.2 MB", date: "25 Feb 2026" },
-                  { name: "Payment Receipt - Mar", type: "receipts", size: "1.2 MB", date: "25 Mar 2026" },
-                  { name: "Allotment Letter", type: "legal", size: "3.5 MB", date: "28 Jan 2026" },
-                  { name: "RERA Registration", type: "legal", size: "5.8 MB", date: "10 Jan 2026" },
-                  { name: "Project Brochure", type: "other", size: "15.4 MB", date: "10 Jan 2026" }
-                ].filter(d => {
+                {allDocuments.filter(d => {
                   if (documentSubTab === 'all') return true;
                   return d.type === documentSubTab;
                 }).map((doc, idx) => (
