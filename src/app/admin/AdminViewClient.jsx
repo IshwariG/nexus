@@ -1206,7 +1206,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                         <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#113629' }}>₹ {exec.revenue}</span>
                       </div>
                       <button 
-                        onClick={() => impersonateSales(exec.id)}
+                        onClick={() => window.location.href = `/admin/salesman/${exec.id}`}
                         style={{ width: '100%', padding: '0.5rem', fontSize: '0.72rem', fontWeight: 'bold', border: '1px solid #113629', background: '#fff', color: '#113629', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', transition: 'all 0.2s' }}
                         onMouseEnter={(e) => { e.currentTarget.style.background = '#113629'; e.currentTarget.style.color = '#fff'; }}
                         onMouseLeave={(e) => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = '#113629'; }}

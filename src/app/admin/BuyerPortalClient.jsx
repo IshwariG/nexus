@@ -1297,10 +1297,29 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
 
                   {isEditing && (
                     <button 
-                      onClick={() => {
-                        setIsEditing(false);
-                        setProfileMsg('Profile information updated successfully!');
-                        setTimeout(() => setProfileMsg(''), 3000);
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(`/api/buyers?username=${username}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              mobile: mobileNum,
+                              email: emailAddress,
+                              address: addressVal,
+                              pan_number: panNumber
+                            })
+                          });
+                          const result = await res.json();
+                          if (result.success) {
+                            setIsEditing(false);
+                            setProfileMsg('Profile information updated successfully!');
+                          } else {
+                            setProfileMsg(result.error || 'Failed to update profile information.');
+                          }
+                        } catch (err) {
+                          setProfileMsg('Network error while updating profile.');
+                        }
+                        setTimeout(() => setProfileMsg(''), 4000);
                       }} 
                       className="btn-dark" 
                       style={{ width: 'fit-content', padding: '8px 16px', fontSize: '0.75rem', background: '#D9A036', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
