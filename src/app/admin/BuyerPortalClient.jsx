@@ -7,10 +7,19 @@ import './admin.css';
 export default function BuyerPortalClient({ username, buyerDetails, inquiries, units }) {
   const router = useRouter();
 
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+
   useEffect(() => {
+    // Check if already loaded
+    if (typeof window.Razorpay !== 'undefined') {
+      setRazorpayLoaded(true);
+      return;
+    }
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
+    script.onload = () => setRazorpayLoaded(true);
+    script.onerror = () => console.error('Failed to load Razorpay SDK');
     document.body.appendChild(script);
     return () => {
       if (document.body.contains(script)) {
@@ -28,7 +37,82 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
   });
 
   const [selectedAccordion, setSelectedAccordion] = useState(null);
-  const [activeSupportTicket, setActiveSupportTicket] = useState(null);
+  
+  // --- Razorpay Payment Handler ---
+  const handleRazorpayPayment = (installmentName, amountInINR) => {
+    const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_paste_key_here';
+    
+    if (!razorpayLoaded || typeof window.Razorpay === 'undefined') {
+      alert('Razorpay is still loading. Please wait a moment and try again.');
+      return;
+    }
+
+    // Validate amount
+    const amountPaise = Math.round(Number(amountInINR) * 100);
+    if (!amountPaise || amountPaise <= 0 || isNaN(amountPaise)) {
+      alert('Invalid payment amount. Please check the instalment details.');
+      return;
+    }
+
+    const options = {
+      key: keyId,
+      amount: amountPaise,
+      currency: "INR",
+      name: "Vanya Residences",
+      description: `Payment for ${installmentName} - Unit ${rawUnitId}`,
+      image: "/images/hero_building_1777640070355.png",
+      handler: async function (response) {
+        alert(`Payment successful!\nPayment ID: ${response.razorpay_payment_id}`);
+        try {
+          const newAmountPaid = paidNum + Number(amountInINR);
+          // Store as full formatted string e.g. "₹ 1,20,00,000"
+          const formattedAmountPaid = '₹ ' + new Intl.NumberFormat('en-IN').format(Math.round(newAmountPaid));
+          
+          const res = await fetch(`/api/buyers?username=${username}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              amount_paid: formattedAmountPaid
+            })
+          });
+          const result = await res.json();
+          if (result.success) {
+            alert('Your dashboard payment status has been updated in real-time!');
+            router.refresh();
+            setTimeout(() => window.location.reload(), 300);
+          } else {
+            alert('Failed to save payment status to database.');
+          }
+        } catch (e) {
+          alert('Error updating payment: ' + e.message);
+        }
+      },
+      prefill: {
+        name: username,
+        email: `${username}@vanya.com`,
+        contact: "9999999999"
+      },
+      theme: {
+        color: "#113629"
+      },
+      modal: {
+        ondismiss: function() {
+          console.log('Razorpay checkout closed by user');
+        }
+      }
+    };
+
+    try {
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (response) {
+        alert(`Payment failed: ${response.error.description}`);
+      });
+      rzp.open();
+    } catch (err) {
+      alert('Error opening Razorpay: ' + err.message);
+      console.error('Razorpay error:', err);
+    }
+  };  const [activeSupportTicket, setActiveSupportTicket] = useState(null);
   
   // Tab sub-filters
   const [paymentSubTab, setPaymentSubTab] = useState('schedule');
@@ -180,60 +264,6 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
     if (val >= 10000000) return '₹ ' + (val / 10000000).toFixed(2) + ' Cr';
     if (val >= 100000) return '₹ ' + (val / 100000).toFixed(2) + ' L';
     return '₹ ' + val.toLocaleString('en-IN');
-  };
-
-  const handleRazorpayPayment = (installmentName, amountInINR) => {
-    const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_paste_key_here';
-    
-    if (typeof window.Razorpay === 'undefined') {
-      alert('Razorpay SDK failed to load. Please check your internet connection.');
-      return;
-    }
-
-    const options = {
-      key: keyId,
-      amount: amountInINR * 100, // in paisa
-      currency: "INR",
-      name: "Vanya Residences",
-      description: `Payment for ${installmentName} - Unit ${rawUnitId}`,
-      image: "/images/hero_building_1777640070355.png",
-      handler: async function (response) {
-        alert(`Payment successful!\nPayment ID: ${response.razorpay_payment_id}`);
-        try {
-          const newAmountPaid = paidNum + amountInINR;
-          const formattedAmountPaid = '₹ ' + (newAmountPaid / 10000000).toFixed(2) + ' Cr';
-          
-          const res = await fetch(`/api/buyers?username=${username}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              amount_paid: formattedAmountPaid
-            })
-          });
-          const result = await res.json();
-          if (result.success) {
-            alert('Your dashboard payment status has been updated in real-time!');
-            router.refresh();
-            setTimeout(() => window.location.reload(), 300);
-          } else {
-            alert('Failed to save payment status to database.');
-          }
-        } catch (e) {
-          alert('Error updating payment: ' + e.message);
-        }
-      },
-      prefill: {
-        name: username,
-        email: `${username}@vanya.com`,
-        contact: "9999999999"
-      },
-      theme: {
-        color: "#113629"
-      }
-    };
-
-    const rzp = new window.Razorpay(options);
-    rzp.open();
   };
 
   const getRelativeDateStr = (baseDate, monthsToAdd, targetDay) => {

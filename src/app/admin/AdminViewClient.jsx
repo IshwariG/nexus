@@ -1130,7 +1130,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                         <h2 className="serif" style={{ margin: 0, fontSize: '1.6rem', color: '#113629', fontWeight: 'bold' }}>₹ {totalRevenueFormatted}</h2>
                         <span style={{ fontSize: '0.68rem', color: '#137333', fontWeight: 'bold' }}>↑ 15% from last month</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', height: '200px', alignItems: 'flex-end', gap: '1rem', position: 'relative', marginTop: '1.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', height: '230px', alignItems: 'flex-end', gap: '1rem', position: 'relative', marginTop: '1.5rem' }}>
                         <div style={{ position: 'absolute', bottom: '70%', left: 0, right: 0, borderTop: '2px dashed #c2a661', opacity: 0.45, zIndex: 1 }}></div>
                         {revMonths.map((m, idx) => {
                           const valFormatted = new Intl.NumberFormat('en-IN').format(Math.round(m.value * 100000));
@@ -1138,9 +1138,9 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                           const hPerc = Math.max(10, Math.round((m.value / maxVal) * 100));
                           return (
                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, height: '100%', justifyContent: 'flex-end', zIndex: 2 }}>
-                              <span style={{ fontSize: '0.82rem', fontWeight: 'bold', color: '#113629', marginBottom: '6px' }}>{valFormatted}</span>
-                              <div style={{ height: `${hPerc}%`, width: '60%', background: 'linear-gradient(180deg, #2d7c5f, #b8d8c8)', borderRadius: '5px 5px 0 0', opacity: 0.85 }}></div>
-                              <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', marginTop: '8px', letterSpacing: '0.3px' }}>{m.label.toUpperCase()}</span>
+                              <span style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#113629', marginBottom: '8px' }}>{valFormatted}</span>
+                              <div style={{ height: `${hPerc}%`, width: '55%', background: 'linear-gradient(180deg, #2d7c5f, #b8d8c8)', borderRadius: '5px 5px 0 0', opacity: 0.85 }}></div>
+                              <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#4b5563', marginTop: '10px', letterSpacing: '0.3px' }}>{m.label.toUpperCase()}</span>
                             </div>
                           );
                         })}
