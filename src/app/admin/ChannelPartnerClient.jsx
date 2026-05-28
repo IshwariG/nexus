@@ -48,6 +48,53 @@ export default function ChannelPartnerClient({ username }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordMsg, setPasswordMsg] = useState(null);
 
+  const handleChangePassword = async () => {
+    setPasswordMsg(null);
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordMsg('All password fields are required.');
+      setTimeout(() => setPasswordMsg(null), 3000);
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordMsg('New password and confirm password do not match.');
+      setTimeout(() => setPasswordMsg(null), 3000);
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordMsg('Password must be at least 6 characters.');
+      setTimeout(() => setPasswordMsg(null), 3000);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/users/password', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username,
+          currentPassword,
+          newPassword
+        })
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setPasswordMsg('Password updated successfully.');
+        setTimeout(() => setPasswordMsg(null), 3000);
+      } else {
+        setPasswordMsg(json.error || 'Failed to update password.');
+        setTimeout(() => setPasswordMsg(null), 3000);
+      }
+    } catch (e) {
+      setPasswordMsg('Network error updating password.');
+      setTimeout(() => setPasswordMsg(null), 3000);
+    }
+  };
+
   // Chat threads states
   const [activeThread, setActiveThread] = useState('rahul');
   const [chatMessages, setChatMessages] = useState({
@@ -958,7 +1005,7 @@ export default function ChannelPartnerClient({ username }) {
                       <label>Confirm Password</label>
                       <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} style={{ width: '92%', padding: '6px 10px' }} />
                     </div>
-                    <button onClick={() => { setPasswordMsg('Verification error: invalid current password.'); setTimeout(() => setPasswordMsg(null), 3000); }} className="btn-dark" style={{ width: '100%', padding: '8px', fontSize: '0.75rem' }}>
+                    <button onClick={handleChangePassword} className="btn-dark" style={{ width: '100%', padding: '8px', fontSize: '0.75rem' }}>
                       UPDATE PASSWORD
                     </button>
                   </div>

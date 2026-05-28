@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import PortfolioTable from './PortfolioTable';
 import GridClient from './GridClient';
@@ -37,6 +37,24 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
+
+  const weekRangeLabel = useMemo(() => {
+    const now = new Date();
+    const day = now.getDay(); // 0=Sun
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    const start = new Date(now);
+    start.setDate(now.getDate() + mondayOffset);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+
+    const fmt = (d) =>
+      d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+    return `${fmt(start)} - ${fmt(end)}`;
+  }, []);
   
   // Leads tab sub-filter
   const [leadSubTab, setLeadSubTab] = useState('all');
@@ -56,8 +74,11 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
   // Analytical Performance phase toggle (Phase 1 = overview, Phase 2 = detailed)
   const [analyticalPhase, setAnalyticalPhase] = useState(1);
 
-  // Monthly Sales Velocity half-year filter
-  const [velocityHalf, setVelocityHalf] = useState('H1'); // 'H1' = Jan-Jun, 'H2' = Jul-Dec
+  // Monthly Sales Velocity range filter
+  // - WEEK: last 7 days (daily bars)
+  // - MONTH: current month (weekly bars)
+  // - H1/H2: Jan-Jun / Jul-Dec (monthly bars)
+  const [velocityRange, setVelocityRange] = useState('MONTH');
 
   const handlePrevMonth = () => {
     setLeadsMonth(prev => {
@@ -104,7 +125,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
 
   // Helper to compute monthly revenue from real BuyerDetails and PropertyUnits
   const getRevenueData = () => {
-    const baseDate = new Date("2026-05-25");
+    const baseDate = new Date();
     
     if (revenueViewType === 'past') {
       const months = [];
@@ -121,24 +142,11 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
       
       buyers.forEach(buyer => {
         const amt = parseAmountVal(buyer.amount_paid);
-        const regDate = buyer.created_at ? new Date(buyer.created_at) : new Date("2026-05-01");
-        
-        const activeMonths = months.filter(m => {
-          const mDate = new Date(m.year, m.monthIndex, 1);
-          const rDate = new Date(regDate.getFullYear(), regDate.getMonth(), 1);
-          return mDate >= rDate;
-        });
-        
-        const count = activeMonths.length || 1;
-        const share = amt / count;
-        
-        months.forEach(m => {
-          const mDate = new Date(m.year, m.monthIndex, 1);
-          const rDate = new Date(regDate.getFullYear(), regDate.getMonth(), 1);
-          if (mDate >= rDate) {
-            m.value += share;
-          }
-        });
+        const dtRaw = buyer.paid_at || buyer.payment_date || buyer.updated_at || buyer.created_at;
+        const dt = dtRaw ? new Date(dtRaw) : null;
+        if (!dt || Number.isNaN(dt.getTime())) return;
+        const m = months.find(x => x.year === dt.getFullYear() && x.monthIndex === dt.getMonth());
+        if (m) m.value += amt;
       });
       
       return months;
@@ -184,55 +192,159 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
     }
   };
 
-  // Helper to compute Monthly Sales Velocity data for H1 (Jan-Jun) or H2 (Jul-Dec)
-  const getVelocityData = (half) => {
-    const year = 2026;
-    const startMonth = half === 'H1' ? 0 : 6; // Jan=0 or Jul=6
-    const monthNames = half === 'H1'
-      ? ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE']
-      : ['JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
-    const months = [];
-    for (let i = 0; i < 6; i++) {
-      months.push({ label: monthNames[i], monthIndex: startMonth + i, value: 0 });
+  const formatShortDay = (d) =>
+    d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }).toUpperCase();
+
+  const getWeekOfMonth = (d) => {
+    const first = new Date(d.getFullYear(), d.getMonth(), 1);
+    const firstDay = first.getDay(); // 0=Sun
+    const offset = (firstDay + 6) % 7; // Monday-based index
+    return Math.floor((d.getDate() + offset - 1) / 7) + 1;
+  };
+
+  const getVelocityData = (range) => {
+    const now = new Date();
+    const payments = (buyers || [])
+      .map((b) => {
+        const amtLakhs = parseAmountVal(b.amount_paid);
+        const dt = b.created_at ? new Date(b.created_at) : null;
+        return { amtLakhs, dt };
+      })
+      .filter((p) => p.dt && !Number.isNaN(p.dt.getTime()) && p.amtLakhs > 0);
+
+    if (range === 'WEEK') {
+      const end = startOfDay(now);
+      const start = new Date(end);
+      start.setDate(start.getDate() - 6);
+
+      const buckets = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(start);
+        d.setDate(d.getDate() + i);
+        buckets.push({ label: formatShortDay(d), key: d.toISOString().slice(0, 10), valueLakhs: 0 });
+      }
+
+      payments.forEach((p) => {
+        const day = startOfDay(p.dt);
+        if (day < start || day > end) return;
+        const key = day.toISOString().slice(0, 10);
+        const b = buckets.find((x) => x.key === key);
+        if (b) b.valueLakhs += p.amtLakhs;
+      });
+
+      return buckets.map((b) => ({ label: b.label, valueCr: b.valueLakhs / 100 }));
     }
 
-    buyers.forEach(buyer => {
-      const amt = parseAmountVal(buyer.amount_paid); // in Lakhs
-      const regDate = buyer.created_at ? new Date(buyer.created_at) : new Date("2026-05-01");
+    if (range === 'MONTH') {
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const start = new Date(year, month, 1);
+      const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
 
-      const activeMonths = months.filter(m => {
-        const mDate = new Date(year, m.monthIndex, 1);
-        const rDate = new Date(regDate.getFullYear(), regDate.getMonth(), 1);
-        return mDate >= rDate;
+      const weeksInMonth = getWeekOfMonth(new Date(year, month + 1, 0));
+      const buckets = Array.from({ length: weeksInMonth }, (_, i) => ({
+        label: `WK ${i + 1}`,
+        week: i + 1,
+        valueLakhs: 0
+      }));
+
+      payments.forEach((p) => {
+        if (p.dt < start || p.dt > end) return;
+        const w = getWeekOfMonth(p.dt);
+        const b = buckets.find((x) => x.week === w);
+        if (b) b.valueLakhs += p.amtLakhs;
       });
 
-      const count = activeMonths.length || 1;
-      const share = amt / count;
+      return buckets.map((b) => ({ label: b.label, valueCr: b.valueLakhs / 100 }));
+    }
 
-      months.forEach(m => {
-        const mDate = new Date(year, m.monthIndex, 1);
-        const rDate = new Date(regDate.getFullYear(), regDate.getMonth(), 1);
-        if (mDate >= rDate) {
-          m.value += share;
-        }
-      });
+    const half = range === 'H2' ? 'H2' : 'H1';
+    const year = now.getFullYear();
+    const startMonth = half === 'H1' ? 0 : 6; // Jan=0 or Jul=6
+    const monthNames =
+      half === 'H1'
+        ? ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN']
+        : ['JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+    const buckets = monthNames.map((label, i) => ({
+      label,
+      monthIndex: startMonth + i,
+      valueLakhs: 0
+    }));
+
+    payments.forEach((p) => {
+      if (p.dt.getFullYear() !== year) return;
+      const mi = p.dt.getMonth();
+      const b = buckets.find((x) => x.monthIndex === mi);
+      if (b) b.valueLakhs += p.amtLakhs;
     });
 
-    // Convert to Cr for display
-    return months.map(m => ({ ...m, valueCr: m.value / 100 }));
+    return buckets.map((b) => ({ label: b.label, valueCr: b.valueLakhs / 100 }));
   };
+  const normalizeUnitStatus = (raw) => {
+    const s = (raw || '').toString().trim().toUpperCase();
+    if (!s) return 'AVAILABLE';
+    if (s === 'SOLD' || s === 'SOLDOUT' || s === 'SOLD_OUT') return 'SOLD OUT';
+    if (s === 'NEGOTIATION' || s === 'IN_NEGOTIATION' || s === 'IN-NEGOTIATION') return 'IN NEGOTIATION';
+    if (s === 'BOOKED') return 'RESERVED';
+    return s;
+  };
+
+  const getDashboardUnitsForProject = (proj) => {
+    if (proj === 'vanya-estate') {
+      const generated = [];
+      for (let lvl = 1; lvl <= 10; lvl++) {
+        for (let i = 1; i <= 10; i++) {
+          const unitId = lvl * 100 + i;
+          const seedValue = (unitId * 7) % 10;
+          let status = 'AVAILABLE';
+          if (seedValue < 3) status = 'SOLD OUT';
+          else if (seedValue < 5) status = 'RESERVED';
+          generated.push({ unit_id: unitId.toString(), floor: lvl.toString(), status });
+        }
+      }
+      return generated;
+    }
+
+    if (proj === 'vanya-meadows') {
+      const generated = [];
+      for (let lvl = 1; lvl <= 10; lvl++) {
+        for (let i = 1; i <= 8; i++) {
+          const unitId = lvl * 100 + i;
+          const seedValue = (unitId * 13) % 10;
+          let status = 'AVAILABLE';
+          if (seedValue < 2) status = 'SOLD OUT';
+          else if (seedValue < 3) status = 'RESERVED';
+          generated.push({ unit_id: unitId.toString(), floor: lvl.toString(), status });
+        }
+      }
+      return generated;
+    }
+
+    // For vanya-residences (and any unknown projects), trust the backend query result.
+    // We intentionally do NOT filter client-side by a project field because the DB may
+    // store a different naming convention (and filtering can mistakenly drop all sold/reserved units).
+    return (units || []);
+  };
+
+  const dashboardUnits = getDashboardUnitsForProject(project).map((u) => ({
+    ...u,
+    status: normalizeUnitStatus(u?.status)
+  }));
+
   const totalLeadsCount = inquiries.filter(inq => !inq.source?.startsWith('UNIT_ASSIGNMENT_')).length;
-  const soldUnitsCount = units.filter(u => u.status === 'SOLD OUT').length;
-  const availableUnitsCount = units.filter(u => u.status === 'AVAILABLE').length;
-  const reservedUnitsCount = units.filter(u => u.status === 'RESERVED' || u.status === 'IN NEGOTIATION').length;
+  const soldUnitsCount = dashboardUnits.filter(u => u.status === 'SOLD OUT').length;
+  const availableUnitsCount = dashboardUnits.filter(u => u.status === 'AVAILABLE').length;
+  const reservedUnitsCount = dashboardUnits.filter(u => u.status === 'RESERVED' || u.status === 'IN NEGOTIATION').length;
   const activeLeadsCount = inquiries.filter(inq => 
     inq.status && !inq.status.startsWith('DONE|') && !inq.status.startsWith('SCHEDULED|') && !inq.source?.startsWith('UNIT_ASSIGNMENT_')
   ).length;
   const hotLeadsCount = inquiries.filter(inq => inq.status && inq.status.startsWith('HOT')).length;
   const conversionRate = totalLeadsCount > 0 ? Math.round((soldUnitsCount / totalLeadsCount) * 100) : 0;
 
-  const totalUnitsCount = units.length || 1;
+  const totalUnitsCount = dashboardUnits.length || 1;
   const soldPerc = Math.round((soldUnitsCount / totalUnitsCount) * 100);
   const reservedPerc = Math.round((reservedUnitsCount / totalUnitsCount) * 100);
   const availablePerc = Math.max(0, 100 - soldPerc - reservedPerc);
@@ -304,10 +416,20 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
   // Handle lead assignment
   const handleAssignLead = async (leadId, salesmanId) => {
     try {
-      const res = await fetch('/api/inquiries', {
+      if (!salesmanId || salesmanId === 'unassigned') {
+        alert('Salesman ID required. Please select a representative.');
+        return;
+      }
+
+      const currentInquiry = inquiries.find((x) => String(x.id) === String(leadId));
+      const currentStatus = (currentInquiry?.status || 'NEW').toString();
+      const baseStage = currentStatus.includes('|') ? currentStatus.split('|')[0] : currentStatus;
+      const nextStatus = `${baseStage}|${salesmanId}`;
+
+      const res = await fetch(`/api/inquiries?id=${encodeURIComponent(leadId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: leadId, salesmanId })
+        body: JSON.stringify({ status: nextStatus })
       });
       const data = await res.json();
       if (data.success) {
@@ -455,7 +577,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
         <header className="admin-header" style={{ padding: '1rem 2.5rem', background: '#ffffff', borderBottom: '1px solid #f1f3f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100 }}>
           <div>
             <h1 className="serif" style={{ fontSize: '1.35rem', margin: 0, color: '#113629' }}>Welcome back, Admin! 👋</h1>
-            <p style={{ margin: 0, fontSize: '0.7rem', color: '#9ca3af' }}>Here's what's happening in your business today.</p>
+            <p style={{ margin: 0, fontSize: '0.7rem', color: '#9ca3af' }}>Here&apos;s what&apos;s happening in your business today.</p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
@@ -525,14 +647,14 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
             <div className="flex-between mb-3" style={{ alignItems: 'flex-start' }}>
               <div>
                 <h1 className="serif" style={{ fontSize: '1.6rem', color: '#113629', margin: '0 0 0.25rem 0', fontWeight: 'bold' }}>Welcome back, Admin! 👋</h1>
-                <p className="text-muted" style={{ margin: 0, fontSize: '0.72rem' }}>Here's what's happening in your business today.</p>
+                <p className="text-muted" style={{ margin: 0, fontSize: '0.72rem' }}>Here&apos;s what&apos;s happening in your business today.</p>
                 <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
                   <button onClick={() => setDashboardSubTab('analytical')} className={dashboardSubTab === 'analytical' ? 'btn-dark' : 'btn-outline'} style={{ padding: '0.4rem 1rem', fontSize: '0.7rem' }}>Analytical Performance</button>
                   <button onClick={() => setDashboardSubTab('executive')} className={dashboardSubTab === 'executive' ? 'btn-dark' : 'btn-outline'} style={{ padding: '0.4rem 1rem', fontSize: '0.7rem' }}>Executive Portal</button>
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#fff', border: '1px solid #f1f3f5', padding: '0.5rem 0.75rem', borderRadius: '8px', fontSize: '0.7rem', color: '#6b7280', fontWeight: '600', boxShadow: '0 1px 3px rgba(0,0,0,0.01)' }}>
-                <span>📅 20 May 2026 - 26 May 2026</span>
+                <span>📅 {weekRangeLabel}</span>
               </div>
             </div>
 
@@ -583,13 +705,13 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
 
               {/* ===== PHASE 1: Overview ===== */}
               {analyticalPhase === 1 && (() => {
-                const velocityData = getVelocityData(velocityHalf);
+                const velocityData = getVelocityData(velocityRange);
                 const maxVelocity = Math.max(...velocityData.map(d => d.valueCr), 1);
                 const targetLine = maxVelocity * 0.55; // target line at ~55% of max
                 const yAxisMax = Math.ceil(maxVelocity * 1.2);
                 const ySteps = [0, 2, 4, 6, 8];
                 const effectiveMax = Math.max(yAxisMax, 8);
-                const totalUnits = units.length || 50;
+                const totalUnits = totalUnitsCount || 50;
 
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -606,17 +728,17 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                           <svg width="160" height="160" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
                             <circle cx="18" cy="18" r="14" fill="none" stroke="#f1f3f5" strokeWidth="3.8" />
                             {/* AVAILABLE (green) - drawn first as background arc */}
-                            <circle cx="18" cy="18" r="14" fill="none" stroke="#137333" strokeWidth="4"
+                            <circle cx="18" cy="18" r="14" fill="none" stroke="#137333" strokeWidth="4" pathLength="100"
                               strokeDasharray={`${availablePerc} ${100 - availablePerc}`} strokeDashoffset="0"
                               strokeLinecap="round"
                               style={{ transition: 'stroke-dasharray 0.8s ease' }} />
                             {/* RESERVED (blue) */}
-                            <circle cx="18" cy="18" r="14" fill="none" stroke="#1a73e8" strokeWidth="4"
+                            <circle cx="18" cy="18" r="14" fill="none" stroke="#1a73e8" strokeWidth="4" pathLength="100"
                               strokeDasharray={`${reservedPerc} ${100 - reservedPerc}`} strokeDashoffset={`${-availablePerc}`}
                               strokeLinecap="round"
                               style={{ transition: 'stroke-dasharray 0.8s ease' }} />
                             {/* SOLD (dark red/maroon) */}
-                            <circle cx="18" cy="18" r="14" fill="none" stroke="#8B2500" strokeWidth="4"
+                            <circle cx="18" cy="18" r="14" fill="none" stroke="#8B2500" strokeWidth="4" pathLength="100"
                               strokeDasharray={`${soldPerc} ${100 - soldPerc}`} strokeDashoffset={`${-availablePerc - reservedPerc}`}
                               strokeLinecap="round"
                               style={{ transition: 'stroke-dasharray 0.8s ease' }} />
@@ -668,13 +790,13 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                             </div>
                           </div>
 
-                          {/* Half-Year Filter Dropdown */}
+                          {/* Velocity Range Filter Dropdown */}
                           <select
-                            value={velocityHalf}
-                            onChange={(e) => setVelocityHalf(e.target.value)}
+                            value={velocityRange}
+                            onChange={(e) => setVelocityRange(e.target.value)}
                             style={{
                               padding: '0.4rem 0.75rem',
-                              fontSize: '0.75rem',
+                              fontSize: '0.85rem',
                               border: '1px solid #d1d5db',
                               borderRadius: '6px',
                               background: '#fff',
@@ -684,6 +806,8 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                               outline: 'none'
                             }}
                           >
+                            <option value="WEEK">Week</option>
+                            <option value="MONTH">Month</option>
                             <option value="H1">Jan - Jun</option>
                             <option value="H2">Jul - Dec</option>
                           </select>
@@ -701,7 +825,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                               return (
                                 <g key={i}>
                                   <line x1="40" y1={y} x2="580" y2={y} stroke="#f1f3f5" strokeWidth="1" />
-                                  <text x="30" y={y + 4} textAnchor="end" style={{ fontSize: '0.6rem', fill: '#9ca3af', fontWeight: '600' }}>{val}</text>
+                                  <text x="30" y={y + 4} textAnchor="end" style={{ fontSize: '0.78rem', fill: '#9ca3af', fontWeight: '700' }}>{val}</text>
                                 </g>
                               );
                             })}
@@ -715,8 +839,12 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
 
                             {/* Bars */}
                             {velocityData.map((d, idx) => {
-                              const barWidth = 55;
-                              const gap = (540 - barWidth * 6) / 7;
+                              const n = Math.max(velocityData.length, 1);
+                              const totalWidth = 540;
+                              const maxBarWidth = 55;
+                              const minGap = 8;
+                              const gap = Math.max(minGap, Math.floor(totalWidth / (n * 8)));
+                              const barWidth = Math.min(maxBarWidth, Math.floor((totalWidth - gap * (n + 1)) / n));
                               const x = 40 + gap + idx * (barWidth + gap);
                               const barHeight = Math.max(3, (d.valueCr / effectiveMax) * 170);
                               const y = 195 - barHeight;
@@ -736,7 +864,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                     {crLabel}
                                   </text>
                                   {/* Month label */}
-                                  <text x={x + barWidth / 2} y={210} textAnchor="middle" style={{ fontSize: '0.55rem', fill: '#6b7280', fontWeight: '600' }}>
+                                  <text x={x + barWidth / 2} y={210} textAnchor="middle" style={{ fontSize: '0.68rem', fill: '#6b7280', fontWeight: '700' }}>
                                     {d.label}
                                   </text>
                                 </g>
@@ -1002,7 +1130,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                         <h2 className="serif" style={{ margin: 0, fontSize: '1.6rem', color: '#113629', fontWeight: 'bold' }}>₹ {totalRevenueFormatted}</h2>
                         <span style={{ fontSize: '0.68rem', color: '#137333', fontWeight: 'bold' }}>↑ 15% from last month</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', height: '140px', alignItems: 'flex-end', gap: '1rem', position: 'relative', marginTop: '1.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', height: '200px', alignItems: 'flex-end', gap: '1rem', position: 'relative', marginTop: '1.5rem' }}>
                         <div style={{ position: 'absolute', bottom: '70%', left: 0, right: 0, borderTop: '2px dashed #c2a661', opacity: 0.45, zIndex: 1 }}></div>
                         {revMonths.map((m, idx) => {
                           const valFormatted = new Intl.NumberFormat('en-IN').format(Math.round(m.value * 100000));
@@ -1010,9 +1138,9 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                           const hPerc = Math.max(10, Math.round((m.value / maxVal) * 100));
                           return (
                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, height: '100%', justifyContent: 'flex-end', zIndex: 2 }}>
-                              <span style={{ fontSize: '0.65rem', fontWeight: 'bold', color: '#113629', marginBottom: '4px' }}>{valFormatted}</span>
-                              <div style={{ height: `${hPerc}%`, width: '70%', background: 'linear-gradient(180deg, #2d7c5f, #b8d8c8)', borderRadius: '4px 4px 0 0', opacity: 0.85 }}></div>
-                              <span style={{ fontSize: '0.58rem', fontWeight: '600', color: '#6b7280', marginTop: '6px' }}>{m.label.toUpperCase()}</span>
+                              <span style={{ fontSize: '0.82rem', fontWeight: 'bold', color: '#113629', marginBottom: '6px' }}>{valFormatted}</span>
+                              <div style={{ height: `${hPerc}%`, width: '60%', background: 'linear-gradient(180deg, #2d7c5f, #b8d8c8)', borderRadius: '5px 5px 0 0', opacity: 0.85 }}></div>
+                              <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', marginTop: '8px', letterSpacing: '0.3px' }}>{m.label.toUpperCase()}</span>
                             </div>
                           );
                         })}
@@ -1247,7 +1375,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem 2.5rem 2.5rem' }}>
             
             <div style={{ background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px', padding: '1rem' }}>
-              <GridClient units={units} inquiries={inquiries} project={project} />
+              <GridClient units={units} inquiries={inquiries} buyers={buyers} project={project} />
             </div>
           </div>
         )}

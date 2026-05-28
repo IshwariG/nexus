@@ -1,9 +1,10 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
-export default function GridClient({ units, inquiries, project = 'vanya-residences' }) {
+export default function GridClient({ units, inquiries, buyers = [], project = 'vanya-residences' }) {
   const [selectedClient, setSelectedClient] = useState(null);
   const [activePhase, setActivePhase] = useState(1);
+  const [velocityRange, setVelocityRange] = useState('MONTH');
   const gridLevels = activePhase === 1 ? [5, 4, 3, 2, 1] : [10, 9, 8, 7, 6];
 
   // Dynamically filter or simulate units based on project
@@ -93,6 +94,89 @@ export default function GridClient({ units, inquiries, project = 'vanya-residenc
   const availableUnits = validUnits.filter(u => u.status === 'AVAILABLE').length;
   const totalUnits = validUnits.length || 1;
 
+  const parseAmountVal = (val) => {
+    if (!val) return 0;
+    if (typeof val === 'number') return val < 1000 ? val * 100 : val / 100000;
+    const lowerVal = val.toString().toLowerCase();
+    const cleaned = lowerVal.replace(/[^\d.]/g, '');
+    let num = parseFloat(cleaned) || 0;
+    if (lowerVal.includes('cr') || lowerVal.includes('crore')) num = num * 100;
+    else if (lowerVal.includes('l') || lowerVal.includes('lakh')) {
+      // already in Lakhs
+    } else {
+      num = num < 1000 ? num * 100 : num / 100000;
+    }
+    return num;
+  };
+
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const formatShortDay = (d) =>
+    d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }).toUpperCase();
+  const getWeekOfMonth = (d) => {
+    const first = new Date(d.getFullYear(), d.getMonth(), 1);
+    const firstDay = first.getDay(); // 0=Sun
+    const offset = (firstDay + 6) % 7; // Monday-based
+    return Math.floor((d.getDate() + offset - 1) / 7) + 1;
+  };
+
+  const velocityBars = useMemo(() => {
+    const now = new Date();
+    const payments = (buyers || [])
+      .map((b) => ({ amtLakhs: parseAmountVal(b.amount_paid), dt: b.created_at ? new Date(b.created_at) : null }))
+      .filter((p) => p.dt && !Number.isNaN(p.dt.getTime()) && p.amtLakhs > 0);
+
+    if (velocityRange === 'WEEK') {
+      const end = startOfDay(now);
+      const start = new Date(end);
+      start.setDate(start.getDate() - 6);
+      const buckets = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(start);
+        d.setDate(d.getDate() + i);
+        buckets.push({ label: formatShortDay(d), key: d.toISOString().slice(0, 10), valueLakhs: 0 });
+      }
+      payments.forEach((p) => {
+        const day = startOfDay(p.dt);
+        if (day < start || day > end) return;
+        const key = day.toISOString().slice(0, 10);
+        const b = buckets.find((x) => x.key === key);
+        if (b) b.valueLakhs += p.amtLakhs;
+      });
+      return buckets.map((b) => ({ label: b.label, value: b.valueLakhs / 100 }));
+    }
+
+    if (velocityRange === 'MONTH') {
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const start = new Date(year, month, 1);
+      const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
+      const weeksInMonth = getWeekOfMonth(new Date(year, month + 1, 0));
+      const buckets = Array.from({ length: weeksInMonth }, (_, i) => ({ label: `WK ${i + 1}`, week: i + 1, valueLakhs: 0 }));
+      payments.forEach((p) => {
+        if (p.dt < start || p.dt > end) return;
+        const w = getWeekOfMonth(p.dt);
+        const b = buckets.find((x) => x.week === w);
+        if (b) b.valueLakhs += p.amtLakhs;
+      });
+      return buckets.map((b) => ({ label: b.label, value: b.valueLakhs / 100 }));
+    }
+
+    const half = velocityRange === 'H2' ? 'H2' : 'H1';
+    const year = now.getFullYear();
+    const startMonth = half === 'H1' ? 0 : 6;
+    const monthNames = half === 'H1'
+      ? ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE']
+      : ['JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+    const buckets = monthNames.map((label, i) => ({ label, monthIndex: startMonth + i, valueLakhs: 0 }));
+    payments.forEach((p) => {
+      if (p.dt.getFullYear() !== year) return;
+      const mi = p.dt.getMonth();
+      const b = buckets.find((x) => x.monthIndex === mi);
+      if (b) b.valueLakhs += p.amtLakhs;
+    });
+    return buckets.map((b) => ({ label: b.label, value: b.valueLakhs / 100 }));
+  }, [buyers, velocityRange]);
+
   return (
     <>
       {/* Analytical Performance Report */}
@@ -181,24 +265,23 @@ export default function GridClient({ units, inquiries, project = 'vanya-residenc
                         </span>
                       </div>
                     </div>
-                    <select defaultValue={activePhase === 2 ? "H2" : "H1"} style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem', border: '1px solid #d1d5db', borderRadius: '6px', background: '#fff', color: '#374151', fontWeight: '600' }}>
+                    <select
+                      value={velocityRange}
+                      onChange={(e) => setVelocityRange(e.target.value)}
+                      style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem', border: '1px solid #d1d5db', borderRadius: '6px', background: '#fff', color: '#374151', fontWeight: '600' }}
+                    >
+                      <option value="WEEK">Week</option>
+                      <option value="MONTH">Month</option>
                       <option value="H1">Jan - Jun</option>
                       <option value="H2">Jul - Dec</option>
                     </select>
                   </div>
                   {/* SVG Bar chart */}
                   {(() => {
-                    const months = [
-                      { label: 'JANUARY', value: project === 'vanya-estate' ? 1.5 : project === 'vanya-meadows' ? 0.8 : 2 },
-                      { label: 'FEBRUARY', value: project === 'vanya-estate' ? 2.2 : project === 'vanya-meadows' ? 1.0 : 2.6 },
-                      { label: 'MARCH', value: project === 'vanya-estate' ? 1.8 : project === 'vanya-meadows' ? 1.2 : 3.2 },
-                      { label: 'APRIL', value: project === 'vanya-estate' ? 3.5 : project === 'vanya-meadows' ? 2.0 : 3.8 },
-                      { label: 'MAY', value: project === 'vanya-estate' ? 3.0 : project === 'vanya-meadows' ? 1.8 : 4.4 },
-                      { label: 'JUNE', value: project === 'vanya-estate' ? 4.2 : project === 'vanya-meadows' ? 2.5 : 5.0 }
-                    ];
-                    if (activePhase === 2) {
-                      months.forEach(m => m.value = m.value * 1.5);
-                    }
+                    const months = velocityBars.map((b) => ({
+                      label: b.label,
+                      value: activePhase === 2 ? b.value * 1.5 : b.value
+                    }));
                     const maxVal = Math.max(...months.map(m => m.value), 1);
                     const targetLine = maxVal * 0.55;
                     
@@ -211,7 +294,7 @@ export default function GridClient({ units, inquiries, project = 'vanya-residenc
                             return (
                               <g key={i}>
                                 <line x1="40" y1={y} x2="580" y2={y} stroke="#f1f3f5" strokeWidth="1" />
-                                <text x="30" y={y + 4} textAnchor="end" style={{ fontSize: '0.6rem', fill: '#9ca3af', fontWeight: '600' }}>{val}</text>
+                                <text x="30" y={y + 4} textAnchor="end" style={{ fontSize: '0.78rem', fill: '#9ca3af', fontWeight: '700' }}>{val}</text>
                               </g>
                             );
                           })}
@@ -219,8 +302,12 @@ export default function GridClient({ units, inquiries, project = 'vanya-residenc
                           <line x1="40" y1={195 - (targetLine / (maxVal * 1.2)) * 170} x2="580" y2={195 - (targetLine / (maxVal * 1.2)) * 170} stroke="#137333" strokeWidth="1.5" strokeDasharray="8 4" opacity="0.4" />
                           
                           {months.map((m, idx) => {
-                            const barWidth = 55;
-                            const gap = (540 - barWidth * 6) / 7;
+                            const n = Math.max(months.length, 1);
+                            const totalWidth = 540;
+                            const maxBarWidth = 55;
+                            const minGap = 8;
+                            const gap = Math.max(minGap, Math.floor(totalWidth / (n * 8)));
+                            const barWidth = Math.min(maxBarWidth, Math.floor((totalWidth - gap * (n + 1)) / n));
                             const x = 40 + gap + idx * (barWidth + gap);
                             const barHeight = Math.max(3, (m.value / (maxVal * 1.2)) * 170);
                             const y = 195 - barHeight;
@@ -229,8 +316,8 @@ export default function GridClient({ units, inquiries, project = 'vanya-residenc
                             return (
                               <g key={idx}>
                                 <rect x={x} y={y} width={barWidth} height={barHeight} rx="4" ry="4" fill="url(#barGradientGrid)" />
-                                <text x={x + barWidth / 2} y={y - 8} textAnchor="middle" style={{ fontSize: '0.62rem', fill: '#1f2937', fontWeight: '700' }}>{crLabel}</text>
-                                <text x={x + barWidth / 2} y={210} textAnchor="middle" style={{ fontSize: '0.55rem', fill: '#6b7280', fontWeight: '600' }}>{m.label}</text>
+                                <text x={x + barWidth / 2} y={y - 8} textAnchor="middle" style={{ fontSize: '0.70rem', fill: '#1f2937', fontWeight: '700' }}>{crLabel}</text>
+                                <text x={x + barWidth / 2} y={210} textAnchor="middle" style={{ fontSize: '0.68rem', fill: '#6b7280', fontWeight: '700' }}>{m.label}</text>
                               </g>
                             );
                           })}

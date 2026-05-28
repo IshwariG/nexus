@@ -139,10 +139,19 @@ export async function POST(request) {
 export async function PATCH(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-    const { status } = await request.json();
+    const qsId = searchParams.get('id');
+    const body = await request.json();
+    const id = qsId || body?.id;
+    let status = body?.status;
+
+    // Backwards compatibility: allow { salesmanId } and preserve stage prefix
+    if (!status && body?.salesmanId) {
+      const stage = body?.stage || 'NEW';
+      status = `${stage}|${body.salesmanId}`;
+    }
 
     if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 });
+    if (!status) return NextResponse.json({ error: 'status required' }, { status: 400 });
 
     const { data, error } = await supabase
       .from('Inquiries')

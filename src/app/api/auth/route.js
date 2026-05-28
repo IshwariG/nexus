@@ -28,10 +28,10 @@ export async function POST(request) {
     }
 
     if (user.password === password) {
-      const response = NextResponse.json({ success: true, role: user.role });
-      response.cookies.set('user_role', user.role, { path: '/' });
-      response.cookies.set('user_id', user.username, { path: '/' });
-      return response;
+      const cookieStore = await cookies();
+      cookieStore.set('user_role', user.role, { path: '/' });
+      cookieStore.set('user_id', user.username, { path: '/' });
+      return NextResponse.json({ success: true, role: user.role });
     } else {
       return NextResponse.json({ success: false, error: 'Invalid credentials' }, { status: 401 });
     }
