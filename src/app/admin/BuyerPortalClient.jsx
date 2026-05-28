@@ -1336,12 +1336,38 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                       <input type="password" value={confPass} onChange={(e) => setConfPass(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #ccc' }} />
                     </div>
                     <button 
-                      onClick={() => {
-                        setCurrPass('');
-                        setNewPass('');
-                        setConfPass('');
-                        setPasswordMsg('Current password matches verified user.');
-                        setTimeout(() => setPasswordMsg(''), 3000);
+                      onClick={async () => {
+                        if (!currPass || !newPass || !confPass) {
+                          setPasswordMsg('Please fill in all password fields.');
+                          return;
+                        }
+                        if (newPass !== confPass) {
+                          setPasswordMsg('New password and confirm password do not match.');
+                          return;
+                        }
+                        try {
+                          const res = await fetch('/api/users/password', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              username: username,
+                              currentPassword: currPass,
+                              newPassword: newPass
+                            })
+                          });
+                          const data = await res.json();
+                          if (data.success) {
+                            setPasswordMsg('Password updated successfully!');
+                            setCurrPass('');
+                            setNewPass('');
+                            setConfPass('');
+                          } else {
+                            setPasswordMsg(data.error || 'Failed to update password.');
+                          }
+                        } catch (err) {
+                          setPasswordMsg('Network error while updating password.');
+                        }
+                        setTimeout(() => setPasswordMsg(''), 5000);
                       }} 
                       className="btn-dark" 
                       style={{ width: '100%', padding: '10px', fontSize: '0.75rem', background: '#113629', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
