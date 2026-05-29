@@ -25,7 +25,7 @@ export async function POST(request) {
     const { error: userError } = await supabase
       .from('Users')
       .insert([
-        { username, phone: phone.trim(), password, role: 'Sales' }
+        { username, phone: phone.trim(), password, role: 'Sales', full_name, employee_id: employee_id || 'SALES REPRESENTATIVE' }
       ]);
 
     if (userError) {

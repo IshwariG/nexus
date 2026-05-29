@@ -353,6 +353,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
 
       // 2. Update Inquiry status to CONVERTED
       const finalStatus = `CONVERTED|${userId}`;
+      const closingLead = myInquiries.find(i => i.id === closeDealLeadId);
       const resInquiry = await fetch(`/api/inquiries?id=${closeDealLeadId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -364,6 +365,23 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
       const dataInquiry = await resInquiry.json();
       
       if (dataInquiry.success) {
+        // 3. Trigger CP commission check — POST a UNIT_ASSIGNMENT_ inquiry so the
+        //    commission auto-generation logic in /api/inquiries fires for this buyer's phone
+        if (closingLead?.phone) {
+          await fetch('/api/inquiries', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: closingLead.name || closeDealForm.username,
+              email: closingLead.email || '',
+              phone: closingLead.phone,
+              source: `UNIT_ASSIGNMENT_${closeDealForm.unitId}`,
+              status: `CONVERTED|${userId}`,
+              message: `Commission trigger for unit ${closeDealForm.unitId}`
+            })
+          });
+        }
+
         alert(`Deal closed successfully!\n\nBuyer login created:\nUsername: ${closeDealForm.username}\nPassword: ${closeDealForm.password}\nFlat V-${closeDealForm.unitId} is marked as SOLD OUT.`);
         setIsCloseDealModalOpen(false);
         router.refresh();
@@ -835,7 +853,14 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                   </tr>
                 </thead>
                 <tbody>
-                  {myInquiries.filter(inq => inq.status === `SCHEDULED|${userId}` || inq.status === `DONE|${userId}`).slice(0, 5).map((inq, i) => (
+                  {myInquiries
+                    .filter(inq => inq.status === `SCHEDULED|${userId}` || inq.status === `DONE|${userId}`)
+                    .sort((a, b) => {
+                      const aUp = a.status.startsWith('SCHEDULED');
+                      const bUp = b.status.startsWith('SCHEDULED');
+                      return aUp === bUp ? 0 : aUp ? -1 : 1;
+                    })
+                    .slice(0, 5).map((inq, i) => (
                     <tr key={inq.id || i}>
                       <td>
                         <strong>{inq.name}</strong>
@@ -1488,7 +1513,14 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                   </tr>
                 </thead>
                 <tbody>
-                  {myInquiries.filter(inq => inq.status.startsWith('SCHEDULED') || inq.status.startsWith('DONE')).map((inq, i) => (
+                  {myInquiries
+                    .filter(inq => inq.status.startsWith('SCHEDULED') || inq.status.startsWith('DONE'))
+                    .sort((a, b) => {
+                      const aUp = a.status.startsWith('SCHEDULED');
+                      const bUp = b.status.startsWith('SCHEDULED');
+                      return aUp === bUp ? 0 : aUp ? -1 : 1;
+                    })
+                    .map((inq, i) => (
                     <tr key={inq.id || i}>
                       <td><strong>{inq.name}</strong></td>
                       <td>{inq.phone}</td>
@@ -1643,6 +1675,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
           };
 
           const typeColor = { call: '#1a73e8', visit: '#113629', proposal: '#ab47bc', negotiation: '#d9a036', other: '#6b7280' };
+
 
           return (
             <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>

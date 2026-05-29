@@ -102,7 +102,6 @@ export default function AdminReportActionsClient({ inquiries, units, buyers }) {
        >
          EXPORT DATA
        </button>
-       <span className="icon-bell" style={{cursor: 'pointer'}}>🔔</span>
     </div>
   );
 }

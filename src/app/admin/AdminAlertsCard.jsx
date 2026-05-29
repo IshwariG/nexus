@@ -1,8 +1,9 @@
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 
 export default function AdminAlertsCard({ inquiries = [], units = [], project = 'vanya-residences' }) {
+  const [isDismissed, setIsDismissed] = useState(false);
   // Aggregate counts
   const pendingVisitsCount = inquiries.filter(inq => 
     inq.status && inq.status.startsWith('SCHEDULED|')
@@ -30,19 +31,35 @@ export default function AdminAlertsCard({ inquiries = [], units = [], project = 
 
   const hasAlerts = pendingVisitsCount > 0 || unassignedLeadsCount > 0 || isLowInventory;
 
-  if (!hasAlerts) return null;
+  if (!hasAlerts || isDismissed) return null;
 
   return (
-    <div className="widget-card" style={{ borderLeft: '4px solid #c2a661', background: '#fffdf9', padding: '1.25rem 1.75rem', marginBottom: '1.5rem' }}>
-      <div className="flex-between mb-1" style={{ marginBottom: '0.75rem' }}>
+    <div className="widget-card" style={{ 
+      position: 'fixed', 
+      bottom: '24px', 
+      right: '24px', 
+      zIndex: 9999, 
+      width: '380px',
+      borderLeft: '4px solid #c2a661', 
+      background: '#fffdf9', 
+      padding: '1.25rem', 
+      boxShadow: '0 12px 24px rgba(0,0,0,0.15)' 
+    }}>
+      <div className="flex-between mb-1" style={{ marginBottom: '1rem', alignItems: 'flex-start' }}>
         <div>
-          <h3 className="serif" style={{ margin: 0, color: '#113629', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }}>
+          <h3 className="serif" style={{ margin: 0, color: '#113629', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.05rem' }}>
             <span>⚠️</span> Critical Operational Warnings
           </h3>
-          <p className="text-muted" style={{ margin: 0, fontSize: '0.7rem', letterSpacing: '0.5px' }}>Exceptions requiring administrative actions & assignments</p>
+          <p className="text-muted" style={{ margin: '0.2rem 0 0 0', fontSize: '0.65rem', letterSpacing: '0.5px' }}>Exceptions requiring administrative actions & assignments</p>
         </div>
+        <button 
+          onClick={() => setIsDismissed(true)} 
+          style={{ background: 'none', border: 'none', fontSize: '1.2rem', color: '#999', cursor: 'pointer', padding: 0, lineHeight: 1 }}
+        >
+          &times;
+        </button>
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         {pendingVisitsCount > 0 && (
           <div style={{
             background: 'white',

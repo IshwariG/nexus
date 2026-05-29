@@ -247,9 +247,13 @@ export default function ChannelPartnerClient({ username }) {
   const payouts = data?.payouts || [];
 
   // Parse and calculate metrics from database
-  const totalEarningsVal = commissions.reduce((acc, c) => acc + parseAmount(c.amount), 0);
+  // totalEarningsVal = what has actually been PAID OUT (from Payouts records)
+  // pendingAmountVal = what is APPROVED but not yet disbursed (from Commissions)
   const paidAmountVal = payouts.reduce((acc, p) => acc + parseAmount(p.amount), 0);
-  const pendingAmountVal = totalEarningsVal - paidAmountVal;
+  const pendingAmountVal = commissions
+    .filter(c => c.status === 'APPROVED' || c.status === 'PENDING')
+    .reduce((acc, c) => acc + parseAmount(c.amount), 0);
+  const totalEarningsVal = paidAmountVal + pendingAmountVal;
 
   const getEarningsVelocityData = () => {
     const baseDate = new Date("2026-05-25");
@@ -454,7 +458,7 @@ export default function ChannelPartnerClient({ username }) {
               <div className="kpi-card">
                 <span>TOTAL EARNINGS</span>
                 <h2>{formatAmountINR(totalEarningsVal)}</h2>
-                <div className="kpi-subtext"><span style={{ color: '#137333', fontWeight: 'bold' }}>↗ +15%</span> vs last month</div>
+                <div className="kpi-subtext"><span style={{ color: '#137333', fontWeight: 'bold' }}>↗ Paid + Pending</span></div>
               </div>
             </div>
 
@@ -522,15 +526,15 @@ export default function ChannelPartnerClient({ username }) {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', fontSize: '0.8rem', marginTop: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.5rem' }}>
-                    <span>Total Earnings:</span>
+                    <span>Total Commission Pool:</span>
                     <strong>{formatAmountINR(totalEarningsVal)}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#137333', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.5rem' }}>
-                    <span>Paid amount:</span>
+                    <span>💸 Paid & Disbursed:</span>
                     <strong>{formatAmountINR(paidAmountVal)}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: '#c5221f' }}>
-                    <span>Pending amount:</span>
+                    <span>⏳ Pending Disbursement:</span>
                     <strong>{formatAmountINR(pendingAmountVal)}</strong>
                   </div>
                 </div>

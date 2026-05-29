@@ -45,7 +45,16 @@ export async function PATCH(request) {
         ]);
 
       if (payoutError) {
-        console.warn('Failed to insert automatic payout record:', payoutError.message);
+        // Rollback the commission status update to keep data consistent
+        await supabase
+          .from('Commissions')
+          .update({ status: commission.status })
+          .eq('id', commission_id);
+
+        return NextResponse.json(
+          { success: false, error: 'Payout record creation failed. Status has been rolled back. Please try again.' },
+          { status: 500 }
+        );
       }
     }
 

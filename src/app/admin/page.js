@@ -48,7 +48,7 @@ export default async function AdminDashboard(props) {
     const { data: cpData } = await supabase.from('CP_Partners').select('*');
     if (cpData) cpPartners = cpData;
 
-    const { data: usersData } = await supabase.from('Users').select('username, role, phone');
+    const { data: usersData } = await supabase.from('Users').select('username, role, phone, full_name, employee_id');
     if (usersData) allUsers = usersData;
 
     const { data: commData } = await supabase.from('Commissions').select('*').order('created_at', { ascending: false });

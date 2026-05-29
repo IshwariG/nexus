@@ -29,17 +29,17 @@ export default function GlobalVisitsClient({ inquiries }) {
 
   return (
     <div id="visits" className="widget-card mt-2">
-      <div className="flex-between mb-2">
-        <div>
-          <h3 className="section-title serif" style={{margin:0}}>Project-wide Scheduled Visits</h3>
-          <p className="text-muted" style={{margin:0}}>Global tracking of site walkthroughs and meeting statuses</p>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2rem', gap: '1rem', width: '100%' }}>
+        <div style={{ textAlign: 'center' }}>
+          <h3 className="section-title serif" style={{margin: '0 0 0.25rem 0', fontSize: '1.5rem', color: '#113629'}}>Project-wide Scheduled Visits</h3>
+          <p className="text-muted" style={{margin:0, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px'}}>Global tracking of site walkthroughs and meeting statuses</p>
         </div>
         <div className="search-box">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon" style={{ fontSize: '0.8rem' }}>🔍</span>
           <input 
             className="input-search" 
             placeholder="Search by client or salesman..." 
-            style={{width: '240px'}}
+            style={{width: '240px', fontSize: '0.8rem', padding: '0.5rem 0.5rem 0.5rem 2rem'}}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />

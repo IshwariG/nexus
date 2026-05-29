@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import PortfolioTable from './PortfolioTable';
 import GridClient from './GridClient';
@@ -11,20 +11,23 @@ import GlobalVisitsClient from './GlobalVisitsClient';
 import AdminReportActionsClient from './AdminReportActionsClient';
 import AdminCPCommissionsClient from './AdminCPCommissionsClient';
 import AdminGlobalSearchClient from './AdminGlobalSearchClient';
+import AdminAddSalesClient from './AdminAddSalesClient';
 import AdminAddCPClient from './AdminAddCPClient';
 import AdminProjectSelector from './AdminProjectSelector';
 import AdminAlertsCard from './AdminAlertsCard';
 import { revertToAdmin, logoutUser, impersonateSales } from './actions';
 
-export default function AdminViewClient({ inquiries, units, buyers, cpPartners, commissions, project }) {
+export default function AdminViewClient({ inquiries, units, buyers, cpPartners, commissions, project, allUsers = [] }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      return params.get('tab') || 'dashboard';
+  const [activeTab, setActiveTab] = useState('dashboard');
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const tab = p.get('tab');
+    if (tab) {
+      setActiveTab(tab);
     }
-    return 'dashboard';
-  });
+  }, []);
 
   const changeTab = (tabName) => {
     setActiveTab(tabName);
@@ -62,6 +65,50 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
   const [reportType, setReportType] = useState('sales');
   // Settings tab top selection
   const [settingsSubTab, setSettingsSubTab] = useState('general');
+  // Settings configurations (Hydration-safe)
+  const [companyName, setCompanyName] = useState('Vanya Residences Group');
+  const [baseCurrency, setBaseCurrency] = useState('INR');
+  const [allocationStrategy, setAllocationStrategy] = useState('active');
+  const [themeMode, setThemeMode] = useState('classic');
+  const [brandAccent, setBrandAccent] = useState('#c2a661');
+  const [projectTitle, setProjectTitle] = useState('Vanya Residences');
+  const [minPasswordLength, setMinPasswordLength] = useState(6);
+  const [sessionExpiry, setSessionExpiry] = useState('12h');
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    const ls = (k, d) => localStorage.getItem(k) || d;
+    setCompanyName(ls('erp_company_name', 'Vanya Residences Group'));
+    setBaseCurrency(ls('erp_base_currency', 'INR'));
+    setAllocationStrategy(ls('erp_allocation_strategy', 'active'));
+    setThemeMode(ls('erp_theme_mode', 'classic'));
+    setBrandAccent(ls('erp_brand_accent', '#c2a661'));
+    setProjectTitle(ls('erp_project_title', 'Vanya Residences'));
+    setSessionExpiry(ls('erp_session_expiry', '12h'));
+    const savedPw = localStorage.getItem('erp_min_pw_len');
+    if (savedPw) setMinPasswordLength(parseInt(savedPw, 10));
+    setMfaEnabled(localStorage.getItem('erp_mfa_enabled') === 'true');
+  }, []);
+
+  const handleSaveSettings = () => {
+    localStorage.setItem('erp_company_name', companyName);
+    localStorage.setItem('erp_base_currency', baseCurrency);
+    localStorage.setItem('erp_allocation_strategy', allocationStrategy);
+    localStorage.setItem('erp_theme_mode', themeMode);
+    localStorage.setItem('erp_brand_accent', brandAccent);
+    localStorage.setItem('erp_project_title', projectTitle);
+    localStorage.setItem('erp_session_expiry', sessionExpiry);
+    localStorage.setItem('erp_min_pw_len', minPasswordLength.toString());
+    localStorage.setItem('erp_mfa_enabled', mfaEnabled.toString());
+    
+    setSaveSuccess(true);
+    setTimeout(() => {
+      setSaveSuccess(false);
+      window.location.reload();
+    }, 1500);
+  };
+
   // Quick lead allocation selection
   const [leadAssignState, setLeadAssignState] = useState({ leadId: null, salesmanId: '' });
 
@@ -79,6 +126,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
   // - MONTH: current month (weekly bars)
   // - H1/H2: Jan-Jun / Jul-Dec (monthly bars)
   const [velocityRange, setVelocityRange] = useState('MONTH');
+  const [velocityOffset, setVelocityOffset] = useState(0);
 
   const handlePrevMonth = () => {
     setLeadsMonth(prev => {
@@ -131,7 +179,8 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
       const months = [];
       for (let i = 5; i >= 0; i--) {
         const d = new Date(baseDate);
-        d.setMonth(d.getMonth() - i);
+        d.setDate(1);
+        d.setMonth(baseDate.getMonth() - i);
         months.push({
           label: d.toLocaleString('default', { month: 'short' }).toUpperCase(),
           year: d.getFullYear(),
@@ -154,7 +203,8 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
       const months = [];
       for (let i = 1; i <= 6; i++) {
         const d = new Date(baseDate);
-        d.setMonth(d.getMonth() + i);
+        d.setDate(1);
+        d.setMonth(baseDate.getMonth() + i);
         months.push({
           label: d.toLocaleString('default', { month: 'short' }).toUpperCase(),
           year: d.getFullYear(),
@@ -206,6 +256,14 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
 
   const getVelocityData = (range) => {
     const now = new Date();
+    if (range === 'WEEK') {
+      now.setDate(now.getDate() + (velocityOffset * 7));
+    } else if (range === 'MONTH') {
+      now.setDate(1);
+      now.setMonth(now.getMonth() + velocityOffset);
+    } else if (range === 'H1' || range === 'H2') {
+      now.setFullYear(now.getFullYear() + velocityOffset);
+    }
     const payments = (buyers || [])
       .map((b) => {
         const amtLakhs = parseAmountVal(b.amount_paid);
@@ -344,10 +402,10 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
   const hotLeadsCount = inquiries.filter(inq => inq.status && inq.status.startsWith('HOT')).length;
   const conversionRate = totalLeadsCount > 0 ? Math.round((soldUnitsCount / totalLeadsCount) * 100) : 0;
 
-  const totalUnitsCount = dashboardUnits.length || 1;
-  const soldPerc = Math.round((soldUnitsCount / totalUnitsCount) * 100);
-  const reservedPerc = Math.round((reservedUnitsCount / totalUnitsCount) * 100);
-  const availablePerc = Math.max(0, 100 - soldPerc - reservedPerc);
+  const totalUnitsCount = dashboardUnits.length;
+  const soldPerc = totalUnitsCount > 0 ? Math.round((soldUnitsCount / totalUnitsCount) * 100) : 0;
+  const reservedPerc = totalUnitsCount > 0 ? Math.round((reservedUnitsCount / totalUnitsCount) * 100) : 0;
+  const availablePerc = totalUnitsCount > 0 ? Math.max(0, 100 - soldPerc - reservedPerc) : 0;
 
   const formatIndianCurrency = (amountInLakhs) => {
     const val = Math.round(amountInLakhs * 100000);
@@ -355,11 +413,11 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
   };
 
   const unitPrices = units.map(u => parseAmountVal(u.price)).filter(p => p > 0);
-  const avgPriceLakhs = unitPrices.length > 0 ? unitPrices.reduce((sum, p) => sum + p, 0) / unitPrices.length : 480;
+  const avgPriceLakhs = unitPrices.length > 0 ? unitPrices.reduce((sum, p) => sum + p, 0) / unitPrices.length : 0;
   const avgPriceFormatted = formatIndianCurrency(avgPriceLakhs);
 
   const totalPortfolioLakhs = units.map(u => parseAmountVal(u.price)).reduce((sum, p) => sum + p, 0);
-  const totalPortfolioFormatted = formatIndianCurrency(totalPortfolioLakhs || 45000);
+  const totalPortfolioFormatted = formatIndianCurrency(totalPortfolioLakhs);
 
   const totalRevenueLakhs = buyers.map(b => parseAmountVal(b.amount_paid)).reduce((sum, p) => sum + p, 0);
   const totalRevenueFormatted = formatIndianCurrency(totalRevenueLakhs);
@@ -375,7 +433,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
     }
     return sum;
   }, 0);
-  const collectedThisMonthFormatted = collectedThisMonthLakhs > 0 ? formatIndianCurrency(collectedThisMonthLakhs) : formatIndianCurrency(totalRevenueLakhs * 0.1);
+  const collectedThisMonthFormatted = formatIndianCurrency(collectedThisMonthLakhs);
 
   const totalPendingLakhs = buyers.reduce((sum, b) => {
     const total = parseAmountVal(b.total_amount);
@@ -383,7 +441,20 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
     return sum + Math.max(0, total - paid);
   }, 0);
   const pendingInstallmentsFormatted = formatIndianCurrency(totalPendingLakhs);
-  const overdueAmountFormatted = formatIndianCurrency(totalPendingLakhs * 0.375);
+  const totalOverdueLakhs = buyers.reduce((sum, b) => {
+    const total = parseAmountVal(b.total_amount);
+    const paid = parseAmountVal(b.amount_paid);
+    const progress = parseFloat(b.construction_progress) || 0;
+    
+    // Expected payment is tied to construction progress percentage
+    const expectedPayment = total * (progress / 100);
+    
+    if (paid < expectedPayment) {
+      return sum + (expectedPayment - paid);
+    }
+    return sum;
+  }, 0);
+  const overdueAmountFormatted = formatIndianCurrency(totalOverdueLakhs);
 
   const handleDeleteUser = async (username, role) => {
     if (!confirm(`Are you sure you want to delete the user "${username}"?`)) return;
@@ -577,7 +648,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
         <header className="admin-header" style={{ padding: '1rem 2.5rem', background: '#ffffff', borderBottom: '1px solid #f1f3f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100 }}>
           <div>
             <h1 className="serif" style={{ fontSize: '1.35rem', margin: 0, color: '#113629' }}>Welcome back, Admin! 👋</h1>
-            <p style={{ margin: 0, fontSize: '0.7rem', color: '#9ca3af' }}>Here&apos;s what&apos;s happening in your business today.</p>
+
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
@@ -643,17 +714,13 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
         {activeTab === 'dashboard' && (
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem 2.5rem 2.5rem' }}>
             
-            {/* Header section */}
-            <div className="flex-between mb-3" style={{ alignItems: 'flex-start' }}>
-              <div>
-                <h1 className="serif" style={{ fontSize: '1.6rem', color: '#113629', margin: '0 0 0.25rem 0', fontWeight: 'bold' }}>Welcome back, Admin! 👋</h1>
-                <p className="text-muted" style={{ margin: 0, fontSize: '0.72rem' }}>Here&apos;s what&apos;s happening in your business today.</p>
-                <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
-                  <button onClick={() => setDashboardSubTab('analytical')} className={dashboardSubTab === 'analytical' ? 'btn-dark' : 'btn-outline'} style={{ padding: '0.4rem 1rem', fontSize: '0.7rem' }}>Analytical Performance</button>
-                  <button onClick={() => setDashboardSubTab('executive')} className={dashboardSubTab === 'executive' ? 'btn-dark' : 'btn-outline'} style={{ padding: '0.4rem 1rem', fontSize: '0.7rem' }}>Executive Portal</button>
-                </div>
+            {/* Dashboard Sub-navigation & Date */}
+            <div className="mb-4" style={{ display: 'flex', alignItems: 'center', position: 'relative', width: '100%' }}>
+              <div style={{ display: 'flex', gap: '0.25rem', background: '#f1f5f9', padding: '0.35rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <button onClick={() => setDashboardSubTab('analytical')} style={{ padding: '0.5rem 1.25rem', fontSize: '0.75rem', borderRadius: '6px', border: 'none', background: dashboardSubTab === 'analytical' ? '#fff' : 'transparent', color: dashboardSubTab === 'analytical' ? '#0f172a' : '#64748b', fontWeight: dashboardSubTab === 'analytical' ? '600' : '500', boxShadow: dashboardSubTab === 'analytical' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer', transition: 'all 0.2s' }}>Analytical Performance</button>
+                <button onClick={() => setDashboardSubTab('executive')} style={{ padding: '0.5rem 1.25rem', fontSize: '0.75rem', borderRadius: '6px', border: 'none', background: dashboardSubTab === 'executive' ? '#fff' : 'transparent', color: dashboardSubTab === 'executive' ? '#0f172a' : '#64748b', fontWeight: dashboardSubTab === 'executive' ? '600' : '500', boxShadow: dashboardSubTab === 'executive' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer', transition: 'all 0.2s' }}>Executive Portal</button>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#fff', border: '1px solid #f1f3f5', padding: '0.5rem 0.75rem', borderRadius: '8px', fontSize: '0.7rem', color: '#6b7280', fontWeight: '600', boxShadow: '0 1px 3px rgba(0,0,0,0.01)' }}>
+              <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#fff', border: '1px solid #e2e8f0', padding: '0.5rem 1rem', borderRadius: '8px', fontSize: '0.75rem', color: '#334155', fontWeight: '600', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
                 <span>📅 {weekRangeLabel}</span>
               </div>
             </div>
@@ -711,7 +778,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                 const yAxisMax = Math.ceil(maxVelocity * 1.2);
                 const ySteps = [0, 2, 4, 6, 8];
                 const effectiveMax = Math.max(yAxisMax, 8);
-                const totalUnits = totalUnitsCount || 50;
+                const totalUnits = totalUnitsCount;
 
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -791,26 +858,44 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                           </div>
 
                           {/* Velocity Range Filter Dropdown */}
-                          <select
-                            value={velocityRange}
-                            onChange={(e) => setVelocityRange(e.target.value)}
-                            style={{
-                              padding: '0.4rem 0.75rem',
-                              fontSize: '0.85rem',
-                              border: '1px solid #d1d5db',
-                              borderRadius: '6px',
-                              background: '#fff',
-                              color: '#374151',
-                              fontWeight: '600',
-                              cursor: 'pointer',
-                              outline: 'none'
-                            }}
-                          >
-                            <option value="WEEK">Week</option>
-                            <option value="MONTH">Month</option>
-                            <option value="H1">Jan - Jun</option>
-                            <option value="H2">Jul - Dec</option>
-                          </select>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <button 
+                              onClick={() => setVelocityOffset(prev => prev - 1)}
+                              style={{ background: '#f1f3f5', border: 'none', borderRadius: '4px', padding: '0.3rem 0.6rem', cursor: 'pointer', color: '#4b5563', fontSize: '0.9rem', fontWeight: 'bold' }}
+                            >
+                              &lt;
+                            </button>
+                            <select
+                              value={velocityRange}
+                              onChange={(e) => {
+                                setVelocityRange(e.target.value);
+                                setVelocityOffset(0);
+                              }}
+                              style={{
+                                padding: '0.4rem 0.75rem',
+                                fontSize: '0.85rem',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '6px',
+                                background: '#fff',
+                                color: '#374151',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                outline: 'none'
+                              }}
+                            >
+                              <option value="WEEK">Week</option>
+                              <option value="MONTH">Month</option>
+                              <option value="H1">Jan - Jun</option>
+                              <option value="H2">Jul - Dec</option>
+                            </select>
+                            <button 
+                              onClick={() => setVelocityOffset(prev => prev + 1)}
+                              disabled={velocityOffset >= 0}
+                              style={{ background: velocityOffset >= 0 ? '#f9fafb' : '#f1f3f5', border: 'none', borderRadius: '4px', padding: '0.3rem 0.6rem', cursor: velocityOffset >= 0 ? 'not-allowed' : 'pointer', color: velocityOffset >= 0 ? '#d1d5db' : '#4b5563', fontSize: '0.9rem', fontWeight: 'bold' }}
+                            >
+                              &gt;
+                            </button>
+                          </div>
                         </div>
 
                         {/* Y-Axis label */}
@@ -825,7 +910,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                               return (
                                 <g key={i}>
                                   <line x1="40" y1={y} x2="580" y2={y} stroke="#f1f3f5" strokeWidth="1" />
-                                  <text x="30" y={y + 4} textAnchor="end" style={{ fontSize: '0.78rem', fill: '#9ca3af', fontWeight: '700' }}>{val}</text>
+                                  <text x="30" y={y + 4} textAnchor="end" style={{ fontSize: '0.95rem', fill: '#6b7280', fontWeight: '700' }}>{val}</text>
                                 </g>
                               );
                             })}
@@ -860,11 +945,11 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                     style={{ transition: 'height 0.5s ease, y 0.5s ease' }}
                                   />
                                   {/* Value label */}
-                                  <text x={x + barWidth / 2} y={y - 8} textAnchor="middle" style={{ fontSize: '0.62rem', fill: '#1f2937', fontWeight: '700' }}>
+                                  <text x={x + barWidth / 2} y={y - 8} textAnchor="middle" style={{ fontSize: '0.85rem', fill: '#1f2937', fontWeight: '800' }}>
                                     {crLabel}
                                   </text>
                                   {/* Month label */}
-                                  <text x={x + barWidth / 2} y={210} textAnchor="middle" style={{ fontSize: '0.68rem', fill: '#6b7280', fontWeight: '700' }}>
+                                  <text x={x + barWidth / 2} y={215} textAnchor="middle" style={{ fontSize: '0.9rem', fill: '#4b5563', fontWeight: '700' }}>
                                     {d.label}
                                   </text>
                                 </g>
@@ -895,7 +980,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                               </svg>
                             </div>
                             <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629', fontWeight: 'bold' }}>
-                              ₹ {avgPriceLakhs >= 100 ? `${(avgPriceLakhs / 100).toFixed(1)} Cr` : `${avgPriceLakhs.toFixed(0)} L`}
+                              {baseCurrency === "USD" ? "$" : "₹"} {avgPriceLakhs >= 100 ? `${(avgPriceLakhs / 100).toFixed(1)} Cr` : `${avgPriceLakhs.toFixed(0)} L`}
                             </h3>
                           </div>
                         </div>
@@ -910,7 +995,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                               </svg>
                             </div>
                             <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629', fontWeight: 'bold' }}>
-                              ₹ {totalPortfolioLakhs >= 100 ? `${(totalPortfolioLakhs / 100).toFixed(1)} Cr` : `${totalPortfolioLakhs.toFixed(0)} L`}
+                              {baseCurrency === "USD" ? "$" : "₹"} {totalPortfolioLakhs >= 100 ? `${(totalPortfolioLakhs / 100).toFixed(1)} Cr` : `${totalPortfolioLakhs.toFixed(0)} L`}
                             </h3>
                           </div>
                           <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700', marginTop: '0.3rem', marginLeft: '0.1rem' }}>↑ +15.2% INCREASE</span>
@@ -943,11 +1028,11 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.75rem' }}>
                           <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: '#ecfdf5', border: '1.5px solid #bbf0d4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#137333" strokeWidth="2.5" strokeLinecap="round">
-                              <text x="7" y="18" fill="#137333" stroke="none" fontSize="18" fontWeight="bold" fontFamily="serif">₹</text>
+                              <text x="7" y="18" fill="#137333" stroke="none" fontSize="18" fontWeight="bold" fontFamily="serif">{baseCurrency === "USD" ? "$" : "₹"}</text>
                             </svg>
                           </div>
                           <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>
-                            ₹ {totalRevenueLakhs >= 100 ? `${(totalRevenueLakhs / 100).toFixed(1)} Cr` : totalRevenueFormatted}
+                            {baseCurrency === "USD" ? "$" : "₹"} {totalRevenueLakhs >= 100 ? `${(totalRevenueLakhs / 100).toFixed(1)} Cr` : totalRevenueFormatted}
                           </h3>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' }}>
@@ -1005,15 +1090,15 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                           <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>
                             {(() => {
                               const cycles = buyers.map(b => {
-                                const buyerDate = new Date(b.created_at || '2026-05-01');
+                                const buyerDate = new Date(b.created_at || new Date());
                                 const matchingInq = inquiries.find(inq => inq.name && b.username && inq.name.toLowerCase().replace(/\s+/g, '') === b.username.toLowerCase());
                                 if (matchingInq) {
                                   const inqDate = new Date(matchingInq.created_at);
                                   return Math.max(1, Math.round((buyerDate - inqDate) / (1000 * 60 * 60 * 24)));
                                 }
-                                return 24;
-                              });
-                              return cycles.length > 0 ? Math.round(cycles.reduce((a, b) => a + b, 0) / cycles.length) : 24;
+                                return 0;
+                              }).filter(c => c > 0);
+                              return cycles.length > 0 ? Math.round(cycles.reduce((a, b) => a + b, 0) / cycles.length) : 0;
                             })()} Days
                           </h3>
                         </div>
@@ -1127,7 +1212,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                         <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase' }}>Revenue Overview</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '1rem' }}>
-                        <h2 className="serif" style={{ margin: 0, fontSize: '1.6rem', color: '#113629', fontWeight: 'bold' }}>₹ {totalRevenueFormatted}</h2>
+                        <h2 className="serif" style={{ margin: 0, fontSize: '1.6rem', color: '#113629', fontWeight: 'bold' }}>{baseCurrency === "USD" ? "$" : "₹"} {totalRevenueFormatted}</h2>
                         <span style={{ fontSize: '0.68rem', color: '#137333', fontWeight: 'bold' }}>↑ 15% from last month</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', height: '230px', alignItems: 'flex-end', gap: '1rem', position: 'relative', marginTop: '1.5rem' }}>
@@ -1179,34 +1264,68 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
               </>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem', position: 'relative', width: '100%' }}>
                 {/* Executive Performance Portal Header */}
-                <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-                  <h2 className="serif" style={{ fontSize: '2rem', color: '#113629', marginBottom: '0.5rem' }}>Executive Performance Portal</h2>
-                  <div style={{ width: '60px', height: '3px', background: '#c2a661', margin: '0 auto 0.5rem auto', borderRadius: '2px' }}></div>
-                  <p style={{ fontSize: '0.8rem', color: '#9ca3af', margin: 0 }}>Strategic overview and dashboard access for senior representatives</p>
+                <div style={{ flex: 1, textAlign: 'center' }}>
+                  <h2 className="serif" style={{ fontSize: '1.75rem', color: '#113629', marginBottom: '0.25rem' }}>Executive Performance Portal</h2>
+                  <p className="text-muted" style={{ margin: 0, textTransform: 'uppercase', letterSpacing: '1px', fontSize: '0.75rem' }}>SALES REPRESENTATIVE DIRECTORY & PIPELINE PERFORMANCE</p>
                 </div>
+                <div style={{ position: 'absolute', right: 0 }}>
+                  <AdminAddSalesClient />
+                </div>
+              </div>
 
                 {/* Salesman Cards Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1.25rem' }}>
-                  {[
-                    { initials: 'VS', name: 'VIKRAM SETHI', title: 'SNR. VICE PRESIDENT', id: 'SR-9999', revenue: '35,50,00,000' },
-                    { initials: 'AR', name: 'ANANYA RAO', title: 'REGIONAL DIRECTOR', id: 'SR-1111', revenue: '32,40,00,000' },
-                    { initials: 'RV', name: 'RAHUL VERMA', title: 'SALES DIRECTOR', id: 'SR-2222', revenue: '24,80,00,000' },
-                    { initials: 'SP', name: 'SNEHA PATIL', title: 'LEAD BROKER', id: 'SR-3333', revenue: '15,30,00,000' },
-                    { initials: 'AS', name: 'ADITYA SHARMA', title: 'SENIOR ASSOCIATE', id: 'SR-4444', revenue: '10,40,00,000' }
-                  ].map((exec, idx) => (
-                    <div key={idx} style={{ background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', transition: 'box-shadow 0.2s' }}>
-                      <div style={{ width: '64px', height: '64px', borderRadius: '50%', border: '2px solid #113629', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.75rem' }}>
-                        <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#113629' }}>{exec.initials}</span>
-                      </div>
-                      <strong style={{ fontSize: '0.78rem', color: '#113629', letterSpacing: '0.5px' }}>{exec.name}</strong>
-                      <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: '600', letterSpacing: '0.5px', marginTop: '2px', marginBottom: '1rem' }}>{exec.title}</span>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', marginBottom: '1rem' }}>
-                        <span style={{ fontSize: '0.65rem', color: '#6b7280', fontWeight: '600' }}>REVENUE</span>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#113629' }}>₹ {exec.revenue}</span>
-                      </div>
-                      <button 
-                        onClick={() => window.location.href = `/admin/salesman/${exec.id}`}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem' }}>
+                  {(() => {
+                    const mockExecs = [
+                      { initials: 'VS', name: 'VIKRAM SETHI', title: 'SALESPERSON', id: 'SR-9999', revenue: '35,50,00,000' },
+                      { initials: 'AR', name: 'ANANYA RAO', title: 'SALESPERSON', id: 'SR-1111', revenue: '32,40,00,000' },
+                      { initials: 'RV', name: 'RAHUL VERMA', title: 'SALESPERSON', id: 'SR-2222', revenue: '24,80,00,000' },
+                      { initials: 'SP', name: 'SNEHA PATIL', title: 'SALESPERSON', id: 'SR-3333', revenue: '15,30,00,000' },
+                      { initials: 'AS', name: 'ADITYA SHARMA', title: 'SALESPERSON', id: 'SR-4444', revenue: '10,40,00,000' }
+                    ];
+                    const realExecs = allUsers.filter(u => u.role === 'Sales').map(exec => {
+                      const mockFallback = mockExecs.find(m => m.id === exec.username);
+                      
+                      const resolvedName = exec.full_name || (mockFallback ? mockFallback.name : exec.username);
+                      const resolvedTitle = exec.employee_id || (mockFallback ? mockFallback.title : 'SALES REPRESENTATIVE');
+                      
+                      let resolvedInitials = '';
+                      if (exec.full_name) {
+                        resolvedInitials = exec.full_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                      } else if (mockFallback) {
+                        resolvedInitials = mockFallback.initials;
+                      } else {
+                        resolvedInitials = exec.username.substring(0, 2).toUpperCase();
+                      }
+
+                      return {
+                        initials: resolvedInitials,
+                        name: resolvedName,
+                        title: resolvedTitle,
+                        id: exec.username,
+                        revenue: mockFallback ? mockFallback.revenue : '0.00' // Use mock revenue if available
+                      };
+                    });
+                    
+                    const combinedExecs = [...realExecs, ...mockExecs].filter((exec, index, self) => 
+                      index === self.findIndex((t) => t.id === exec.id)
+                    );
+
+                    return combinedExecs.map((exec, idx) => (
+                      <div key={exec.id || idx} style={{ background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', transition: 'box-shadow 0.2s' }}>
+                        <div style={{ width: '64px', height: '64px', borderRadius: '50%', border: '2px solid #113629', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.75rem' }}>
+                          <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#113629' }}>{exec.initials}</span>
+                        </div>
+                        <strong style={{ fontSize: '0.78rem', color: '#113629', letterSpacing: '0.5px' }}>{exec.name}</strong>
+                        <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: '600', letterSpacing: '0.5px', marginTop: '2px', marginBottom: '1rem' }}>{exec.title}</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', marginBottom: '1rem' }}>
+                          <span style={{ fontSize: '0.65rem', color: '#6b7280', fontWeight: '600' }}>REVENUE</span>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#113629' }}>{baseCurrency === 'USD' ? '$' : '₹'} {exec.revenue}</span>
+                        </div>
+                        <button 
+                          onClick={() => window.location.href = `/admin/salesman/${exec.id}`}
                         style={{ width: '100%', padding: '0.5rem', fontSize: '0.72rem', fontWeight: 'bold', border: '1px solid #113629', background: '#fff', color: '#113629', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', transition: 'all 0.2s' }}
                         onMouseEnter={(e) => { e.currentTarget.style.background = '#113629'; e.currentTarget.style.color = '#fff'; }}
                         onMouseLeave={(e) => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = '#113629'; }}
@@ -1214,7 +1333,8 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                         ↗ OPEN PORTAL
                       </button>
                     </div>
-                  ))}
+                    ));
+                  })()}
                 </div>
 
                 {/* Project-wide Scheduled Visits */}
@@ -1230,9 +1350,14 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
         {activeTab === 'projects' && (
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem 2.5rem 2.5rem' }}>
             <div className="widget-card">
-              <div className="flex-between mb-2">
-                <h3 className="serif" style={{ margin: 0 }}>Projects List</h3>
-                <button className="btn-dark" style={{ padding: '0.5rem 1rem', fontSize: '0.72rem' }}>+ Add Project</button>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1.5rem', position: 'relative', width: '100%' }}>
+                <div style={{ flex: 1, textAlign: 'center' }}>
+                  <h3 className="serif" style={{ margin: '0 0 0.25rem 0', fontSize: '1.5rem', color: '#113629' }}>Projects List</h3>
+                  <p className="text-muted" style={{ margin: 0, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Global Portfolio Overview</p>
+                </div>
+                <div style={{ position: 'absolute', right: 0 }}>
+                  <button className="btn-dark" style={{ padding: '0.5rem 1rem', fontSize: '0.72rem' }}>+ Add Project</button>
+                </div>
               </div>
               <table className="table-standard">
                 <thead>
@@ -1478,9 +1603,17 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
               <div className="widget-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <h3 className="serif" style={{ margin: '0 0 1rem 0' }}>Collection by Mode</h3>
                 {(() => {
-                  const digitalPercent = Math.min(98, 70 + (buyers.length * 2));
-                  const bankPercent = Math.max(1, Math.round((100 - digitalPercent) * 0.7));
-                  const cashPercent = 100 - digitalPercent - bankPercent;
+                  let digitalCount = 0; let bankCount = 0; let cashCount = 0;
+                  buyers.forEach(b => {
+                    const mode = (b.payment_mode || '').toLowerCase();
+                    if (mode.includes('upi') || mode.includes('digital') || mode.includes('card')) digitalCount++;
+                    else if (mode.includes('neft') || mode.includes('rtgs') || mode.includes('bank') || mode.includes('transfer')) bankCount++;
+                    else if (mode.includes('cash') || mode.includes('cheque')) cashCount++;
+                  });
+                  const totalModes = digitalCount + bankCount + cashCount;
+                  const digitalPercent = totalModes > 0 ? Math.round((digitalCount / totalModes) * 100) : 0;
+                  const bankPercent = totalModes > 0 ? Math.round((bankCount / totalModes) * 100) : 0;
+                  const cashPercent = totalModes > 0 ? Math.max(0, 100 - digitalPercent - bankPercent) : 0;
                   return (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around', flexGrow: 1, padding: '0.5rem 0' }}>
                       <div className="donut-chart-mock" style={{ margin: '0', background: `conic-gradient(#137333 0% ${digitalPercent}%, #c2a661 ${digitalPercent}% ${digitalPercent + bankPercent}%, #1a73e8 ${digitalPercent + bankPercent}% 100%)` }}>
@@ -1580,12 +1713,14 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
         {activeTab === 'users' && (
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem 2.5rem 2.5rem' }}>
             <div className="widget-card">
-              <div className="flex-between mb-2">
-                <div>
-                  <h3 className="serif" style={{ margin: 0 }}>Users Account Registry</h3>
-                  <p className="text-muted" style={{ margin: 0, fontSize: '0.7rem' }}>Authorized CRM portals access registry</p>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2rem', gap: '1rem', width: '100%' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <h3 className="serif" style={{ margin: '0 0 0.25rem 0', fontSize: '1.5rem', color: '#113629' }}>Users Account Registry</h3>
+                  <p className="text-muted" style={{ margin: 0, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Authorized CRM portals access registry</p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <AdminAddSalesClient />
+                  <AdminAddCPClient />
                   <AdminAddBuyerClient />
                 </div>
               </div>
@@ -1601,6 +1736,46 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                   </tr>
                 </thead>
                 <tbody>
+                  {/* Salesmen list */}
+                  {allUsers.filter(u => u.role === 'Sales').map((s, idx) => (
+                    <tr key={`sales-${idx}`}>
+                      <td><strong>{s.username}</strong></td>
+                      <td><span className="source-pill" style={{ color: '#137333', background: '#e6f4ea' }}>Sales Executive</span></td>
+                      <td style={{ fontStyle: 'italic', fontSize: '0.75rem', color: '#9ca3af' }}>{s.full_name ? `Name: ${s.full_name}` : 'Sales Portal Access'}</td>
+                      <td><span className="badge available">Active Portal</span></td>
+                      <td>
+                        <button 
+                          onClick={() => handleDeleteUser(s.username, 'Sales')}
+                          style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '0.35rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 'bold', transition: 'all 0.2s' }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = '#fecaca'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
+                        >
+                          ❌ Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {/* Channel Partners list */}
+                  {cpPartners.map((cp, idx) => (
+                    <tr key={`cp-${idx}`}>
+                      <td><strong>{cp.username}</strong></td>
+                      <td><span className="source-pill" style={{ color: '#c2a661', background: '#fdf5e6' }}>Channel Partner</span></td>
+                      <td style={{ fontStyle: 'italic', fontSize: '0.75rem', color: '#9ca3af' }}>Firm: {cp.firm_name}</td>
+                      <td><span className="badge available">Active Portal</span></td>
+                      <td>
+                        <button 
+                          onClick={() => handleDeleteUser(cp.username, 'ChannelPartner')}
+                          style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '0.35rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 'bold', transition: 'all 0.2s' }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = '#fecaca'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
+                        >
+                          ❌ Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+
                   {/* Buyers list */}
                   {buyers.map((b, idx) => (
                     <tr key={`buyer-${idx}`}>
@@ -1611,17 +1786,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                       <td>
                         <button 
                           onClick={() => handleDeleteUser(b.username, 'Buyer')}
-                          style={{
-                            background: '#fee2e2',
-                            color: '#dc2626',
-                            border: 'none',
-                            padding: '0.35rem 0.75rem',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '0.7rem',
-                            fontWeight: 'bold',
-                            transition: 'all 0.2s'
-                          }}
+                          style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '0.35rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 'bold', transition: 'all 0.2s' }}
                           onMouseEnter={(e) => e.currentTarget.style.background = '#fecaca'}
                           onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
                         >
@@ -1689,26 +1854,76 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
               {/* Settings Form */}
               <div className="widget-card">
                 <h3 className="serif" style={{ margin: '0 0 1.5rem 0' }}>ERP Configurations</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                  <div className="form-group">
-                    <label>Enterprise Company Name</label>
-                    <input type="text" defaultValue="Vanya Residences Group" style={{ width: '96%' }} />
+                {settingsSubTab === 'general' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div className="form-group">
+                      <label>Enterprise Company Name</label>
+                      <input type="text" value={companyName} onChange={e => setCompanyName(e.target.value)} style={{ width: '96%' }} />
+                    </div>
+                    <div className="form-group">
+                      <label>System Base Currency Display</label>
+                      <select value={baseCurrency} onChange={e => setBaseCurrency(e.target.value)} style={{ width: '100%' }}>
+                        <option value="INR">Indian Rupee (₹, Cr, L)</option>
+                        <option value="USD">US Dollar ($)</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Round-Robin Allocation Strategy</label>
+                      <select value={allocationStrategy} onChange={e => setAllocationStrategy(e.target.value)} style={{ width: '100%' }}>
+                        <option value="active">Active Sales Rep Priority</option>
+                        <option value="weighted">Weighted Conversion Ratio</option>
+                      </select>
+                    </div>
                   </div>
-                  <div className="form-group">
-                    <label>System Base Currency Display</label>
-                    <select style={{ width: '100%' }}>
-                      <option value="INR">Indian Rupee (₹, Cr, L)</option>
-                      <option value="USD">US Dollar ($)</option>
-                    </select>
+                )}
+
+                {settingsSubTab === 'branding' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div className="form-group">
+                      <label>Platform Theme Mode</label>
+                      <select value={themeMode} onChange={e => setThemeMode(e.target.value)} style={{ width: '100%' }}>
+                        <option value="classic">Classic Light (Professional)</option>
+                        <option value="dark">Executive Dark Mode</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Brand Accent Color</label>
+                      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        <input type="color" value={brandAccent} onChange={e => setBrandAccent(e.target.value)} style={{ width: '50px', height: '40px', padding: 0, border: 'none' }} />
+                        <span style={{ fontFamily: 'monospace', color: '#6b7280' }}>{brandAccent.toUpperCase()}</span>
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label>Project Title (Displays on Portals)</label>
+                      <input type="text" value={projectTitle} onChange={e => setProjectTitle(e.target.value)} style={{ width: '96%' }} />
+                    </div>
                   </div>
-                  <div className="form-group">
-                    <label>Round-Robin Allocation Strategy</label>
-                    <select style={{ width: '100%' }}>
-                      <option value="active">Active Sales Rep Priority</option>
-                      <option value="weighted">Weighted Conversion Ratio</option>
-                    </select>
+                )}
+
+                {settingsSubTab === 'security' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div className="form-group">
+                      <label>Session Expiry Time</label>
+                      <select value={sessionExpiry} onChange={e => setSessionExpiry(e.target.value)} style={{ width: '100%' }}>
+                        <option value="4h">4 Hours</option>
+                        <option value="12h">12 Hours (Default)</option>
+                        <option value="24h">24 Hours</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Minimum Password Length</label>
+                      <input type="number" min="6" max="20" value={minPasswordLength} onChange={e => setMinPasswordLength(parseInt(e.target.value) || 6)} style={{ width: '96%' }} />
+                    </div>
+                    <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem' }}>
+                      <input type="checkbox" id="mfaToggle" checked={mfaEnabled} onChange={e => setMfaEnabled(e.target.checked)} style={{ width: '18px', height: '18px' }} />
+                      <label htmlFor="mfaToggle" style={{ margin: 0, cursor: 'pointer' }}>Require Multi-Factor Auth (MFA) for Admin Users</label>
+                    </div>
                   </div>
-                  <button className="btn-dark" style={{ alignSelf: 'flex-start', marginTop: '1rem' }}>SAVE SETTINGS</button>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1.5rem' }}>
+                  <button className="btn-dark" onClick={handleSaveSettings} style={{ background: brandAccent, border: 'none', color: '#fff' }}>SAVE SETTINGS</button>
+                  {saveSuccess && <span style={{ color: '#10b981', fontSize: '0.85rem', fontWeight: 'bold' }}>✓ Settings applied successfully</span>}
                 </div>
               </div>
             </div>
