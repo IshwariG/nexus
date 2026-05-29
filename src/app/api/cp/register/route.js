@@ -4,10 +4,10 @@ import { supabase } from '@/lib/supabase';
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { username, password, firm_name, rera_number, commission_rate } = body;
+    const { username, phone, password, firm_name, rera_number, commission_rate } = body;
 
-    if (!username || !password || !firm_name || !rera_number) {
-      return NextResponse.json({ success: false, error: 'All fields (Username, Password, Firm Name, RERA) are required' }, { status: 400 });
+    if (!username || !phone || !password || !firm_name || !rera_number) {
+      return NextResponse.json({ success: false, error: 'All fields (Username, Phone, Password, Firm Name, RERA) are required' }, { status: 400 });
     }
 
     // 1. Check if user already exists
@@ -25,7 +25,7 @@ export async function POST(request) {
     const { error: userError } = await supabase
       .from('Users')
       .insert([
-        { username, password, role: 'ChannelPartner' }
+        { username, phone: phone.trim(), password, role: 'ChannelPartner' }
       ]);
 
     if (userError) {

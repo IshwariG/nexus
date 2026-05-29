@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-export default function AdminAddCPClient() {
+export default function AdminAddSalesClient() {
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -22,13 +22,12 @@ export default function AdminAddCPClient() {
       username: e.target.username.value,
       phone: e.target.phone.value,
       password: e.target.password.value,
-      firm_name: e.target.firm_name.value,
-      rera_number: e.target.rera_number.value,
-      commission_rate: parseFloat(e.target.commission_rate.value) || 2.0
+      full_name: e.target.full_name.value,
+      employee_id: e.target.employee_id.value
     };
 
     try {
-      const res = await fetch('/api/cp/register', {
+      const res = await fetch('/api/sales/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
@@ -36,11 +35,11 @@ export default function AdminAddCPClient() {
 
       const data = await res.json();
       if (data.success) {
-        alert('Channel Partner registered successfully!');
+        alert('Salesperson registered successfully!');
         setIsOpen(false);
         window.location.reload();
       } else {
-        setError(data.error || 'Failed to register broker.');
+        setError(data.error || 'Failed to register salesperson.');
       }
     } catch (err) {
       setError('Network error. Failed to connect to server.');
@@ -54,8 +53,8 @@ export default function AdminAddCPClient() {
       <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
         <div className="modal-header">
           <div>
-            <h2 className="serif">Register Channel Partner</h2>
-            <p className="text-muted" style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Establish new Broker Portal credentials</p>
+            <h2 className="serif">Register Salesperson</h2>
+            <p className="text-muted" style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Establish new Sales Portal credentials</p>
           </div>
           <button className="close-btn" onClick={() => setIsOpen(false)}>×</button>
         </div>
@@ -65,8 +64,8 @@ export default function AdminAddCPClient() {
             <h4 style={{ marginBottom: '1rem', color: '#c9a96e', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1.5px' }}>1. Portal Access credentials</h4>
             <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <div className="form-group">
-                <label>Broker Username (Login ID)</label>
-                <input name="username" placeholder="e.g. apex_brokers" required />
+                <label>Sales Username (Login ID)</label>
+                <input name="username" placeholder="e.g. SR-1001" required />
               </div>
               <div className="form-group">
                 <label>Registered Phone Number</label>
@@ -80,20 +79,14 @@ export default function AdminAddCPClient() {
           </div>
 
           <div className="form-section mt-1" style={{ background: '#fff' }}>
-            <h4 style={{ marginBottom: '1rem', color: '#c9a96e', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1.5px' }}>2. Business profile</h4>
+            <h4 style={{ marginBottom: '1rem', color: '#c9a96e', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1.5px' }}>2. Employee profile</h4>
             <div className="form-group">
-              <label>Broker / Firm Name</label>
-              <input name="firm_name" placeholder="e.g. Apex Luxury Realty" required />
+              <label>Full Name</label>
+              <input name="full_name" placeholder="e.g. John Doe" required />
             </div>
-            <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.5rem', marginTop: '1rem' }}>
-              <div className="form-group">
-                <label>RERA Registration Number</label>
-                <input name="rera_number" placeholder="e.g. RERA-DEL-98765-CP" required />
-              </div>
-              <div className="form-group">
-                <label>Commission Rate (%)</label>
-                <input name="commission_rate" type="number" step="0.05" min="0" max="10" defaultValue="2.50" required />
-              </div>
+            <div className="form-group">
+              <label>Employee ID</label>
+              <input name="employee_id" placeholder="e.g. EMP-2023-44" required />
             </div>
           </div>
 
@@ -120,7 +113,7 @@ export default function AdminAddCPClient() {
             letterSpacing: '2px',
             boxShadow: '0 10px 20px rgba(17, 54, 41, 0.2)'
           }} disabled={loading}>
-            {loading ? 'REGISTERING PORTAL...' : 'ACTIVATE BROKER PORTAL'}
+            {loading ? 'REGISTERING PORTAL...' : 'ACTIVATE SALES PORTAL'}
           </button>
         </form>
       </div>
@@ -129,7 +122,7 @@ export default function AdminAddCPClient() {
 
   return (
     <>
-      <button className="btn-dark" style={{ background: '#c2a661', color: 'white', border: 'none', padding: '0.55rem 1.1rem', fontSize: '0.67rem', cursor: 'pointer', borderRadius: '7px', fontWeight: '500' }} onClick={() => setIsOpen(true)}>ADD NEW CP PARTNER</button>
+      <button className="btn-dark" style={{ background: '#c2a661', color: 'white', border: 'none', padding: '0.55rem 1.1rem', fontSize: '0.67rem', cursor: 'pointer', borderRadius: '7px', fontWeight: '500' }} onClick={() => setIsOpen(true)}>ADD SALESPERSON</button>
       {mounted && isOpen && createPortal(modalContent, document.body)}
     </>
   );

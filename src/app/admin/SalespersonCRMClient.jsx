@@ -8,23 +8,20 @@ import VisitManagerClient from './VisitManagerClient';
 export default function SalespersonCRMClient({ inquiries = [], units = [], buyers = [], userId = 'SR-9999', isImpersonating = false }) {
   const router = useRouter();
 
-  // Active Tab State: 'dashboard' | 'leads' | 'details' | 'pipeline' | 'followups' | 'bookings' | 'visits' | 'tasks' | 'calendar' | 'inventory' | 'reports' | 'profile' | 'settings'
-  const [activeTab, setActiveTabState] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      return params.get('tab') || 'dashboard';
-    }
-    return 'dashboard';
-  });
+  // Active Tab State
+  const [activeTab, setActiveTabState] = useState('dashboard');
+  const [selectedLeadId, setSelectedLeadIdState] = useState(null);
 
-  const [selectedLeadId, setSelectedLeadIdState] = useState(() => {
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      const val = params.get('leadId');
-      return val ? parseInt(val) : null;
+      const tab = params.get('tab');
+      if (tab) setActiveTabState(tab);
+      
+      const leadId = params.get('leadId');
+      if (leadId) setSelectedLeadIdState(parseInt(leadId));
     }
-    return null;
-  });
+  }, []);
 
   const setActiveTab = (tabName) => {
     setActiveTabState(tabName);
@@ -103,6 +100,45 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
     possessionDate: '2027-12-31',
     progress: '72'
   });
+
+  // Calendar state
+  const [calendarWeekOffset, setCalendarWeekOffset] = useState(0);
+  const [calendarEvents, setCalendarEvents] = useState([]); // { date: 'YYYY-MM-DD', title, type }
+  const [newEventForm, setNewEventForm] = useState({ date: '', title: '', type: 'call' });
+  const [showAddEventForm, setShowAddEventForm] = useState(false);
+
+  // Build calendar events from inquiries (callbacks & visits) once on mount
+  useEffect(() => {
+    const extracted = [];
+    myInquiries.forEach(inq => {
+      if (!inq.message) return;
+      // Parse [CALLBACK SET FOR <datetime>] patterns
+      const cbMatches = [...inq.message.matchAll(/\[CALLBACK SET FOR ([^\]]+)\]/gi)];
+      cbMatches.forEach(m => {
+        const d = new Date(m[1]);
+        if (!isNaN(d)) {
+          extracted.push({
+            date: d.toISOString().split('T')[0],
+            title: `📞 ${inq.name} – Follow Up`,
+            type: 'call'
+          });
+        }
+      });
+      // Parse [VISIT SCHEDULED: <datetime>] patterns
+      const vsMatches = [...inq.message.matchAll(/\[VISIT SCHEDULED: ([^\]]+)\]/gi)];
+      vsMatches.forEach(m => {
+        const d = new Date(m[1]);
+        if (!isNaN(d)) {
+          extracted.push({
+            date: d.toISOString().split('T')[0],
+            title: `🏠 ${inq.name} – Site Visit`,
+            type: 'visit'
+          });
+        }
+      });
+    });
+    if (extracted.length > 0) setCalendarEvents(prev => [...prev, ...extracted]);
+  }, []);
 
   // Salesperson Names mapping
   const salesmanNames = {
@@ -372,13 +408,30 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
     }
   };
 
-  const handleAddNote = (leadId) => {
+  const handleAddNote = async (leadId) => {
     if (!currentNoteText.trim()) return;
+    const noteText = `\n[NOTE - ${new Date().toLocaleDateString()}]: ${currentNoteText}`;
+    
+    // Update local state for immediate feedback
     const currentNotes = leadNotes[leadId] || [];
     setLeadNotes({
       ...leadNotes,
       [leadId]: [...currentNotes, { text: currentNoteText, time: new Date().toLocaleString() }]
     });
+    
+    // Save to database
+    const inq = myInquiries.find(i => i.id === leadId);
+    const newMsg = inq ? `${inq.message || ''}${noteText}` : noteText;
+    
+    try {
+      await fetch(`/api/inquiries?id=${leadId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: newMsg })
+      });
+      router.refresh();
+    } catch(err) {}
+    
     setCurrentNoteText('');
   };
 
@@ -404,14 +457,14 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
     const finalStatus = `CONTACTED|${userId}`;
     const timeStr = `[CALLBACK SET FOR ${callbackDateTime}]`;
     const inq = myInquiries.find(i => i.id === callbackLeadId);
-    const newMsg = inq ? `${inq.message || ''} ${timeStr}` : timeStr;
+    const newMsg = inq ? `${inq.message || ''}\n${timeStr}` : timeStr;
 
     try {
       // Patch status to contacted, append callback detail
       const res = await fetch(`/api/inquiries?id=${callbackLeadId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: finalStatus })
+        body: JSON.stringify({ status: finalStatus, message: newMsg })
       });
       if (res.ok) {
         setIsCallbackModalOpen(false);
@@ -426,13 +479,15 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
     if (!visitLeadId) return;
     // Set status to SCHEDULED|salesperson
     const finalStatus = `SCHEDULED|${userId}`;
-    const visitNote = `Scheduled visit on ${visitDateTime}. Detail: ${visitMessage}`;
+    const visitNote = `\n[VISIT SCHEDULED: ${visitDateTime}] ${visitMessage}`;
+    const inq = myInquiries.find(i => i.id === visitLeadId);
+    const newMsg = inq ? `${inq.message || ''}${visitNote}` : visitNote;
 
     try {
       const res = await fetch(`/api/inquiries?id=${visitLeadId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: finalStatus })
+        body: JSON.stringify({ status: finalStatus, message: newMsg })
       });
       if (res.ok) {
         setIsVisitModalOpen(false);
@@ -520,20 +575,14 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
             { id: 'tasks', label: 'Tasks Manager', icon: '✅' },
             { id: 'calendar', label: 'Calendar Grid', icon: '📅' },
             { id: 'reports', label: 'Reports & Analytics', icon: '📈' },
-            { id: 'logout', label: 'Logout', icon: '🚪' },
             { id: 'profile', label: 'My Profile', icon: '👤' },
             { id: 'settings', label: 'Settings', icon: '⚙️' }
           ].map(tab => (
             <button
               key={tab.id}
               onClick={async () => {
-                if (tab.id === 'logout') {
-                  const { logoutUser } = await import('./actions');
-                  await logoutUser();
-                } else {
                   setActiveTab(tab.id);
                   if (tab.id !== 'details') setSelectedLeadId(null);
-                }
               }}
               style={{
                 display: 'flex',
@@ -1125,32 +1174,72 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                 <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
                   <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: '#113629' }}>Lifecycle Status Timeline</h3>
                   <div style={{ position: 'relative', paddingLeft: '1.5rem', borderLeft: '2px solid #e5e7eb', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <div style={{ position: 'relative' }}>
-                      <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: '#113629' }}></span>
-                      <strong style={{ fontSize: '0.82rem', display: 'block' }}>Lead Received</strong>
-                      <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Assigned to {currentSalesmanName}</span>
-                    </div>
-                    {selectedLead.status.includes('CONTACTED') && (
-                      <div style={{ position: 'relative' }}>
-                        <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: '#c2a661' }}></span>
-                        <strong style={{ fontSize: '0.82rem', display: 'block' }}>First Contact Initiated</strong>
-                        <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Marked attended & follow up scheduled</span>
-                      </div>
-                    )}
-                    {selectedLead.status.includes('SCHEDULED') && (
-                      <div style={{ position: 'relative' }}>
-                        <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: '#D9A036' }}></span>
-                        <strong style={{ fontSize: '0.82rem', display: 'block' }}>Site Visit Scheduled</strong>
-                        <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Booked visit for client</span>
-                      </div>
-                    )}
-                    {selectedLead.status.includes('CONVERTED') && (
-                      <div style={{ position: 'relative' }}>
-                        <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: '#34a853' }}></span>
-                        <strong style={{ fontSize: '0.82rem', display: 'block' }}>Booking Closed Won</strong>
-                        <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Verified booking documents updated</span>
-                      </div>
-                    )}
+                    
+                    {(() => {
+                      const stagesOrder = ['NEW', 'CONTACTED', 'PROPOSAL', 'SCHEDULED', 'DONE', 'NEGOTIATION', 'BOOKED', 'CONVERTED'];
+                      const currentRaw = selectedLead.status.split('|')[0];
+                      const currentIndex = stagesOrder.indexOf(currentRaw);
+                      const hasReached = (st) => currentIndex >= stagesOrder.indexOf(st);
+                      
+                      return (
+                        <>
+                          <div style={{ position: 'relative' }}>
+                            <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: '#113629' }}></span>
+                            <strong style={{ fontSize: '0.82rem', display: 'block' }}>Lead Received</strong>
+                            <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Assigned to {currentSalesmanName}</span>
+                          </div>
+                          
+                          {hasReached('CONTACTED') && (
+                            <div style={{ position: 'relative' }}>
+                              <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: '#c2a661' }}></span>
+                              <strong style={{ fontSize: '0.82rem', display: 'block' }}>First Contact Initiated</strong>
+                              <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Marked attended & follow up scheduled</span>
+                            </div>
+                          )}
+                          
+                          {hasReached('PROPOSAL') && (
+                            <div style={{ position: 'relative' }}>
+                              <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: '#113629' }}></span>
+                              <strong style={{ fontSize: '0.82rem', display: 'block' }}>Proposal Sent</strong>
+                              <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Shared brochure & proposal docs</span>
+                            </div>
+                          )}
+
+                          {hasReached('SCHEDULED') && (
+                            <div style={{ position: 'relative' }}>
+                              <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: '#D9A036' }}></span>
+                              <strong style={{ fontSize: '0.82rem', display: 'block' }}>Site Visit Scheduled / Done</strong>
+                              <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Booked visit for client</span>
+                            </div>
+                          )}
+
+                          {hasReached('NEGOTIATION') && (
+                            <div style={{ position: 'relative' }}>
+                              <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: '#d97706' }}></span>
+                              <strong style={{ fontSize: '0.82rem', display: 'block' }}>In Negotiation</strong>
+                              <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Discussing terms & final pricing</span>
+                            </div>
+                          )}
+
+                          {hasReached('CONVERTED') && (
+                            <div style={{ position: 'relative' }}>
+                              <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: '#34a853' }}></span>
+                              <strong style={{ fontSize: '0.82rem', display: 'block' }}>Booking Closed Won</strong>
+                              <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Verified booking documents updated</span>
+                            </div>
+                          )}
+
+                          {currentRaw === 'LOST' && (
+                            <div style={{ position: 'relative' }}>
+                              <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: '#dc2626' }}></span>
+                              <strong style={{ fontSize: '0.82rem', display: 'block', color: '#dc2626' }}>Deal Lost</strong>
+                              <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Client dropped out or unresponsive</span>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+
                   </div>
                 </div>
 
@@ -1169,21 +1258,23 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
             <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629' }}>Leads Pipeline Kanban</h2>
             
             {/* Kanban Columns Grid */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(6, 1fr)',
-              gap: '1rem',
-              alignItems: 'start',
-              minHeight: '500px'
-            }}>
-              {[
-                { id: 'NEW', title: 'New Leads', color: '#dc2626' },
-                { id: 'CONTACTED', title: 'Contacted', color: '#d97706' },
-                { id: 'SCHEDULED', title: 'Site Visit', color: '#2563eb' },
-                { id: 'PROPOSAL', title: 'Proposal', color: '#7c3aed' },
-                { id: 'NEGOTIATION', title: 'Negotiation', color: '#db2777' },
-                { id: 'CONVERTED', title: 'Closed Won', color: '#16a34a' }
-              ].map(col => {
+            <div style={{ width: '100%', overflowX: 'auto', paddingBottom: '1rem' }}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(7, minmax(220px, 1fr))',
+                gap: '1rem',
+                alignItems: 'start',
+                minHeight: '500px'
+              }}>
+                {[
+                  { id: 'NEW', title: 'New Leads', color: '#dc2626' },
+                  { id: 'CONTACTED', title: 'Contacted', color: '#d97706' },
+                  { id: 'SCHEDULED', title: 'Site Visit', color: '#2563eb' },
+                  { id: 'PROPOSAL', title: 'Proposal', color: '#7c3aed' },
+                  { id: 'NEGOTIATION', title: 'Negotiation', color: '#db2777' },
+                  { id: 'CONVERTED', title: 'Closed Won', color: '#16a34a' },
+                  { id: 'LOST', title: 'Deal Lost', color: '#4b5563' }
+                ].map(col => {
                 const colLeads = myInquiries.filter(inq => {
                   const s = inq.status.split('|')[0];
                   return s === col.id || (col.id === 'CONVERTED' && s === 'BOOKED');
@@ -1245,6 +1336,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                   </div>
                 );
               })}
+            </div>
             </div>
 
           </div>
@@ -1448,20 +1540,42 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                       borderRadius: '8px',
                       borderLeft: `4px solid ${t.priority === 'HIGH' ? '#dc2626' : t.priority === 'MEDIUM' ? '#d97706' : '#2563eb'}`
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
                         <input type="checkbox" checked={t.done} onChange={() => handleToggleTask(t.id)} style={{ accentColor: '#113629', cursor: 'pointer' }} />
                         <span style={{ fontSize: '0.85rem', color: '#374151', textDecoration: t.done ? 'line-through' : 'none' }}>{t.text}</span>
                       </div>
-                      <span style={{
-                        fontSize: '0.62rem',
-                        fontWeight: 'bold',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        background: t.priority === 'HIGH' ? '#fef2f2' : t.priority === 'MEDIUM' ? '#fffbeb' : '#eff6ff',
-                        color: t.priority === 'HIGH' ? '#dc2626' : t.priority === 'MEDIUM' ? '#d97706' : '#2563eb'
-                      }}>{t.priority}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0 }}>
+                        <span style={{
+                          fontSize: '0.62rem',
+                          fontWeight: 'bold',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          background: t.priority === 'HIGH' ? '#fef2f2' : t.priority === 'MEDIUM' ? '#fffbeb' : '#eff6ff',
+                          color: t.priority === 'HIGH' ? '#dc2626' : t.priority === 'MEDIUM' ? '#d97706' : '#2563eb'
+                        }}>{t.priority}</span>
+                        <button
+                          onClick={() => setTasks(prev => prev.filter(task => task.id !== t.id))}
+                          title="Remove task"
+                          style={{
+                            background: 'none',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '4px',
+                            color: '#9ca3af',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                            padding: '2px 7px',
+                            lineHeight: 1,
+                            transition: 'all 0.15s'
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.borderColor = '#dc2626'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#9ca3af'; e.currentTarget.style.borderColor = '#e5e7eb'; }}
+                        >×</button>
+                      </div>
                     </div>
                   ))}
+                  {tasks.length === 0 && (
+                    <p style={{ textAlign: 'center', color: '#9ca3af', padding: '2rem', fontSize: '0.82rem' }}>No tasks yet. Add one using the form →</p>
+                  )}
                 </div>
               </div>
 
@@ -1502,55 +1616,190 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
         {/* ============================================================== */}
         {/* TAB 9: CALENDAR GRID */}
         {/* ============================================================== */}
-        {activeTab === 'calendar' && (
-          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629' }}>My Weekly Schedule</h2>
-            
-            <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1rem', borderBottom: '1px solid #eee', paddingBottom: '0.75rem', textAlign: 'center', fontWeight: 'bold', fontSize: '0.82rem' }}>
-                {['MON 25', 'TUE 26', 'WED 27', 'THU 28', 'FRI 29', 'SAT 30', 'SUN 31'].map((day, idx) => (
-                  <div key={idx} style={{ color: idx >= 5 ? '#d9a036' : '#4b5563' }}>{day}</div>
-                ))}
+        {activeTab === 'calendar' && (() => {
+          // Compute week days for current offset
+          const today = new Date();
+          const dayOfWeek = today.getDay(); // 0=Sun
+          const monday = new Date(today);
+          monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7) + calendarWeekOffset * 7);
+
+          const weekDays = Array.from({ length: 7 }, (_, i) => {
+            const d = new Date(monday);
+            d.setDate(monday.getDate() + i);
+            return d;
+          });
+
+          const DAY_LABELS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+          const monthName = monday.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+          const getEventsForDate = (date) => {
+            const key = date.toISOString().split('T')[0];
+            return calendarEvents.filter(e => e.date === key);
+          };
+
+          const isToday = (d) => {
+            const t = new Date();
+            return d.getDate() === t.getDate() && d.getMonth() === t.getMonth() && d.getFullYear() === t.getFullYear();
+          };
+
+          const typeColor = { call: '#1a73e8', visit: '#113629', proposal: '#ab47bc', negotiation: '#d9a036', other: '#6b7280' };
+
+          return (
+            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              {/* Header row */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629' }}>My Weekly Schedule</h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <button
+                    onClick={() => setCalendarWeekOffset(w => w - 1)}
+                    style={{ padding: '0.5rem 1.1rem', borderRadius: '8px', border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}
+                  >‹</button>
+                  <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#113629', minWidth: '160px', textAlign: 'center' }}>{monthName}</span>
+                  <button
+                    onClick={() => setCalendarWeekOffset(w => w + 1)}
+                    style={{ padding: '0.5rem 1.1rem', borderRadius: '8px', border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}
+                  >›</button>
+                  <button
+                    onClick={() => setCalendarWeekOffset(0)}
+                    style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid #113629', background: '#113629', color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.75rem' }}
+                  >Today</button>
+                  <button
+                    onClick={() => setShowAddEventForm(v => !v)}
+                    style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid #c2a661', background: '#c2a661', color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.75rem' }}
+                  >+ Add Event</button>
+                </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1rem', minHeight: '300px', paddingTop: '1rem' }}>
-                {[
-                  // Monday appointments
-                  [{ title: '9:00 AM - Call Rahul', type: 'call' }],
-                  // Tuesday appointments
-                  [{ title: '11:00 AM - Site Visit (Villa 102)', type: 'visit' }],
-                  // Wednesday appointments
-                  [{ title: '2:00 PM - Proposal Review', type: 'proposal' }],
-                  // Thursday appointments
-                  [],
-                  // Friday appointments
-                  [{ title: '4:00 PM - Negotiation Meet', type: 'negotiation' }],
-                  // Saturday appointments
-                  [{ title: '10:00 AM - Showings Phase 2', type: 'visit' }],
-                  // Sunday appointments
-                  []
-                ].map((events, colIdx) => (
-                  <div key={colIdx} style={{ background: '#f8f9fa', borderRadius: '8px', padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {events.map((evt, idx) => (
-                      <div key={idx} style={{
+              {/* Add Event Form */}
+              {showAddEventForm && (
+                <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '1.5rem', border: '1px solid #f1f3f5' }}>
+                  <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: '#113629' }}>Add New Calendar Event</h4>
+                  <form
+                    onSubmit={e => {
+                      e.preventDefault();
+                      if (!newEventForm.date || !newEventForm.title) return;
+                      setCalendarEvents(prev => [...prev, { ...newEventForm }]);
+                      setNewEventForm({ date: '', title: '', type: 'call' });
+                      setShowAddEventForm(false);
+                    }}
+                    style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end' }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                      <label style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280' }}>DATE *</label>
+                      <input type="date" required value={newEventForm.date} onChange={e => setNewEventForm(f => ({ ...f, date: e.target.value }))} style={{ padding: '0.6rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.82rem' }} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', flex: 1, minWidth: '200px' }}>
+                      <label style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280' }}>EVENT TITLE *</label>
+                      <input type="text" required placeholder="e.g. Call with Rahul Sharma" value={newEventForm.title} onChange={e => setNewEventForm(f => ({ ...f, title: e.target.value }))} style={{ padding: '0.6rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.82rem' }} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                      <label style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280' }}>TYPE</label>
+                      <select value={newEventForm.type} onChange={e => setNewEventForm(f => ({ ...f, type: e.target.value }))} style={{ padding: '0.6rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.82rem' }}>
+                        <option value="call">📞 Follow-up Call</option>
+                        <option value="visit">🏠 Site Visit</option>
+                        <option value="proposal">📄 Proposal</option>
+                        <option value="negotiation">🤝 Negotiation</option>
+                        <option value="other">📌 Other</option>
+                      </select>
+                    </div>
+                    <button type="submit" style={{ padding: '0.65rem 1.5rem', background: '#113629', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem' }}>Save Event</button>
+                    <button type="button" onClick={() => setShowAddEventForm(false)} style={{ padding: '0.65rem 1rem', background: 'white', color: '#6b7280', border: '1px solid #ddd', borderRadius: '6px', cursor: 'pointer', fontSize: '0.82rem' }}>Cancel</button>
+                  </form>
+                </div>
+              )}
+
+              {/* Calendar Grid */}
+              <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '1.5rem', border: '1px solid #f1f3f5', overflowX: 'auto' }}>
+                {/* Day headers */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(120px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                  {weekDays.map((d, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        textAlign: 'center',
                         padding: '0.6rem 0.5rem',
-                        borderRadius: '4px',
-                        fontSize: '0.68rem',
+                        borderRadius: '8px',
+                        background: isToday(d) ? '#113629' : idx >= 5 ? '#fef9ec' : '#f8f9fb',
+                        color: isToday(d) ? 'white' : idx >= 5 ? '#d9a036' : '#4b5563',
                         fontWeight: 'bold',
-                        color: 'white',
-                        backgroundColor: evt.type === 'call' ? '#1a73e8' : evt.type === 'visit' ? '#113629' : evt.type === 'proposal' ? '#ab47bc' : '#d9a036'
-                      }}>
-                        {evt.title}
+                        fontSize: '0.78rem',
+                        cursor: 'pointer',
+                        border: isToday(d) ? '2px solid #113629' : '1px solid #e5e7eb'
+                      }}
+                      onClick={() => {
+                        const key = d.toISOString().split('T')[0];
+                        setNewEventForm(f => ({ ...f, date: key }));
+                        setShowAddEventForm(true);
+                      }}
+                    >
+                      <div style={{ fontSize: '0.65rem', opacity: 0.8 }}>{DAY_LABELS[idx]}</div>
+                      <div style={{ fontSize: '1.1rem', marginTop: '2px' }}>{d.getDate()}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Event cells */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(120px, 1fr))', gap: '0.75rem', minHeight: '280px' }}>
+                  {weekDays.map((d, colIdx) => {
+                    const evts = getEventsForDate(d);
+                    return (
+                      <div
+                        key={colIdx}
+                        style={{ background: '#f8f9fb', borderRadius: '8px', padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', minHeight: '200px' }}
+                      >
+                        {evts.length === 0 && (
+                          <button
+                            onClick={() => {
+                              const key = d.toISOString().split('T')[0];
+                              setNewEventForm(f => ({ ...f, date: key }));
+                              setShowAddEventForm(true);
+                            }}
+                            style={{ background: 'none', border: '1px dashed #d1d5db', borderRadius: '6px', color: '#9ca3af', fontSize: '0.65rem', padding: '0.4rem', cursor: 'pointer', marginTop: '0.3rem', textAlign: 'center' }}
+                          >
+                            + Add
+                          </button>
+                        )}
+                        {evts.map((evt, ei) => (
+                          <div
+                            key={ei}
+                            style={{
+                              padding: '0.5rem 0.4rem',
+                              borderRadius: '5px',
+                              fontSize: '0.68rem',
+                              fontWeight: 'bold',
+                              color: 'white',
+                              background: typeColor[evt.type] || '#6b7280',
+                              lineHeight: 1.3,
+                              position: 'relative'
+                            }}
+                          >
+                            {evt.title}
+                            <button
+                              onClick={() => setCalendarEvents(prev => prev.filter((_, i) => !(prev[i].date === evt.date && prev[i].title === evt.title)))}
+                              style={{ position: 'absolute', top: '2px', right: '4px', background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: '0.7rem', padding: 0, lineHeight: 1 }}
+                              title="Remove event"
+                            >×</button>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                    {events.length === 0 && <span style={{ fontSize: '0.62rem', color: '#ccc', textAlign: 'center', marginTop: '1rem' }}>No events</span>}
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Legend */}
+              <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.75rem' }}>
+                {Object.entries({ call: '📞 Follow-up Call', visit: '🏠 Site Visit', proposal: '📄 Proposal', negotiation: '🤝 Negotiation', other: '📌 Other' }).map(([k, v]) => (
+                  <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '2px', background: typeColor[k] }}></span>
+                    <span style={{ color: '#6b7280' }}>{v}</span>
                   </div>
                 ))}
               </div>
-            </div>
 
-          </div>
-        )}
+            </div>
+          );
+        })()}
 
         {/* ============================================================== */}
         {/* TAB 10: TOWER INVENTORY */}

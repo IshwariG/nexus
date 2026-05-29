@@ -75,7 +75,7 @@ export default function UnitDetailsPage({ params }) {
           password: usrData?.password || 'password123',
           total_amount: bData?.total_amount || uData.price || '₹ 14,25,00,000',
           amount_paid: bData?.amount_paid || '₹ 0.00',
-          progress: bData?.construction_progress ? bData.construction_progress.replace('%', '') : '72',
+          progress: bData?.construction_progress ? String(bData.construction_progress).replace('%', '') : '72',
           possession_date: bData?.possession_date || '2027-12-31'
         });
       }

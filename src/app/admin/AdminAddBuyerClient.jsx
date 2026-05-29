@@ -20,6 +20,7 @@ export default function AdminAddBuyerClient() {
     
     const formData = {
       username: e.target.username.value,
+      phone: e.target.phone.value,
       password: e.target.password.value,
       unit_id: e.target.unit_id.value,
       total_amount: e.target.total_amount.value,
@@ -68,6 +69,10 @@ export default function AdminAddBuyerClient() {
             <div className="form-group">
               <label>Owner Username (Login ID)</label>
               <input name="username" placeholder="e.g. arya_vanya_102" required />
+            </div>
+            <div className="form-group">
+              <label>Registered Phone Number</label>
+              <input name="phone" placeholder="e.g. 9876543210" required />
             </div>
             <div className="form-group">
               <label>Access Password</label>

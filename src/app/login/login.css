@@ -1,343 +1,135 @@
-/* CSS Variables for Premium Golden/Green Brand */
+/* ============================================================
+   HOMELAND. Real Estate — Login Portal CSS
+   Matches the reference design exactly
+   ============================================================ */
+
 :root {
   --brand-green: #113629;
-  --brand-gold: #c2a661;
-  --brand-gold-dark: #b08e40;
-  --brand-bg-light: #fbfbf9;
-  --brand-border: #f1f3f5;
-  --text-dark: #1f2937;
+  --brand-gold: #C9A84C;
+  --brand-gold-hover: #b8962e;
+  --brand-bg: #f7f6f2;
+  --border: #e5e7eb;
+  --text-dark: #1a1a1a;
   --text-muted: #6b7280;
+  --text-mid: #374151;
+  --white: #ffffff;
 }
 
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ── Page Shell ── */
 .login-page {
   min-height: 100vh;
-  background-color: var(--brand-bg-light);
+  background: var(--brand-bg);
   display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  font-family: var(--font-sans), sans-serif;
+  align-items: stretch;
 }
 
-/* 2-Column Split Container */
+/* ── Split Container ── */
 .login-split-container {
   display: grid;
-  grid-template-columns: 1.3fr 1fr;
-  min-height: 100vh;
+  grid-template-columns: 1.15fr 0.85fr;
   width: 100%;
+  min-height: 100vh;
 }
 
-/* Left Pane (Visuals & Info) */
+/* ── Left Pane ── */
 .login-left-pane {
-  background: #f7f6f2; /* Elegant soft grey-beige */
-  border-right: 1px solid #e5e7eb;
-  padding: 4rem;
+  background: var(--brand-bg);
+  padding: 3rem 3.5rem;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
   position: relative;
   overflow: hidden;
 }
 
-/* Right Pane (Forms / Selection) */
+/* ── Right Pane ── */
 .login-right-pane {
-  background: #ffffff;
-  padding: 4rem 5rem;
+  background: var(--white);
+  border-left: 1px solid var(--border);
+  padding: 3rem 3.5rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
   position: relative;
-  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.02);
+  box-shadow: -8px 0 32px rgba(0,0,0,0.03);
 }
 
-/* Logo Typography */
+/* ── Logo ── */
 .logo-container {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.55rem;
   margin-bottom: 2.5rem;
 }
 
 .logo-main-text {
-  font-family: var(--font-serif), serif;
-  font-size: 1.35rem;
-  font-weight: 700;
+  font-size: 1.25rem;
+  font-weight: 800;
   color: var(--brand-green);
   letter-spacing: 0.5px;
+  font-family: 'Georgia', serif;
 }
 
 .logo-sub-text {
   font-size: 0.55rem;
   color: var(--brand-gold);
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
-  font-weight: bold;
+  font-weight: 700;
+  display: block;
+  margin-top: 1px;
 }
 
-/* Left Pane Title/Subtitle Styles */
+/* ── Left Pane Header Block ── */
 .left-pane-header {
-  margin-bottom: 3rem;
-  max-width: 500px;
+  margin-bottom: 2rem;
+}
+
+.left-pane-header .eyebrow {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--brand-gold);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  display: block;
+  margin-bottom: 0.5rem;
 }
 
 .left-pane-header h1 {
-  font-family: var(--font-serif), serif;
-  font-size: 2.2rem;
+  font-family: 'Georgia', serif;
+  font-size: 2rem;
   color: var(--brand-green);
-  line-height: 1.25;
-  margin: 0.5rem 0;
-  fontWeight: 600;
+  line-height: 1.2;
+  margin: 0 0 0.75rem 0;
+  font-weight: 700;
+}
+
+.left-pane-header h1 em {
+  font-style: normal;
+  color: var(--brand-gold);
 }
 
 .left-pane-header p {
   color: var(--text-muted);
-  font-size: 0.95rem;
-  line-height: 1.5;
+  font-size: 0.88rem;
+  line-height: 1.55;
   margin: 0;
 }
 
-/* Grid Layout for Roles Cards */
-.roles-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.25rem;
-  margin-bottom: 2.5rem;
-}
-
-/* Role Card styling */
-.role-card {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 1.5rem;
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  position: relative;
-  outline: none;
-}
-
-.role-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.03);
-  border-color: var(--brand-gold);
-}
-
-.role-card.active {
-  border-color: var(--brand-gold);
-  background: rgba(194, 166, 97, 0.05);
-  box-shadow: 0 10px 25px rgba(194, 166, 97, 0.08);
-}
-
-.role-card-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  background: #fbfbf9;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.25rem;
-  border: 1px solid #f1f3f5;
-  transition: all 0.25s;
-}
-
-.role-card.active .role-card-icon {
-  background: #ffffff;
-  border-color: var(--brand-gold);
-  color: var(--brand-gold);
-}
-
-.role-card h3 {
-  font-family: var(--font-serif), serif;
-  font-size: 1rem;
-  color: var(--brand-green);
-  margin: 0.25rem 0 0 0;
-  font-weight: 600;
-}
-
-.role-card p {
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  line-height: 1.4;
-  margin: 0;
-}
-
-/* Gold Continue Button */
-.continue-btn {
-  background: var(--brand-gold-dark);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  height: 48px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  width: 100%;
-  transition: all 0.2s;
-  letter-spacing: 0.5px;
-}
-
-.continue-btn:hover:not(:disabled) {
-  background: var(--brand-gold);
-  transform: translateY(-1px);
-}
-
-.continue-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* KPI Grid for Admin View */
-.admin-kpis-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.25rem;
-  max-width: 550px;
-}
-
-.admin-kpi-card {
-  background: #ffffff;
-  border-radius: 12px;
-  padding: 1.25rem;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
-  border: 1px solid #f1f3f5;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  height: 110px;
-}
-
-.admin-kpi-label {
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.admin-kpi-value {
-  font-family: var(--font-serif), serif;
-  font-size: 1.5rem;
-  color: var(--brand-green);
-  margin: 0.25rem 0;
-  font-weight: bold;
-}
-
-.admin-kpi-sub {
-  font-size: 0.65rem;
-  font-weight: 600;
-  color: #10b981; /* Green color for positive increase */
-}
-
-/* Sales Laptop mockup styling */
-.sales-laptop-mock {
-  background: #ffffff;
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
-  padding: 1.5rem;
-  max-width: 500px;
-}
-
-.sales-pipeline-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid #f3f4f6;
-  font-size: 0.78rem;
-}
-
-.sales-pipeline-row:last-child {
-  border-bottom: none;
-}
-
-/* CP Node Graphic Visual */
-.cp-nodes-graphic {
-  background: #ffffff;
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  padding: 2rem;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  position: relative;
-  height: 200px;
-  max-width: 500px;
-  overflow: hidden;
-}
-
-.cp-node-center {
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  background: var(--brand-gold);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  font-size: 0.85rem;
-  z-index: 2;
-  box-shadow: 0 4px 10px rgba(194, 166, 97, 0.3);
-}
-
-.cp-node-branch {
-  position: absolute;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
-  z-index: 2;
-}
-
-.cp-line {
-  position: absolute;
-  background: #e5e7eb;
-  z-index: 1;
-}
-
-/* Translucent Overlays for Buyer Building View */
-.buyer-hero-container {
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.05);
-  position: relative;
-  height: 320px;
-  max-width: 500px;
-  background-size: cover;
-  background-position: center;
-}
-
-.buyer-overlay-card {
-  position: absolute;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 12px;
-  padding: 1rem 1.25rem;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.05);
-}
-
-/* Left Pane Bottom Row Badges */
+/* ── Bottom Badges ── */
 .bottom-badges-row {
   display: flex;
   gap: 1.5rem;
   margin-top: auto;
   padding-top: 2rem;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
 }
 
 .badge-item {
@@ -345,42 +137,320 @@
   align-items: center;
   gap: 0.4rem;
   font-size: 0.72rem;
-  font-weight: bold;
-  color: var(--brand-green);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* Forms layout */
-.form-header-box {
-  margin-bottom: 2.5rem;
-}
-
-.form-header-box h1 {
-  font-family: var(--font-serif), serif;
-  font-size: 2rem;
-  color: var(--brand-green);
   font-weight: 600;
-  margin: 0.5rem 0 0.25rem 0;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
 }
 
-.form-header-box p {
+/* ── Admin KPI Grid ── */
+.admin-kpis-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.admin-kpi-card {
+  background: var(--white);
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.admin-kpi-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.admin-kpi-value {
+  font-family: 'Georgia', serif;
+  font-size: 1.3rem;
+  color: var(--brand-green);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.admin-kpi-sub {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: #10b981;
+}
+
+/* ── Sales Pipeline Mock ── */
+.sales-laptop-mock {
+  background: var(--white);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.04);
+  padding: 1.25rem 1.5rem;
+}
+
+.sales-pipeline-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 0.75rem;
+}
+
+.sales-pipeline-row:last-child { border-bottom: none; }
+
+/* ── CP Node Graphic ── */
+.cp-nodes-graphic {
+  background: var(--white);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 1.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  height: 190px;
+  overflow: hidden;
+}
+
+.cp-node-center {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--brand-gold);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.82rem;
+  z-index: 2;
+  box-shadow: 0 4px 12px rgba(201,168,76,0.3);
+}
+
+.cp-node-branch {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #f3f4f6;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  z-index: 2;
+}
+
+/* ── Buyer Hero ── */
+.buyer-hero-container {
+  border-radius: 14px;
+  overflow: hidden;
+  position: relative;
+  height: 290px;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.06);
+}
+
+.buyer-overlay-card {
+  position: absolute;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.5);
+  border-radius: 10px;
+  padding: 0.9rem 1.1rem;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+}
+
+/* ── RIGHT PANE: Role Selection ── */
+.right-pane-header {
+  margin-bottom: 2rem;
+}
+
+.right-pane-header h2 {
+  font-family: 'Georgia', serif;
+  font-size: 1.75rem;
+  color: var(--brand-green);
+  font-weight: 700;
+  margin: 0 0 0.4rem 0;
+}
+
+.right-pane-header p {
   color: var(--text-muted);
   font-size: 0.82rem;
   margin: 0;
 }
 
+/* ── Roles Grid ── */
+.roles-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.role-card {
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.role-card:hover {
+  border-color: var(--brand-gold);
+  box-shadow: 0 4px 16px rgba(201,168,76,0.1);
+  transform: translateY(-2px);
+}
+
+.role-card.active {
+  border-color: var(--brand-gold);
+  background: rgba(201,168,76,0.04);
+  box-shadow: 0 4px 20px rgba(201,168,76,0.12);
+}
+
+.role-card-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 9px;
+  background: #fdf8ee;
+  border: 1px solid #f0e8cc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand-gold);
+}
+
+.role-card.active .role-card-icon {
+  background: #fdf3d0;
+  border-color: var(--brand-gold);
+}
+
+.role-card h3 {
+  font-family: 'Georgia', serif;
+  font-size: 0.92rem;
+  color: var(--brand-green);
+  margin: 0;
+  font-weight: 700;
+}
+
+.role-card p {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* ── Continue / Login Button ── */
+.continue-btn {
+  background: var(--brand-gold);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  height: 48px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  transition: background 0.2s, transform 0.15s;
+  letter-spacing: 0.3px;
+}
+
+.continue-btn:hover:not(:disabled) {
+  background: var(--brand-gold-hover);
+  transform: translateY(-1px);
+}
+
+.continue-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Form Header (Portal title block) ── */
+.form-header-box {
+  margin-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.portal-icon-ring {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #fdf8ee;
+  border: 1.5px solid #f0e8cc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+  color: var(--brand-gold);
+}
+
+.form-header-box h1 {
+  font-family: 'Georgia', serif;
+  font-size: 1.6rem;
+  color: var(--brand-green);
+  font-weight: 700;
+  margin: 0 0 0.3rem 0;
+}
+
+.form-header-box p {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+/* ── Form Fields ── */
 .login-form-group {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 1.1rem;
 }
 
 .login-form-group label {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--text-mid);
+}
+
+.login-input-field {
+  width: 100%;
+  height: 44px;
+  padding: 0 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 0.85rem;
+  outline: none;
+  font-family: inherit;
+  color: var(--text-dark);
+  background: #fff;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.login-input-field::placeholder {
+  color: #b0b7c0;
+}
+
+.login-input-field:focus {
+  border-color: var(--brand-gold);
+  box-shadow: 0 0 0 3px rgba(201,168,76,0.1);
 }
 
 .login-input-wrapper {
@@ -389,37 +459,29 @@
   align-items: center;
 }
 
-.login-input-icon {
+.login-input-wrapper .login-input-field {
+  padding-right: 2.8rem;
+}
+
+.login-pw-toggle {
   position: absolute;
-  left: 14px;
-  font-size: 1rem;
-  opacity: 0.5;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  padding: 0;
 }
 
-.login-input-field {
-  padding-left: 2.75rem;
-  padding-right: 2.5rem;
-  width: 100%;
-  height: 48px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 0.88rem;
-  outline: none;
-  font-family: var(--font-sans), sans-serif;
-  transition: border-color 0.2s;
-}
-
-.login-input-field:focus {
-  border-color: var(--brand-gold);
-  box-shadow: 0 0 0 3px rgba(194, 166, 97, 0.1);
-}
-
+/* ── Options Row ── */
 .login-form-options {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 1.25rem;
   font-size: 0.78rem;
-  margin-bottom: 1.5rem;
 }
 
 .login-checkbox-label {
@@ -431,100 +493,73 @@
   user-select: none;
 }
 
+.login-checkbox-label input[type="checkbox"] {
+  accent-color: var(--brand-gold);
+  width: 14px;
+  height: 14px;
+}
+
 .login-forgot-link {
-  color: var(--brand-gold-dark);
+  color: var(--brand-gold);
   text-decoration: none;
-  font-weight: bold;
+  font-weight: 600;
+  font-size: 0.78rem;
 }
 
 .login-forgot-link:hover {
   text-decoration: underline;
-  color: var(--brand-gold);
 }
 
-/* Secondary Actions (Google/Microsoft) */
-.or-divider {
+/* ── Support Footer ── */
+.login-support-line {
   text-align: center;
-  margin: 1.25rem 0;
-  position: relative;
-}
-
-.or-divider::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 0;
-  right: 0;
-  border-top: 1px solid #e5e7eb;
-  z-index: 1;
-}
-
-.or-divider span {
-  background: #ffffff;
-  padding: 0 0.75rem;
-  position: relative;
-  z-index: 2;
-  font-size: 0.68rem;
+  margin-top: 1.25rem;
+  font-size: 0.78rem;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
-.social-auth-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.social-auth-btn {
-  height: 44px;
-  border: 1px solid #d1d5db;
-  background: white;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
+.login-support-link {
+  color: var(--brand-gold);
+  text-decoration: none;
   font-weight: 600;
-  color: #374151;
+}
+
+.login-support-link:hover { text-decoration: underline; }
+
+/* ── Back Button ── */
+.back-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.2s;
+  font-size: 0.82rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 1.75rem;
+  padding: 0;
+  font-family: inherit;
+  transition: color 0.15s;
 }
 
-.social-auth-btn:hover {
-  background: #f9fafb;
-  border-color: #c2a661;
-}
+.back-btn:hover { color: var(--brand-green); }
 
-/* Animations */
+/* ── Fade Animation ── */
 .animate-fade-in {
-  animation: fadeIn 0.4s ease-out forwards;
+  animation: fadeIn 0.3s ease-out forwards;
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Responsive collapse on mobile */
-@media (max-width: 1024px) {
+/* ── Responsive ── */
+@media (max-width: 960px) {
   .login-split-container {
     grid-template-columns: 1fr;
   }
-  
-  .login-left-pane {
-    display: none; /* Hide left column on tablets and mobiles for better focus on credentials input */
-  }
-  
-  .login-right-pane {
-    padding: 3rem 2rem;
-  }
+  .login-left-pane { display: none; }
+  .login-right-pane { padding: 3rem 2rem; }
 }

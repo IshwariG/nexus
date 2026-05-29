@@ -1,35 +1,417 @@
 "use client";
-
 import { useState } from 'react';
-import './login.css';
 
-export default function LoginPage() {
-  const [view, setView] = useState('selection'); // 'selection' | 'form'
-  const [role, setRole] = useState(null); // 'Admin' | 'Sales' | 'ChannelPartner' | 'Buyer'
-  const [selectedRole, setSelectedRole] = useState('Admin');
-  const [showPassword, setShowPassword] = useState(false);
+/* ─── Brand Colors ─── */
+const G = '#113629';
+const GOLD = '#C9A84C';
+const GOLD2 = '#b8962e';
 
-  const handleSelectCard = (roleId) => {
-    setSelectedRole(roleId);
+/* ─── SVG Icons ─── */
+const Logo = () => (
+  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+    <rect x="2"  y="13" width="5" height="13" rx="1.2" fill={GOLD}/>
+    <rect x="11" y="4"  width="6" height="22" rx="1.2" fill={G}/>
+    <rect x="21" y="8"  width="5" height="18" rx="1.2" fill={GOLD}/>
+  </svg>
+);
+
+const AdminIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2l2.5 7h7.5l-6 4.5 2.5 7L12 17l-6.5 3.5 2.5-7L2 9h7.5z"/>
+  </svg>
+);
+
+const SalesIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="8" r="4"/>
+    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+  </svg>
+);
+
+const CPIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </svg>
+);
+
+const HomeIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+    <polyline points="9 22 9 12 15 12 15 22"/>
+  </svg>
+);
+
+const ShieldIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+  </svg>
+);
+
+const EyeOn = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+  </svg>
+);
+const EyeOff = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round">
+    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+    <line x1="1" y1="1" x2="23" y2="23"/>
+  </svg>
+);
+
+/* ─── Reusable Input ─── */
+const Input = ({ label, name, type = 'text', placeholder, children }) => (
+  <div style={{ marginBottom: '1rem' }}>
+    <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '0.35rem' }}>{label}</label>
+    <div style={{ position: 'relative' }}>
+      <input
+        name={name}
+        type={type}
+        placeholder={placeholder}
+        required
+        style={{
+          width: '100%', height: '42px', padding: '0 2.5rem 0 0.85rem',
+          border: '1px solid #e5e7eb', borderRadius: '7px',
+          fontSize: '0.85rem', outline: 'none', fontFamily: 'inherit',
+          boxSizing: 'border-box', background: '#fff', color: '#1f2937'
+        }}
+        onFocus={e => { e.target.style.borderColor = GOLD; e.target.style.boxShadow = `0 0 0 3px rgba(201,168,76,0.12)`; }}
+        onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.boxShadow = 'none'; }}
+      />
+      {children}
+    </div>
+  </div>
+);
+
+/* ─── KPI Card ─── */
+const KpiCard = ({ label, value, sub, subColor = '#10b981', extra }) => (
+  <div style={{ background: '#fff', borderRadius: '10px', padding: '1rem 1.1rem', border: '1px solid #e5e7eb', boxShadow: '0 2px 10px rgba(0,0,0,0.04)', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ fontSize: '0.58rem', fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{label}</div>
+    <div style={{ fontSize: '1.25rem', fontWeight: '700', color: G, margin: '4px 0 2px', fontFamily: 'Georgia,serif' }}>{value}</div>
+    <div style={{ fontSize: '0.62rem', fontWeight: '600', color: subColor }}>{sub}</div>
+    {extra}
+  </div>
+);
+
+/* ─── Role Card ─── */
+const RoleCard = ({ id, label, desc, Icon, active, onClick, onDoubleClick }) => (
+  <div
+    onClick={onClick}
+    onDoubleClick={onDoubleClick}
+    style={{
+      background: '#fff',
+      border: `1.5px solid ${active ? GOLD : '#e5e7eb'}`,
+      borderRadius: '12px',
+      padding: '1.1rem',
+      cursor: 'pointer',
+      transition: 'all 0.18s',
+      boxShadow: active ? `0 4px 18px rgba(201,168,76,0.13)` : '0 1px 4px rgba(0,0,0,0.03)',
+      background: active ? 'rgba(201,168,76,0.04)' : '#fff',
+    }}
+  >
+    <div style={{
+      width: '40px', height: '40px', borderRadius: '9px',
+      background: active ? '#fdf3d0' : '#fdf8ee',
+      border: `1px solid ${active ? GOLD : '#f0e8cc'}`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      marginBottom: '0.65rem'
+    }}>
+      <Icon />
+    </div>
+    <div style={{ fontSize: '0.88rem', fontWeight: '700', color: G, marginBottom: '0.25rem', fontFamily: 'Georgia,serif' }}>{label}</div>
+    <div style={{ fontSize: '0.7rem', color: '#6b7280', lineHeight: '1.4' }}>{desc}</div>
+  </div>
+);
+
+/* ─── Portal Icon Ring ─── */
+const PortalRing = ({ Icon }) => (
+  <div style={{
+    width: '58px', height: '58px', borderRadius: '50%',
+    background: '#fdf8ee', border: `1.5px solid #f0e8cc`,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    margin: '0 auto 0.85rem'
+  }}>
+    <Icon />
+  </div>
+);
+
+const ROLES = [
+  { id: 'Admin', label: 'Admin', desc: 'Manage business operations and analytics', Icon: AdminIcon },
+  { id: 'Sales', label: 'Salesperson', desc: 'Handle leads and customer pipeline', Icon: SalesIcon },
+  { id: 'ChannelPartner', label: 'CP (Channel Partner)', desc: 'Submit and track leads & commissions', Icon: CPIcon },
+  { id: 'Buyer', label: 'Buyer / User', desc: 'Track booking, payments and construction updates', Icon: HomeIcon },
+];
+
+const PORTAL_META = {
+  Admin:         { title: 'Admin Portal',          sub: 'Control your business operations',     Icon: ShieldIcon },
+  Sales:         { title: 'Sales Portal',           sub: 'Manage leads and close deals faster',  Icon: SalesIcon  },
+  ChannelPartner:{ title: 'Channel Partner Portal', sub: 'Submit leads and track commissions',   Icon: CPIcon     },
+  Buyer:         { title: 'Buyer Portal',           sub: 'Track your home journey and payments', Icon: HomeIcon   },
+};
+
+/* ═══════════════════════════════════════════════════
+   Forgot Password Modal (OTP Flow)
+══════════════════════════════════════════════════ */
+function ForgotModal({ onClose }) {
+  const [step, setStep] = useState(1); // 1: Phone, 2: OTP, 3: New Password
+  const [phone, setPhone] = useState('');
+  const [otp, setOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [demoOtp, setDemoOtp] = useState('');
+
+  const handleSendOtp = async (e) => {
+    e.preventDefault();
+    setLoading(true); setError('');
+    try {
+      const res = await fetch('/api/auth/otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone.trim() })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDemoOtp(data.demo_otp); // For testing
+        setStep(2);
+      } else {
+        setError(data.error);
+      }
+    } catch { setError('Network error. Please try again.'); }
+    finally { setLoading(false); }
   };
 
-  const handleContinue = () => {
-    if (selectedRole) {
-      setRole(selectedRole);
-      setView('form');
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      setError("Passwords don't match.");
+      return;
     }
+    setLoading(true); setError('');
+    try {
+      const res = await fetch('/api/auth/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone.trim(), otp: otp.trim(), newPassword })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStep(4); // Success step
+      } else {
+        setError(data.error);
+      }
+    } catch { setError('Network error. Please try again.'); }
+    finally { setLoading(false); }
   };
 
-  const handleBack = () => {
-    setView('selection');
-    setRole(null);
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9999, backdropFilter:'blur(4px)' }}>
+      <div style={{ background:'#fff', borderRadius:'16px', padding:'2rem 2.25rem', width:'100%', maxWidth:'420px', boxShadow:'0 20px 60px rgba(0,0,0,0.15)', animation:'fadeIn 0.25s ease' }}>
+        {/* Header */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1.5rem' }}>
+          <div>
+            <h2 style={{ fontFamily:'Georgia,serif', fontSize:'1.25rem', color:G, margin:'0 0 0.2rem', fontWeight:'700' }}>Reset Password</h2>
+            <p style={{ fontSize:'0.78rem', color:'#6b7280', margin:0 }}>
+              {step === 1 ? 'Enter your registered phone number' : step === 2 ? 'We sent a code to your phone' : step === 3 ? 'Create a new password' : ''}
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'1.4rem', cursor:'pointer', color:'#9ca3af', lineHeight:1, padding:'0 0.2rem' }}>×</button>
+        </div>
+
+        {error && <div style={{ background:'#fee2e2', color:'#dc2626', padding:'0.75rem', borderRadius:'8px', fontSize:'0.8rem', marginBottom:'1rem' }}>{error}</div>}
+
+        {step === 1 && (
+          <form onSubmit={handleSendOtp}>
+            <label style={{ display:'block', fontSize:'0.75rem', fontWeight:'600', color:'#374151', marginBottom:'0.35rem' }}>Phone Number</label>
+            <input
+              type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+              placeholder="e.g. 9876543210" required
+              style={{ width:'100%', height:'42px', padding:'0 0.85rem', border:'1px solid #e5e7eb', borderRadius:'7px', fontSize:'0.85rem', outline:'none', fontFamily:'inherit', boxSizing:'border-box', marginBottom:'1.25rem' }}
+              onFocus={e => { e.target.style.borderColor = GOLD; e.target.style.boxShadow = `0 0 0 3px rgba(201,168,76,0.12)`; }}
+              onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.boxShadow = 'none'; }}
+            />
+            <button type="submit" disabled={loading}
+              style={{ width:'100%', height:'42px', background:GOLD, border:'none', borderRadius:'7px', color:'#fff', fontWeight:'700', fontSize:'0.88rem', cursor:'pointer' }}>
+              {loading ? 'Sending OTP…' : 'Send OTP'}
+            </button>
+          </form>
+        )}
+
+        {step === 2 && (
+          <form onSubmit={(e) => { e.preventDefault(); setError(''); setStep(3); }}>
+            {demoOtp && <div style={{ fontSize:'0.75rem', color:'#10b981', marginBottom:'1rem' }}>Test Mode OTP: {demoOtp}</div>}
+            <label style={{ display:'block', fontSize:'0.75rem', fontWeight:'600', color:'#374151', marginBottom:'0.35rem' }}>Enter 6-digit OTP</label>
+            <input
+              type="text" maxLength="6" value={otp} onChange={e => setOtp(e.target.value)}
+              placeholder="000000" required
+              style={{ width:'100%', height:'42px', padding:'0 0.85rem', border:'1px solid #e5e7eb', borderRadius:'7px', fontSize:'1.2rem', letterSpacing:'4px', textAlign:'center', outline:'none', fontFamily:'monospace', boxSizing:'border-box', marginBottom:'1.25rem' }}
+              onFocus={e => { e.target.style.borderColor = GOLD; e.target.style.boxShadow = `0 0 0 3px rgba(201,168,76,0.12)`; }}
+              onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.boxShadow = 'none'; }}
+            />
+            <button type="submit"
+              style={{ width:'100%', height:'42px', background:GOLD, border:'none', borderRadius:'7px', color:'#fff', fontWeight:'700', fontSize:'0.88rem', cursor:'pointer' }}>
+              Verify OTP
+            </button>
+            <div style={{ textAlign:'center', marginTop:'1rem' }}>
+              <button type="button" onClick={() => setStep(1)} style={{ background:'none', border:'none', color:'#6b7280', fontSize:'0.75rem', cursor:'pointer', textDecoration:'underline' }}>Change Phone Number</button>
+            </div>
+          </form>
+        )}
+
+        {step === 3 && (
+          <form onSubmit={handleResetPassword}>
+            <label style={{ display:'block', fontSize:'0.75rem', fontWeight:'600', color:'#374151', marginBottom:'0.35rem' }}>New Password</label>
+            <input
+              type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
+              placeholder="Enter new password" required
+              style={{ width:'100%', height:'42px', padding:'0 0.85rem', border:'1px solid #e5e7eb', borderRadius:'7px', fontSize:'0.85rem', outline:'none', fontFamily:'inherit', boxSizing:'border-box', marginBottom:'1rem' }}
+              onFocus={e => { e.target.style.borderColor = GOLD; }} onBlur={e => { e.target.style.borderColor = '#e5e7eb'; }}
+            />
+            <label style={{ display:'block', fontSize:'0.75rem', fontWeight:'600', color:'#374151', marginBottom:'0.35rem' }}>Confirm Password</label>
+            <input
+              type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+              placeholder="Confirm new password" required
+              style={{ width:'100%', height:'42px', padding:'0 0.85rem', border:'1px solid #e5e7eb', borderRadius:'7px', fontSize:'0.85rem', outline:'none', fontFamily:'inherit', boxSizing:'border-box', marginBottom:'1.25rem' }}
+              onFocus={e => { e.target.style.borderColor = GOLD; }} onBlur={e => { e.target.style.borderColor = '#e5e7eb'; }}
+            />
+            <button type="submit" disabled={loading}
+              style={{ width:'100%', height:'42px', background:GOLD, border:'none', borderRadius:'7px', color:'#fff', fontWeight:'700', fontSize:'0.88rem', cursor:'pointer' }}>
+              {loading ? 'Updating…' : 'Reset Password'}
+            </button>
+          </form>
+        )}
+
+        {step === 4 && (
+          <div style={{ textAlign:'center', padding:'1rem 0' }}>
+            <div style={{ width:'56px', height:'56px', borderRadius:'50%', background:'#e6f4ea', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 1rem', fontSize:'1.6rem' }}>✅</div>
+            <p style={{ fontSize:'1rem', color:G, fontWeight:'700', marginBottom:'0.5rem' }}>Password Reset Successful</p>
+            <p style={{ fontSize:'0.82rem', color:'#6b7280', marginBottom:'1.5rem' }}>You can now log in with your new password.</p>
+            <button onClick={onClose} style={{ width:'100%', height:'42px', background:GOLD, border:'none', borderRadius:'7px', color:'#fff', fontWeight:'700', cursor:'pointer', fontSize:'0.88rem' }}>Back to Login</button>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════
+   Contact Support Modal
+══════════════════════════════════════════════════ */
+function SupportModal({ onClose }) {
+  const [sent, setSent] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [name, setName] = useState('');
+
+  const handleSend = (e) => {
+    e.preventDefault();
+    if (!msg.trim() || !name.trim()) return;
+    setSent(true);
   };
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9999, backdropFilter:'blur(4px)' }}>
+      <div style={{ background:'#fff', borderRadius:'16px', padding:'2rem 2.25rem', width:'100%', maxWidth:'460px', boxShadow:'0 20px 60px rgba(0,0,0,0.15)', animation:'fadeIn 0.25s ease' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1.5rem' }}>
+          <div>
+            <h2 style={{ fontFamily:'Georgia,serif', fontSize:'1.25rem', color:G, margin:'0 0 0.2rem', fontWeight:'700' }}>Contact Support</h2>
+            <p style={{ fontSize:'0.78rem', color:'#6b7280', margin:0 }}>We typically respond within 2–4 hours</p>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'1.4rem', cursor:'pointer', color:'#9ca3af', lineHeight:1, padding:'0 0.2rem' }}>×</button>
+        </div>
+
+        {/* Contact Info */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem', marginBottom:'1.5rem' }}>
+          {[
+            { icon:'📧', label:'Email', val:'support@homeland.com' },
+            { icon:'📞', label:'Phone', val:'+91 98765 43210' },
+            { icon:'🕐', label:'Hours', val:'Mon–Sat, 9am–7pm IST' },
+            { icon:'📍', label:'Office', val:'Mumbai, Maharashtra' },
+          ].map(c => (
+            <div key={c.label} style={{ background:'#f8f9fb', borderRadius:'8px', padding:'0.7rem 0.9rem', border:'1px solid #f1f3f5' }}>
+              <div style={{ fontSize:'0.82rem', marginBottom:'2px' }}>{c.icon}</div>
+              <div style={{ fontSize:'0.6rem', color:'#9ca3af', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.5px' }}>{c.label}</div>
+              <div style={{ fontSize:'0.75rem', color:G, fontWeight:'600', marginTop:'2px' }}>{c.val}</div>
+            </div>
+          ))}
+        </div>
+
+        {!sent ? (
+          <form onSubmit={handleSend}>
+            <div style={{ marginBottom:'0.85rem' }}>
+              <label style={{ display:'block', fontSize:'0.75rem', fontWeight:'600', color:'#374151', marginBottom:'0.3rem' }}>Your Name</label>
+              <input value={name} onChange={e => setName(e.target.value)} type="text" required placeholder="Enter your name"
+                style={{ width:'100%', height:'40px', padding:'0 0.85rem', border:'1px solid #e5e7eb', borderRadius:'7px', fontSize:'0.85rem', outline:'none', fontFamily:'inherit', boxSizing:'border-box' }}
+                onFocus={e => { e.target.style.borderColor = GOLD; }}
+                onBlur={e => { e.target.style.borderColor = '#e5e7eb'; }}
+              />
+            </div>
+            <div style={{ marginBottom:'1.1rem' }}>
+              <label style={{ display:'block', fontSize:'0.75rem', fontWeight:'600', color:'#374151', marginBottom:'0.3rem' }}>Message</label>
+              <textarea value={msg} onChange={e => setMsg(e.target.value)} required rows={3} placeholder="Describe your issue or question…"
+                style={{ width:'100%', padding:'0.7rem 0.85rem', border:'1px solid #e5e7eb', borderRadius:'7px', fontSize:'0.85rem', outline:'none', fontFamily:'inherit', boxSizing:'border-box', resize:'vertical' }}
+                onFocus={e => { e.target.style.borderColor = GOLD; }}
+                onBlur={e => { e.target.style.borderColor = '#e5e7eb'; }}
+              />
+            </div>
+            <button type="submit" style={{ width:'100%', height:'42px', background:GOLD, border:'none', borderRadius:'7px', color:'#fff', fontWeight:'700', fontSize:'0.88rem', cursor:'pointer' }}>Send Message</button>
+          </form>
+        ) : (
+          <div style={{ textAlign:'center', padding:'1rem 0' }}>
+            <div style={{ fontSize:'2rem', marginBottom:'0.75rem' }}>✅</div>
+            <p style={{ fontSize:'0.9rem', fontWeight:'600', color:G, marginBottom:'0.4rem' }}>Message Sent!</p>
+            <p style={{ fontSize:'0.8rem', color:'#6b7280', marginBottom:'1.25rem' }}>Our team will get back to you at the earliest.</p>
+            <button onClick={onClose} style={{ width:'100%', height:'40px', background:G, border:'none', borderRadius:'7px', color:'#fff', fontWeight:'700', cursor:'pointer', fontSize:'0.85rem' }}>Close</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   MAIN PAGE
+══════════════════════════════════════════════════════ */
+export default function LoginPage() {
+  const [view, setView] = useState('selection');
+  const [selectedRole, setSelectedRole] = useState('Admin');
+  const [role, setRole] = useState(null);
+  const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [savedUsername, setSavedUsername] = useState('');
+  const [showForgot, setShowForgot] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
+
+  // Load remembered username on mount
+  useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('homeland_remembered_user');
+      if (saved) { setSavedUsername(saved); setRememberMe(true); }
+    }
+  });
+
+  const goForm = (r) => { setRole(r || selectedRole); setView('form'); };
+  const goBack = () => { setView('selection'); setRole(null); setShowPw(false); };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
     const username = e.target.username.value;
     const password = e.target.password.value;
-    
+
+    // Handle Remember Me
+    if (typeof window !== 'undefined') {
+      if (rememberMe) localStorage.setItem('homeland_remembered_user', username);
+      else localStorage.removeItem('homeland_remembered_user');
+    }
+
     try {
       const res = await fetch('/api/auth', {
         method: 'POST',
@@ -37,491 +419,360 @@ export default function LoginPage() {
         body: JSON.stringify({ username, password })
       });
       const data = await res.json();
-      if (data.success) {
-        window.location.href = '/admin';
-      } else {
-        alert(data.error || 'Authentication rejected by server.');
-      }
-    } catch (error) {
-      alert('Authentication error. Please check your credentials. Details: ' + error.message);
-    }
+      if (data.success) window.location.href = '/admin';
+      else alert(data.error || 'Invalid credentials.');
+    } catch (err) { alert('Connection error: ' + err.message); }
+    finally { setLoading(false); }
   };
 
-  const showDemoCredentials = () => {
-    let creds = '';
-    if (role === 'Admin') creds = 'Username: ADM-1234\nPassword: password123';
-    else if (role === 'Sales') creds = 'Username: SR-9999\nPassword: Vikram@123';
-    else if (role === 'Buyer') creds = 'Username: sham / aryan\nPassword: sham / aryan';
-    else if (role === 'ChannelPartner') creds = 'Username: cp101\nPassword: password123';
-    
-    alert(`Demo Credentials:\n\n${creds}`);
+  const meta = role ? PORTAL_META[role] : null;
+
+  /* ── Shared layout shell ── */
+  const s = {
+    page: { minHeight:'100vh', background:'#f7f6f2', display:'flex', fontFamily:"'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" },
+    left: { flex:'1.1', background:'#f7f6f2', borderRight:'1px solid #e5e7eb', padding:'2.5rem 3rem', display:'flex', flexDirection:'column', minHeight:'100vh' },
+    right: { flex:'0.9', background:'#fff', padding:'2.5rem 3.5rem', display:'flex', flexDirection:'column', justifyContent:'center', minHeight:'100vh', boxShadow:'-8px 0 30px rgba(0,0,0,0.03)' },
+    logo: { display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'2.2rem' },
+    logoText: { fontFamily:"Georgia,serif", fontSize:'1.2rem', fontWeight:'800', color:G, letterSpacing:'0.3px' },
+    logoSub: { fontSize:'0.5rem', color:GOLD, letterSpacing:'1.5px', textTransform:'uppercase', fontWeight:'700', display:'block', marginTop:'1px' },
+    h1: { fontFamily:"Georgia,serif", fontSize:'1.85rem', color:G, lineHeight:'1.2', margin:'0 0 0.6rem', fontWeight:'700' },
+    subp: { fontSize:'0.85rem', color:'#6b7280', lineHeight:'1.5', margin:'0 0 1.75rem' },
+    goldBtn: { width:'100%', height:'46px', background:GOLD, border:'none', borderRadius:'8px', color:'#fff', fontWeight:'700', fontSize:'0.92rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:'0.4rem', transition:'background 0.18s', letterSpacing:'0.2px' },
+    badge: { display:'flex', alignItems:'center', gap:'0.35rem', fontSize:'0.7rem', fontWeight:'600', color:'#6b7280' },
   };
 
   return (
-    <div className="login-page">
-      <div className="login-split-container">
-        
-        {/* ========================================== */}
-        {/* LEFT COLUMN (VISUAL & BRAND PANE) */}
-        {/* ========================================== */}
-        <div className="login-left-pane">
-          <div className="logo-container">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c2a661" strokeWidth="2.5">
-              <rect x="3" y="10" width="4" height="11" rx="1" fill="#c2a661" />
-              <rect x="10" y="4" width="4" height="17" rx="1" fill="#113629" stroke="#113629" />
-              <rect x="17" y="7" width="4" height="14" rx="1" fill="#c2a661" />
-            </svg>
-            <div>
-              <span className="logo-main-text">HOMELAND.</span>
-              <span className="logo-sub-text" style={{ marginLeft: '4px' }}>Real Estate</span>
-            </div>
-          </div>
+    <div style={s.page}>
 
-          {/* Render Selection Left Pane */}
-          {view === 'selection' && (
-            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-              <div className="left-pane-header">
-                <span style={{ fontSize: '0.72rem', color: '#c2a661', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Welcome to</span>
-                <h1>Real Estate<br/>CRM + ERP Platform</h1>
-                <p>Manage Sales, Inventory, Leads, Buyers & Operations in one single unified workspace.</p>
-              </div>
-
-              {/* Existing Project Image Mock */}
-              <div style={{
-                borderRadius: '16px',
-                overflow: 'hidden',
-                boxShadow: '0 20px 45px rgba(0,0,0,0.06)',
-                border: '1px solid #e5e7eb',
-                background: '#fff',
-                padding: '8px',
-                marginTop: '1.5rem',
-                maxHeight: '340px'
-              }}>
-                <img 
-                  src="/images/hero_building_1777640070355.png" 
-                  alt="Vanya Residences Building" 
-                  style={{ width: '100%', height: '320px', objectFit: 'cover', borderRadius: '10px' }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Render Admin Form Left Pane */}
-          {view === 'form' && role === 'Admin' && (
-            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-              <div className="left-pane-header">
-                <span style={{ fontSize: '0.72rem', color: '#c2a661', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Grow Your Business</span>
-                <h1>Grow Your Business<br/>with Intelligence</h1>
-                <p>Real-time insights, performance analytics, inventory tracking & much more.</p>
-              </div>
-
-              {/* Dynamic KPI Cards Grid */}
-              <div className="admin-kpis-grid">
-                <div className="admin-kpi-card">
-                  <span className="admin-kpi-label">TOTAL REVENUE</span>
-                  <span className="admin-kpi-value">₹ 12.45 Cr</span>
-                  <span className="admin-kpi-sub">↑ +16.6% vs last month</span>
-                </div>
-                <div className="admin-kpi-card">
-                  <span className="admin-kpi-label">SALES OVERVIEW</span>
-                  <span className="admin-kpi-value">₹ 8.74 Cr</span>
-                  <span className="admin-kpi-sub">↑ +22.4% vs last month</span>
-                </div>
-                <div className="admin-kpi-card">
-                  <span className="admin-kpi-label">ACTIVE PROJECTS</span>
-                  <span className="admin-kpi-value">24</span>
-                  <span className="admin-kpi-sub" style={{ color: '#6b7280' }}>Across Heritage Suites</span>
-                </div>
-                <div className="admin-kpi-card" style={{ position: 'relative' }}>
-                  <div>
-                    <span className="admin-kpi-label">TOTAL LEADS</span>
-                    <span className="admin-kpi-value">1,248</span>
-                    <span className="admin-kpi-sub">↑ +15.3% increase</span>
-                  </div>
-                  <div style={{ position: 'absolute', right: '1.25rem', bottom: '1.25rem' }}>
-                    <svg width="34" height="34" viewBox="0 0 36 36">
-                      <circle cx="18" cy="18" r="15.915" fill="none" stroke="#f1f3f5" strokeWidth="4" />
-                      <circle cx="18" cy="18" r="15.915" fill="none" stroke="#c2a661" strokeWidth="4.2" 
-                        strokeDasharray="75 25" strokeDashoffset="25" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Render Salesperson Form Left Pane */}
-          {view === 'form' && role === 'Sales' && (
-            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-              <div className="left-pane-header">
-                <span style={{ fontSize: '0.72rem', color: '#c2a661', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Lead Converter</span>
-                <h1>Manage Leads.<br/>Close Deals. Grow Faster.</h1>
-                <p>All your leads, follow-ups, meetings and deals in one place.</p>
-              </div>
-
-              {/* Pipeline Mock Laptop Graphic */}
-              <div className="sales-laptop-mock">
-                <div style={{ fontSize: '0.72rem', fontWeight: 'bold', color: '#113629', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>LEAD PIPELINE STATUS</div>
-                <div className="sales-pipeline-row">
-                  <span style={{ color: '#4b5563', fontWeight: '500' }}>New Lead</span>
-                  <div style={{ flex: 1, background: '#f3f4f6', height: '8px', borderRadius: '4px', margin: '0 1rem', overflow: 'hidden' }}>
-                    <div style={{ background: '#c2a661', width: '80%', height: '100%' }}></div>
-                  </div>
-                  <strong style={{ color: '#113629' }}>120</strong>
-                </div>
-                <div className="sales-pipeline-row">
-                  <span style={{ color: '#4b5563', fontWeight: '500' }}>Contacted</span>
-                  <div style={{ flex: 1, background: '#f3f4f6', height: '8px', borderRadius: '4px', margin: '0 1rem', overflow: 'hidden' }}>
-                    <div style={{ background: '#c2a661', width: '60%', height: '100%' }}></div>
-                  </div>
-                  <strong style={{ color: '#113629' }}>85</strong>
-                </div>
-                <div className="sales-pipeline-row">
-                  <span style={{ color: '#4b5563', fontWeight: '500' }}>Follow Up</span>
-                  <div style={{ flex: 1, background: '#f3f4f6', height: '8px', borderRadius: '4px', margin: '0 1rem', overflow: 'hidden' }}>
-                    <div style={{ background: '#c2a661', width: '45%', height: '100%' }}></div>
-                  </div>
-                  <strong style={{ color: '#113629' }}>64</strong>
-                </div>
-                <div className="sales-pipeline-row">
-                  <span style={{ color: '#4b5563', fontWeight: '500' }}>Proposal</span>
-                  <div style={{ flex: 1, background: '#f3f4f6', height: '8px', borderRadius: '4px', margin: '0 1rem', overflow: 'hidden' }}>
-                    <div style={{ background: '#c2a661', width: '25%', height: '100%' }}></div>
-                  </div>
-                  <strong style={{ color: '#113629' }}>32</strong>
-                </div>
-              </div>
-
-              {/* Side Stats Row */}
-              <div style={{ display: 'flex', gap: '1rem', marginTop: '1.25rem' }}>
-                <div style={{ flex: 1, background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1rem', boxShadow: '0 4px 10px rgba(0,0,0,0.01)' }}>
-                  <div style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: 'bold' }}>MEETINGS TODAY</div>
-                  <h3 style={{ fontSize: '1.35rem', margin: '2px 0 0 0', color: '#113629' }}>08 <span style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: '500' }}>Scheduled</span></h3>
-                </div>
-                <div style={{ flex: 1, background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1rem', boxShadow: '0 4px 10px rgba(0,0,0,0.01)' }}>
-                  <div style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: 'bold' }}>DEALS THIS MONTH</div>
-                  <h3 style={{ fontSize: '1.35rem', margin: '2px 0 0 0', color: '#113629' }}>₹ 5.62 Cr <span style={{ fontSize: '0.62rem', color: '#10b981', fontWeight: 'bold' }}>↗ +10.5%</span></h3>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Render Channel Partner Form Left Pane */}
-          {view === 'form' && role === 'ChannelPartner' && (
-            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-              <div className="left-pane-header">
-                <span style={{ fontSize: '0.72rem', color: '#c2a661', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Earn Commissions</span>
-                <h1>Partner. Promote.<br/>Earn Together.</h1>
-                <p>Submit quality leads and earn exciting commissions on verified closures.</p>
-              </div>
-
-              {/* Connections Node Graphics Visual */}
-              <div className="cp-nodes-graphic">
-                <div className="cp-node-center">You</div>
-                {/* Branches */}
-                <div className="cp-node-branch" style={{ top: '20px', left: '60px' }}>👤</div>
-                <div className="cp-node-branch" style={{ top: '35px', right: '60px' }}>👤</div>
-                <div className="cp-node-branch" style={{ bottom: '20px', left: '70px' }}>👤</div>
-                <div className="cp-node-branch" style={{ bottom: '30px', right: '70px' }}>👤</div>
-                {/* SVG connection lines */}
-                <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }}>
-                  <line x1="50%" y1="50%" x2="70px" y2="40px" stroke="#e5e7eb" strokeWidth="2" />
-                  <line x1="50%" y1="50%" x2="80%" y2="55px" stroke="#e5e7eb" strokeWidth="2" />
-                  <line x1="50%" y1="50%" x2="85px" y2="80%" stroke="#e5e7eb" strokeWidth="2" />
-                  <line x1="50%" y1="50%" x2="78%" y2="80%" stroke="#e5e7eb" strokeWidth="2" />
-                </svg>
-                <div style={{ position: 'absolute', bottom: '10px', left: '15px', background: '#e6f4ea', color: '#137333', fontSize: '0.62rem', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>156 Leads Submitted</div>
-              </div>
-
-              {/* Side Stats Row */}
-              <div style={{ display: 'flex', gap: '1rem', marginTop: '1.25rem' }}>
-                <div style={{ flex: 1.2, background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1rem', boxShadow: '0 4px 10px rgba(0,0,0,0.01)' }}>
-                  <div style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: 'bold' }}>COMMISSIONS EARNED</div>
-                  <h3 style={{ fontSize: '1.35rem', margin: '2px 0 0 0', color: '#113629' }}>₹ 2.45 Cr <span style={{ fontSize: '0.62rem', color: '#10b981', fontWeight: 'bold' }}>↑ +22.6%</span></h3>
-                </div>
-                <div style={{ flex: 1, background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '1rem', boxShadow: '0 4px 10px rgba(0,0,0,0.01)' }}>
-                  <div style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: 'bold' }}>LATEST PAYOUT</div>
-                  <h3 style={{ fontSize: '1.35rem', margin: '2px 0 0 0', color: '#113629' }}>₹ 75,000 <span style={{ fontSize: '0.58rem', background: '#e6f4ea', color: '#137333', padding: '1px 6px', borderRadius: '4px', fontWeight: 'bold', marginLeft: '3px' }}>Paid</span></h3>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Render Buyer Form Left Pane */}
-          {view === 'form' && role === 'Buyer' && (
-            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-              <div className="left-pane-header">
-                <span style={{ fontSize: '0.72rem', color: '#c2a661', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1.5px' }}>Your Dream Home</span>
-                <h1>Your Dream Home.<br/>Our Commitment.</h1>
-                <p>Track your booking, payments and construction updates in real-time.</p>
-              </div>
-
-              {/* Overlaid Image Visual */}
-              <div className="buyer-hero-container" style={{ backgroundImage: `url('/images/hero_building_1777640070355.png')` }}>
-                {/* Construction Card Overlay */}
-                <div className="buyer-overlay-card" style={{ top: '20px', left: '20px', width: '220px' }}>
-                  <span style={{ fontSize: '0.58rem', color: '#9ca3af', fontWeight: 'bold', display: 'block' }}>CONSTRUCTION PROGRESS</span>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '4px 0' }}>
-                    <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#113629' }}>72%</span>
-                    <span style={{ fontSize: '0.58rem', color: '#10b981', fontWeight: 'bold' }}>On Time</span>
-                  </div>
-                  <div style={{ background: '#e5e7eb', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ background: '#c2a661', width: '72%', height: '100%' }}></div>
-                  </div>
-                </div>
-
-                {/* Payment Overview Overlay */}
-                <div className="buyer-overlay-card" style={{ bottom: '20px', right: '20px', width: '200px' }}>
-                  <span style={{ fontSize: '0.58rem', color: '#9ca3af', fontWeight: 'bold', display: 'block' }}>PAYMENT OVERVIEW</span>
-                  <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#113629', display: 'block', margin: '2px 0' }}>₹ 18.75 L</span>
-                  <span style={{ fontSize: '0.58rem', color: '#6b7280', fontWeight: 'bold' }}>Paid So Far</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Badges footer row in Left Pane */}
-          <div className="bottom-badges-row">
-            <div className="badge-item">
-              <span>🛡️</span> Secure
-            </div>
-            <div className="badge-item">
-              <span>🤝</span> Reliable
-            </div>
-            <div className="badge-item">
-              <span>⏰</span> Real-time
-            </div>
-            <div className="badge-item">
-              <span>📈</span> Scalable
-            </div>
+      {/* ══ LEFT PANE ══ */}
+      <div style={s.left}>
+        {/* Logo */}
+        <div style={s.logo}>
+          <Logo />
+          <div>
+            <span style={s.logoText}>HOMELAND.</span>
+            <span style={s.logoSub}>Real Estate</span>
           </div>
         </div>
 
-        {/* ========================================== */}
-        {/* RIGHT COLUMN (SELECTION & FORMS PANE) */}
-        {/* ========================================== */}
-        <div className="login-right-pane">
-          
-          {/* Header Back Arrow inside forms */}
-          {view === 'form' && (
-            <button 
-              onClick={handleBack} 
-              style={{
-                position: 'absolute',
-                top: '2.5rem',
-                left: '5rem',
-                background: 'none',
-                border: 'none',
-                color: '#6b7280',
-                cursor: 'pointer',
-                fontSize: '0.85rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                fontWeight: '600'
-              }}
+        {/* ── SELECTION left ── */}
+        {view === 'selection' && (
+          <div style={{ display:'flex', flexDirection:'column', flex:1, animation:'fadeIn 0.3s ease' }}>
+            <div>
+              <div style={{ fontSize:'0.68rem', color:GOLD, fontWeight:'700', textTransform:'uppercase', letterSpacing:'1.5px', marginBottom:'0.5rem' }}>Welcome to</div>
+              <h1 style={s.h1}>Real Estate<br/>CRM + ERP Platform</h1>
+              <p style={s.subp}>Manage Sales, Inventory, Leads,<br/>Buyers &amp; Operations in one place.</p>
+            </div>
+            <div style={{ flex:1, borderRadius:'14px', overflow:'hidden', maxHeight:'370px', border:'1px solid #e5e7eb', boxShadow:'0 12px 40px rgba(0,0,0,0.07)' }}>
+              <img
+                src="/images/hero_building_1777640070355.png"
+                alt="Homeland Residences"
+                style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ── ADMIN left ── */}
+        {view === 'form' && role === 'Admin' && (
+          <div style={{ display:'flex', flexDirection:'column', flex:1, animation:'fadeIn 0.3s ease' }}>
+            <div>
+              <h1 style={s.h1}>Grow Your Business<br/>with Intelligence</h1>
+              <p style={s.subp}>Real-time insights, performance analytics,<br/>inventory tracking &amp; much more.</p>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.85rem' }}>
+              <KpiCard label="Total Revenue"  value="₹ 12.45 Cr" sub="↑ +16.6% vs last month" />
+              <KpiCard label="Sales Overview" value="₹ 8.74 Cr"  sub="↑ +22.4% vs last month" />
+              <KpiCard label="Projects"       value="24"          sub="Active Projects" subColor="#6b7280" />
+              <KpiCard label="Leads"          value="1,248"       sub="↑ +15.3% vs last month"
+                extra={
+                  <svg width="38" height="38" viewBox="0 0 38 38" style={{ position:'absolute', right:'0.75rem', bottom:'0.75rem' }}>
+                    <circle cx="19" cy="19" r="15" fill="none" stroke="#f1f3f5" strokeWidth="4"/>
+                    <circle cx="19" cy="19" r="15" fill="none" stroke={GOLD} strokeWidth="4" strokeDasharray="65 100" strokeDashoffset="25" strokeLinecap="round"/>
+                  </svg>
+                }
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ── SALES left ── */}
+        {view === 'form' && role === 'Sales' && (
+          <div style={{ display:'flex', flexDirection:'column', flex:1, animation:'fadeIn 0.3s ease' }}>
+            <div>
+              <h1 style={s.h1}>Manage Leads.<br/>Close Deals. <span style={{ color:GOLD }}>Grow Faster.</span></h1>
+              <p style={s.subp}>All your leads, follow-ups, meetings and deals in one place.</p>
+            </div>
+            {/* Pipeline Card */}
+            <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:'12px', padding:'1.25rem 1.5rem', boxShadow:'0 4px 16px rgba(0,0,0,0.04)', marginBottom:'1rem' }}>
+              <div style={{ fontSize:'0.65rem', fontWeight:'700', color:G, textTransform:'uppercase', letterSpacing:'0.8px', borderBottom:'1px solid #f3f4f6', paddingBottom:'0.5rem', marginBottom:'0.75rem' }}>Lead Pipeline</div>
+              {[
+                  { l:'New Lead',  v:120, pct:80 },
+                  { l:'Contacted', v:85,  pct:60 },
+                  { l:'Follow Up', v:64,  pct:46 },
+                  { l:'Proposal',  v:32,  pct:25 },
+                  { l:'Closed',    v:13,  pct:12 },
+                ].map(r => (
+                <div key={r.l} style={{ display:'flex', alignItems:'center', paddingBottom:'0.45rem', borderBottom:'1px solid #f9fafb', marginBottom:'0.4rem' }}>
+                  <span style={{ fontSize:'0.75rem', color:'#4b5563', fontWeight:'500', minWidth:'75px' }}>{r.l}</span>
+                  <div style={{ flex:1, background:'#f3f4f6', height:'7px', borderRadius:'4px', margin:'0 0.75rem', overflow:'hidden' }}>
+                    <div style={{ background:GOLD, width:`${r.pct}%`, height:'100%', borderRadius:'4px' }}/>
+                  </div>
+                  <strong style={{ fontSize:'0.75rem', color:G, minWidth:'28px', textAlign:'right' }}>{r.v}</strong>
+                </div>
+              ))}
+            </div>
+            <div style={{ display:'flex', gap:'0.75rem' }}>
+              {[
+                { l:'Meetings Today',    v:'08',         s:'Scheduled',  sc:'#6b7280' },
+                { l:'Deals This Month',  v:'₹ 5.62 Cr',  s:'↗ +10.5%',  sc:'#10b981' }
+              ].map(c => (
+                <div key={c.l} style={{ flex:1, background:'#fff', border:'1px solid #e5e7eb', borderRadius:'10px', padding:'0.9rem 1rem', boxShadow:'0 2px 8px rgba(0,0,0,0.03)' }}>
+                  <div style={{ fontSize:'0.58rem', color:'#9ca3af', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.6px' }}>{c.l}</div>
+                  <div style={{ fontSize:'1.1rem', fontWeight:'700', color:G, marginTop:'3px' }}>{c.v} <span style={{ fontSize:'0.62rem', color:c.sc, fontWeight:'600' }}>{c.s}</span></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── CHANNEL PARTNER left ── */}
+        {view === 'form' && role === 'ChannelPartner' && (
+          <div style={{ display:'flex', flexDirection:'column', flex:1, animation:'fadeIn 0.3s ease' }}>
+            <div>
+              <h1 style={s.h1}>Partner. Promote.<br/><span style={{ color:GOLD }}>Earn Together.</span></h1>
+              <p style={s.subp}>Submit quality leads and earn exciting commissions on verified closures.</p>
+            </div>
+            {/* Network Visual */}
+            <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:'12px', height:'185px', position:'relative', overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:'1rem', boxShadow:'0 4px 16px rgba(0,0,0,0.04)' }}>
+              <svg style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%' }} aria-hidden>
+                {[['20%','20%'],['78%','22%'],['18%','78%'],['80%','76%']].map(([x,y],i)=>(
+                  <line key={i} x1="50%" y1="50%" x2={x} y2={y} stroke="#e5e7eb" strokeWidth="1.5" strokeDasharray="4 3"/>
+                ))}
+              </svg>
+              {/* Center node */}
+              <div style={{ width:'52px', height:'52px', borderRadius:'50%', background:GOLD, color:'#fff', fontWeight:'700', fontSize:'0.82rem', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2, boxShadow:`0 4px 14px rgba(201,168,76,0.35)` }}>You</div>
+              {/* Branch nodes */}
+              {[{ top:'14%', left:'14%' }, { top:'12%', right:'14%' }, { bottom:'14%', left:'12%' }, { bottom:'12%', right:'12%' }].map((pos, i) => (
+                <div key={i} style={{ position:'absolute', width:'36px', height:'36px', borderRadius:'50%', background:'#f9fafb', border:'1px solid #e5e7eb', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2, ...pos }}>
+                  <SalesIcon />
+                </div>
+              ))}
+              <div style={{ position:'absolute', bottom:'10px', left:'14px', background:'#e6f4ea', color:'#137333', fontSize:'0.6rem', padding:'2px 9px', borderRadius:'20px', fontWeight:'700', zIndex:3 }}>156 Leads Submitted</div>
+            </div>
+            <div style={{ display:'flex', gap:'0.75rem' }}>
+              <div style={{ flex:1.2, background:'#fff', border:'1px solid #e5e7eb', borderRadius:'10px', padding:'0.9rem 1rem', boxShadow:'0 2px 8px rgba(0,0,0,0.03)' }}>
+                <div style={{ fontSize:'0.58rem', color:'#9ca3af', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.6px' }}>Commission Earned</div>
+                <div style={{ fontSize:'1.1rem', fontWeight:'700', color:G, marginTop:'3px' }}>₹ 2.45 Cr <span style={{ fontSize:'0.6rem', color:'#10b981', fontWeight:'700' }}>↑ +22.6%</span></div>
+              </div>
+              <div style={{ flex:1, background:'#fff', border:'1px solid #e5e7eb', borderRadius:'10px', padding:'0.9rem 1rem', boxShadow:'0 2px 8px rgba(0,0,0,0.03)' }}>
+                <div style={{ fontSize:'0.58rem', color:'#9ca3af', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:'0.3rem' }}>Payout History</div>
+                {[['₹ 45,000','Paid'],['₹ 75,000','Paid'],['₹ 68,000','Paid']].map(([a,st])=>(
+                  <div key={a} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'2px' }}>
+                    <span style={{ fontSize:'0.68rem', fontWeight:'600', color:G }}>{a}</span>
+                    <span style={{ fontSize:'0.58rem', background:'#e6f4ea', color:'#137333', padding:'1px 7px', borderRadius:'9px', fontWeight:'700' }}>{st}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── BUYER left ── */}
+        {view === 'form' && role === 'Buyer' && (
+          <div style={{ display:'flex', flexDirection:'column', flex:1, animation:'fadeIn 0.3s ease' }}>
+            <div>
+              <h1 style={s.h1}>Your Dream Home.<br/><span style={{ color:GOLD }}>Our Commitment.</span></h1>
+              <p style={s.subp}>Track your booking, payments and construction updates in real-time.</p>
+            </div>
+            {/* Hero image with overlay cards */}
+            <div style={{ position:'relative', borderRadius:'14px', overflow:'hidden', flex:1, maxHeight:'310px', boxShadow:'0 10px 35px rgba(0,0,0,0.08)' }}>
+              <img
+                src="/images/heritage_palace_1777642572460.png"
+                alt="Dream Home"
+                style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
+              />
+              {/* Construction Progress overlay */}
+              <div style={{ position:'absolute', top:'14px', left:'14px', background:'rgba(255,255,255,0.92)', backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)', border:'1px solid rgba(255,255,255,0.5)', borderRadius:'10px', padding:'0.75rem 1rem', width:'200px', boxShadow:'0 6px 20px rgba(0,0,0,0.08)' }}>
+                <div style={{ fontSize:'0.56rem', color:'#9ca3af', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.6px' }}>Construction Progress</div>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', margin:'4px 0' }}>
+                  <span style={{ fontSize:'1.3rem', fontWeight:'700', color:G }}>72%</span>
+                  <span style={{ fontSize:'0.58rem', color:'#10b981', fontWeight:'700' }}>On Time ✓</span>
+                </div>
+                <div style={{ background:'#e5e7eb', height:'5px', borderRadius:'3px', overflow:'hidden' }}>
+                  <div style={{ background:GOLD, width:'72%', height:'100%', borderRadius:'3px' }}/>
+                </div>
+              </div>
+              {/* Payment overlay */}
+              <div style={{ position:'absolute', bottom:'14px', right:'14px', background:'rgba(255,255,255,0.92)', backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)', border:'1px solid rgba(255,255,255,0.5)', borderRadius:'10px', padding:'0.75rem 1rem', width:'170px', boxShadow:'0 6px 20px rgba(0,0,0,0.08)' }}>
+                <div style={{ fontSize:'0.56rem', color:'#9ca3af', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.6px' }}>Payment Overview</div>
+                <div style={{ fontSize:'1.25rem', fontWeight:'700', color:G, margin:'3px 0 1px' }}>₹ 18.75 L</div>
+                <div style={{ fontSize:'0.62rem', color:'#6b7280', fontWeight:'600' }}>Paid So Far</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bottom trust badges */}
+        <div style={{ display:'flex', gap:'1.25rem', marginTop:'1.75rem', paddingTop:'1.25rem', borderTop:'1px solid #e5e7eb', flexWrap:'wrap' }}>
+          {[['🛡️','Secure'],['🤝','Reliable'],['⏰','Real-time'],['📈','Scalable']].map(([ic, lb]) => (
+            <div key={lb} style={s.badge}><span>{ic}</span>{lb}</div>
+          ))}
+        </div>
+      </div>
+
+      {/* ══ RIGHT PANE ══ */}
+      <div style={s.right}>
+
+        {/* ── ROLE SELECTION ── */}
+        {view === 'selection' && (
+          <div style={{ animation:'fadeIn 0.3s ease' }}>
+            <div style={{ marginBottom:'1.75rem' }}>
+              <h2 style={{ fontFamily:"Georgia,serif", fontSize:'1.7rem', color:G, fontWeight:'700', margin:'0 0 0.4rem' }}>Select Your Role</h2>
+              <p style={{ fontSize:'0.82rem', color:'#6b7280', margin:0 }}>Choose the portal that best matches your role to continue</p>
+            </div>
+
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1rem', marginBottom:'2rem' }}>
+              {ROLES.map(r => (
+                <RoleCard
+                  key={r.id}
+                  {...r}
+                  active={selectedRole === r.id}
+                  onClick={() => setSelectedRole(r.id)}
+                  onDoubleClick={() => goForm(r.id)}
+                />
+              ))}
+            </div>
+
+            <button
+              style={{ ...s.goldBtn }}
+              onMouseEnter={e => e.currentTarget.style.background = GOLD2}
+              onMouseLeave={e => e.currentTarget.style.background = GOLD}
+              onClick={() => goForm()}
+            >
+              Continue &nbsp;→
+            </button>
+
+            <div style={{ marginTop:'2.5rem', textAlign:'center', fontSize:'0.7rem', color:'#c0c0c0' }}>
+              © 2025 Homeland Real Estate. All rights reserved.
+            </div>
+          </div>
+        )}
+
+        {/* ── LOGIN FORM ── */}
+        {view === 'form' && meta && (
+          <div style={{ animation:'fadeIn 0.3s ease' }}>
+            {/* Back */}
+            <button
+              onClick={goBack}
+              style={{ background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:'0.8rem', fontWeight:'600', display:'flex', alignItems:'center', gap:'0.35rem', marginBottom:'2rem', padding:0, fontFamily:'inherit' }}
+              onMouseEnter={e => e.currentTarget.style.color = G}
+              onMouseLeave={e => e.currentTarget.style.color = '#9ca3af'}
             >
               ← Back to Role Selection
             </button>
-          )}
 
-          {/* Render Screen 1: Role Selection */}
-          {view === 'selection' && (
-            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <div style={{ margin: 'auto 0' }}>
-                <div style={{ marginBottom: '2rem' }}>
-                  <h2 className="serif" style={{ fontSize: '2rem', color: '#113629', fontWeight: 'bold', margin: '0 0 0.5rem 0' }}>Select Your Role</h2>
-                  <p className="text-muted" style={{ fontSize: '0.85rem', color: '#6b7280', margin: 0 }}>Choose the portal that best matches your role to continue</p>
-                </div>
-
-                {/* 4 Cards Grid */}
-                <div className="roles-grid">
-                  {[
-                    { id: 'Admin', label: 'Admin', desc: 'Manage business operations and analytics', icon: '👑' },
-                    { id: 'Sales', label: 'Salesperson', desc: 'Handle leads and customer pipeline', icon: '🧑‍💼' },
-                    { id: 'ChannelPartner', label: 'CP (Channel Partner)', desc: 'Submit and track leads & commissions', icon: '🤝' },
-                    { id: 'Buyer', label: 'Buyer / User', desc: 'Track booking, payments and construction updates', icon: '👤' }
-                  ].map(r => (
-                    <div 
-                      key={r.id} 
-                      onClick={() => handleSelectCard(r.id)}
-                      onDoubleClick={() => {
-                        setSelectedRole(r.id);
-                        setRole(r.id);
-                        setView('form');
-                      }}
-                      className={`role-card ${selectedRole === r.id ? 'active' : ''}`}
-                    >
-                      <div className="role-card-icon">
-                        {r.icon}
-                      </div>
-                      <h3>{r.label}</h3>
-                      <p>{r.desc}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <button 
-                  onClick={handleContinue}
-                  className="continue-btn"
-                  disabled={!selectedRole}
-                >
-                  Continue →
-                </button>
-              </div>
-
-              {/* Screen 1 Footer */}
-              <div style={{ marginTop: 'auto', textAlign: 'center', fontSize: '0.75rem', color: '#9ca3af' }}>
-                © 2025 Homeland Real Estate. All rights reserved.
-              </div>
+            {/* Portal header */}
+            <div style={{ textAlign:'center', marginBottom:'2rem' }}>
+              <PortalRing Icon={meta.Icon} />
+              <h1 style={{ fontFamily:"Georgia,serif", fontSize:'1.5rem', color:G, fontWeight:'700', margin:'0 0 0.3rem' }}>{meta.title}</h1>
+              <p style={{ fontSize:'0.8rem', color:'#6b7280', margin:0 }}>{meta.sub}</p>
             </div>
-          )}
 
-          {/* Render Screens 2-5: Form Access views */}
-          {view === 'form' && (
-            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'center' }}>
-              
-              <div className="form-header-box">
-                <div style={{ 
-                  width: '54px', 
-                  height: '54px', 
-                  background: 'rgba(194,166,97,0.1)', 
-                  color: '#b08e40', 
-                  borderRadius: '50%', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  fontSize: '1.5rem',
-                  marginBottom: '1rem' 
-                }}>
-                  {role === 'Admin' ? '👑' : role === 'Sales' ? '🧑‍💼' : role === 'ChannelPartner' ? '🤝' : '👤'}
-                </div>
-                <h1>{
-                  role === 'Admin' ? 'Admin Portal' : 
-                  role === 'Sales' ? 'Sales Portal' : 
-                  role === 'ChannelPartner' ? 'Channel Partner Portal' : 
-                  'Buyer Portal'
-                }</h1>
-                <p>
-                  {role === 'Admin' ? 'Control your business operations' :
-                   role === 'Sales' ? 'Manage leads and close deals faster' :
-                   role === 'ChannelPartner' ? 'Submit leads and track commissions' :
-                   'Track your home journey and payments'}
-                </p>
+            {/* Form */}
+            <form onSubmit={handleSubmit}>
+              {/* Username with pre-filled remembered value */}
+              <div style={{ marginBottom:'1rem' }}>
+                <label style={{ display:'block', fontSize:'0.76rem', fontWeight:'600', color:'#374151', marginBottom:'0.35rem' }}>Email Address</label>
+                <input
+                  name="username"
+                  type="text"
+                  placeholder="Enter your email"
+                  defaultValue={savedUsername}
+                  required
+                  style={{ width:'100%', height:'42px', padding:'0 0.85rem', border:'1px solid #e5e7eb', borderRadius:'7px', fontSize:'0.85rem', outline:'none', fontFamily:'inherit', boxSizing:'border-box', background:'#fff', color:'#1f2937' }}
+                  onFocus={e => { e.target.style.borderColor = GOLD; e.target.style.boxShadow = `0 0 0 3px rgba(201,168,76,0.12)`; }}
+                  onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.boxShadow = 'none'; }}
+                />
               </div>
 
-              {/* Login Form */}
-              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column' }}>
-                
-                {/* Username Input Field */}
-                <div className="login-form-group">
-                  <label>
-                    {role === 'Admin' ? 'Admin ID / Email Address' :
-                     role === 'Sales' ? 'Sales Representative ID / Email' :
-                     role === 'ChannelPartner' ? 'Broker ID / Email' :
-                     'Email Address / Username'}
-                  </label>
-                  <div className="login-input-wrapper">
-                    <span className="login-input-icon">👤</span>
-                    <input 
-                      type="text" 
-                      name="username" 
-                      placeholder={
-                        role === 'Admin' ? 'ADM-XXXX' :
-                        role === 'Sales' ? 'SR-XXXXX' :
-                        role === 'ChannelPartner' ? 'cpXXX' :
-                        'Enter your username'
-                      }
-                      className="login-input-field"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Password Input Field */}
-                <div className="login-form-group">
-                  <label>Password</label>
-                  <div className="login-input-wrapper">
-                    <span className="login-input-icon">🔒</span>
-                    <input 
-                      type={showPassword ? "text" : "password"} 
-                      name="password" 
-                      placeholder="Enter password" 
-                      className="login-input-field"
-                      required
-                    />
-                    <button 
-                      type="button" 
-                      onClick={() => setShowPassword(!showPassword)}
-                      style={{
-                        position: 'absolute',
-                        right: '12px',
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontSize: '1rem',
-                        opacity: 0.6
-                      }}
-                    >
-                      {showPassword ? '👁️' : '👁️‍🗨️'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Options Row */}
-                <div className="login-form-options">
-                  <label className="login-checkbox-label">
-                    <input type="checkbox" style={{ accentColor: '#c2a661' }} />
-                    Remember Me
-                  </label>
-                  <a 
-                    href="#forgot" 
-                    onClick={(e) => { e.preventDefault(); showDemoCredentials(); }}
-                    className="login-forgot-link"
-                  >
-                    Forgot Password?
-                  </a>
-                </div>
-
-                {/* Main Submit Button */}
-                <button type="submit" className="continue-btn" style={{ height: '46px', marginTop: '0.5rem' }}>
-                  Login
-                </button>
-
-                {/* Divider & Secondary continuation options */}
-                <div className="or-divider">
-                  <span>or continue with</span>
-                </div>
-
-                <div className="social-auth-grid">
-                  <button type="button" onClick={() => alert('Google authentication simulated')} className="social-auth-btn">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12.24 10.285V13.4h6.887C18.2 15.614 15.645 18 12.24 18c-3.86 0-7-3.14-7-7s3.14-7 7-7c1.7 0 3.3.6 4.5 1.7l2.4-2.4C17.3 1.5 14.9.8 12.24.8c-5.96 0-10.8 4.84-10.8 10.8s4.84 10.8 10.8 10.8c6.2 0 11.2-4.4 11.2-10.8 0-.7-.1-1.3-.2-1.8H12.24z"/></svg>
-                    Google
+              {/* Password with toggle */}
+              <div style={{ marginBottom:'0.85rem' }}>
+                <label style={{ display:'block', fontSize:'0.76rem', fontWeight:'600', color:'#374151', marginBottom:'0.35rem' }}>Password</label>
+                <div style={{ position:'relative' }}>
+                  <input
+                    name="password"
+                    type={showPw ? 'text' : 'password'}
+                    placeholder="Enter your password"
+                    required
+                    style={{ width:'100%', height:'42px', padding:'0 2.5rem 0 0.85rem', border:'1px solid #e5e7eb', borderRadius:'7px', fontSize:'0.85rem', outline:'none', fontFamily:'inherit', boxSizing:'border-box', background:'#fff', color:'#1f2937' }}
+                    onFocus={e => { e.target.style.borderColor = GOLD; e.target.style.boxShadow = `0 0 0 3px rgba(201,168,76,0.12)`; }}
+                    onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.boxShadow = 'none'; }}
+                  />
+                  <button type="button" onClick={() => setShowPw(v => !v)}
+                    style={{ position:'absolute', right:'0.7rem', top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', display:'flex', alignItems:'center', padding:0 }}>
+                    {showPw ? <EyeOn/> : <EyeOff/>}
                   </button>
-                  {role === 'Admin' || role === 'Sales' ? (
-                    <button type="button" onClick={() => alert('Microsoft authentication simulated')} className="social-auth-btn">
-                      <svg width="14" height="14" viewBox="0 0 23 23"><path d="M0 0h11v11H0z" fill="#f25022"/><path d="M12 0h11v11H12z" fill="#7fba00"/><path d="M0 12h11v11H0z" fill="#00a4ef"/><path d="M12 12h11v11H12z" fill="#ffb900"/></svg>
-                      Microsoft
-                    </button>
-                  ) : (
-                    <button type="button" onClick={() => alert('Apple authentication simulated')} className="social-auth-btn">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 4.17c.66-.81 1.11-1.93.99-3.06-.96.04-2.13.64-2.82 1.45-.6.69-1.12 1.84-.98 2.94.1.08.2.12.3.12.87 0 1.95-.57 2.51-1.45z"/></svg>
-                      Apple
-                    </button>
-                  )}
                 </div>
+              </div>
 
-                <div style={{ textAlign: 'center', fontSize: '0.78rem', color: '#6b7280', marginTop: '1rem' }}>
-                  Need help? <a href="#support" onClick={(e) => { e.preventDefault(); alert('Please contact administrator at support@homeland.com'); }} style={{ color: '#c2a661', textDecoration: 'none', fontWeight: 600 }}>Contact Support</a>
-                </div>
-              </form>
+              {/* Options row */}
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1.25rem' }}>
+                <label style={{ display:'flex', alignItems:'center', gap:'0.4rem', fontSize:'0.78rem', color:'#4b5563', cursor:'pointer', userSelect:'none' }}>
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={e => setRememberMe(e.target.checked)}
+                    style={{ accentColor: GOLD, width:'14px', height:'14px', cursor:'pointer' }}
+                  />
+                  Remember Me
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowForgot(true)}
+                  style={{ fontSize:'0.78rem', color:GOLD, background:'none', border:'none', fontWeight:'600', cursor:'pointer', padding:0, fontFamily:'inherit' }}
+                >
+                  Forgot Password?
+                </button>
+              </div>
 
+              {/* Login button */}
+              <button
+                type="submit"
+                disabled={loading}
+                style={{ ...s.goldBtn, opacity: loading ? 0.7 : 1 }}
+                onMouseEnter={e => { if (!loading) e.currentTarget.style.background = GOLD2; }}
+                onMouseLeave={e => e.currentTarget.style.background = GOLD}
+              >
+                {loading ? 'Logging in…' : 'Login'}
+              </button>
+            </form>
+
+            {/* Support */}
+            <div style={{ textAlign:'center', marginTop:'1.5rem', fontSize:'0.78rem', color:'#9ca3af' }}>
+              Need help?{' '}
+              <button
+                onClick={() => setShowSupport(true)}
+                style={{ color:GOLD, background:'none', border:'none', fontWeight:'600', cursor:'pointer', fontSize:'0.78rem', padding:0, fontFamily:'inherit' }}
+              >
+                Contact Support
+              </button>
             </div>
-          )}
+          </div>
+        )}
 
-        </div>
+        {/* ── Modals ── */}
+        {showForgot && <ForgotModal onClose={() => setShowForgot(false)} />}
+        {showSupport && <SupportModal onClose={() => setShowSupport(false)} />}
 
       </div>
+
+      {/* Global fade animation */}
+      <style>{`
+        @keyframes fadeIn { from { opacity:0; transform:translateY(7px); } to { opacity:1; transform:translateY(0); } }
+        * { box-sizing: border-box; }
+        input::placeholder { color: #b0b8c4; }
+      `}</style>
     </div>
   );
 }
