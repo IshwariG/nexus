@@ -61,13 +61,15 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
     }
   }
 
-  // Ensure all units for Phase 2 (floors 6-10) are AVAILABLE to show "all green"
-  projectUnits = projectUnits.map(u => {
-    if (parseInt(u.floor) >= 6) {
-      return { ...u, status: 'AVAILABLE', tag_color: '' };
-    }
-    return u;
-  });
+  // Ensure all units for Phase 2 (floors 6-10) are AVAILABLE to show "all green" for simulated projects
+  if (project !== 'vanya-residences') {
+    projectUnits = projectUnits.map(u => {
+      if (parseInt(u.floor) >= 6) {
+        return { ...u, status: 'AVAILABLE', tag_color: '' };
+      }
+      return u;
+    });
+  }
 
   const handleCellClick = (unitId) => {
     // Look for client details in the Inquiries side-channel
@@ -177,6 +179,140 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
     return buckets.map((b) => ({ label: b.label, value: b.valueLakhs / 100 }));
   }, [buyers, velocityRange]);
 
+  const realAvgPriceLakhs = useMemo(() => {
+    const prices = projectUnits.map(u => parseAmountVal(u.price)).filter(p => p > 0);
+    return prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : 0;
+  }, [projectUnits]);
+
+  const realTotalPortfolioLakhs = useMemo(() => {
+    return projectUnits.map(u => parseAmountVal(u.price)).reduce((a, b) => a + b, 0);
+  }, [projectUnits]);
+
+  const realTotalRevenueLakhs = useMemo(() => {
+    return (buyers || []).map(b => parseAmountVal(b.amount_paid)).reduce((a, b) => a + b, 0);
+  }, [buyers]);
+
+  const realConversionRate = useMemo(() => {
+    const totalLeads = inquiries.filter(inq => !inq.source?.startsWith('UNIT_ASSIGNMENT_')).length;
+    const soldCount = projectUnits.filter(u => u.status === 'SOLD OUT').length;
+    return totalLeads > 0 ? parseFloat(((soldCount / totalLeads) * 100).toFixed(1)) : 0;
+  }, [projectUnits, inquiries]);
+
+  const realSalesCycle = useMemo(() => {
+    if (!buyers || buyers.length === 0) return 0;
+    const cycles = buyers.map(b => {
+      const buyerDate = new Date(b.created_at || new Date());
+      let matchingInq = inquiries.find(inq => 
+        inq.name && b.username && 
+        inq.name.toLowerCase().replace(/\s+/g, '') === b.username.toLowerCase().replace(/\s+/g, '')
+      );
+      if (!matchingInq && b.unit_id) {
+        const assignInq = inquiries.find(inq => inq.source === `UNIT_ASSIGNMENT_${b.unit_id}`);
+        if (assignInq && assignInq.name) {
+          matchingInq = inquiries.find(inq => 
+            inq.name && !inq.source?.startsWith('UNIT_ASSIGNMENT_') &&
+            inq.name.toLowerCase().trim() === assignInq.name.toLowerCase().trim()
+          );
+        }
+      }
+      if (matchingInq) {
+        const inqDate = new Date(matchingInq.created_at);
+        return Math.max(1, Math.round((buyerDate - inqDate) / (1000 * 60 * 60 * 24)));
+      }
+      return 0;
+    }).filter(c => c > 0);
+    return cycles.length > 0 ? Math.round(cycles.reduce((a, b) => a + b, 0) / cycles.length) : 0;
+  }, [buyers, inquiries]);
+
+  const portfolioIncreasePerc = useMemo(() => {
+    if (project !== 'vanya-residences') {
+      return project === 'vanya-estate' ? 18.4 : 21.0;
+    }
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    let recentVal = 0;
+    let olderVal = 0;
+    projectUnits.forEach(u => {
+      const price = parseAmountVal(u.price);
+      const date = u.created_at ? new Date(u.created_at) : null;
+      if (date && date >= thirtyDaysAgo) {
+        recentVal += price;
+      } else {
+        olderVal += price;
+      }
+    });
+    if (olderVal > 0 && recentVal > 0) {
+      return parseFloat(((recentVal / olderVal) * 100).toFixed(1));
+    }
+    return 15.2; // default fallback
+  }, [projectUnits, project]);
+
+  const revenueIncreasePerc = useMemo(() => {
+    if (project !== 'vanya-residences') {
+      return project === 'vanya-estate' ? 8.5 : 5.2;
+    }
+    const now = new Date();
+    const currentQuarterStart = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+    const prevQuarterStart = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
+    let currentQuarterRevenue = 0;
+    let prevQuarterRevenue = 0;
+    (buyers || []).forEach(b => {
+      const amt = parseAmountVal(b.amount_paid);
+      const date = b.created_at ? new Date(b.created_at) : null;
+      if (!date || isNaN(date.getTime())) return;
+      if (date >= currentQuarterStart && date <= now) {
+        currentQuarterRevenue += amt;
+      } else if (date >= prevQuarterStart && date < currentQuarterStart) {
+        prevQuarterRevenue += amt;
+      }
+    });
+    if (prevQuarterRevenue > 0) {
+      return parseFloat(((currentQuarterRevenue - prevQuarterRevenue) / prevQuarterRevenue * 100).toFixed(1));
+    } else if (currentQuarterRevenue > 0) {
+      return 100.0;
+    }
+    return 12.4; // default fallback
+  }, [buyers, project]);
+
+  const salesCycleImprovement = useMemo(() => {
+    if (project !== 'vanya-residences') {
+      return project === 'vanya-estate' ? -2 : 0;
+    }
+    if (!buyers || buyers.length === 0) return -4;
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const getAvgCycle = (filterFn) => {
+      const cycles = buyers.filter(filterFn).map(b => {
+        let matchingInq = inquiries.find(inq => 
+          inq.name && b.username && 
+          inq.name.toLowerCase().replace(/\s+/g, '') === b.username.toLowerCase().replace(/\s+/g, '')
+        );
+        if (!matchingInq && b.unit_id) {
+          const assignInq = inquiries.find(inq => inq.source === `UNIT_ASSIGNMENT_${b.unit_id}`);
+          if (assignInq && assignInq.name) {
+            matchingInq = inquiries.find(inq => 
+              inq.name && !inq.source?.startsWith('UNIT_ASSIGNMENT_') &&
+              inq.name.toLowerCase().trim() === assignInq.name.toLowerCase().trim()
+            );
+          }
+        }
+        if (matchingInq) {
+          const buyerDate = new Date(b.created_at || new Date());
+          const inqDate = new Date(matchingInq.created_at);
+          return Math.max(1, Math.round((buyerDate - inqDate) / (1000 * 60 * 60 * 24)));
+        }
+        return 0;
+      }).filter(c => c > 0);
+      return cycles.length > 0 ? cycles.reduce((a, b) => a + b, 0) / cycles.length : 0;
+    };
+    const recentAvg = getAvgCycle(b => b.created_at && new Date(b.created_at) >= thirtyDaysAgo);
+    const olderAvg = getAvgCycle(b => !b.created_at || new Date(b.created_at) < thirtyDaysAgo);
+    if (recentAvg > 0 && olderAvg > 0) {
+      return Math.round(recentAvg - olderAvg);
+    }
+    return -4; // default fallback
+  }, [buyers, inquiries, project]);
+
   return (
     <>
       {/* Analytical Performance Report */}
@@ -194,10 +330,15 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
           const pReservedPerc = Math.round((reservedUnits / totalUnits) * 100);
           const pAvailablePerc = Math.max(0, 100 - pSoldPerc - pReservedPerc);
 
-          const pAvgPriceLakhs = project === 'vanya-estate' ? 650 : project === 'vanya-meadows' ? 820 : 480;
-          const pTotalPortfolioLakhs = project === 'vanya-estate' ? 65000 : project === 'vanya-meadows' ? 65600 : 45000;
-          const pTotalRevenueLakhs = project === 'vanya-estate' ? 9750 : project === 'vanya-meadows' ? 4100 : 18050;
-          const pConversionRate = project === 'vanya-estate' ? 18.2 : project === 'vanya-meadows' ? 12.4 : 28.4;
+          const projectSoldUnitsCount = projectUnits.filter(u => u.status === 'SOLD OUT').length;
+          const projectUnitsCount = projectUnits.length || 1;
+          const projectSoldPerc = Math.round((projectSoldUnitsCount / projectUnitsCount) * 100);
+
+          const pAvgPriceLakhs = project === 'vanya-estate' ? 650 : project === 'vanya-meadows' ? 820 : realAvgPriceLakhs;
+          const pTotalPortfolioLakhs = project === 'vanya-estate' ? 65000 : project === 'vanya-meadows' ? 65600 : realTotalPortfolioLakhs;
+          const pTotalRevenueLakhs = project === 'vanya-estate' ? 9750 : project === 'vanya-meadows' ? 4100 : realTotalRevenueLakhs;
+          const pConversionRate = project === 'vanya-estate' ? 18.2 : project === 'vanya-meadows' ? 12.4 : realConversionRate;
+          const pAvgSalesCycle = project === 'vanya-estate' ? 32 : project === 'vanya-meadows' ? 45 : (realSalesCycle > 0 ? realSalesCycle : 24);
           
           const formatCr = (lakhs) => lakhs >= 100 ? `${(lakhs / 100).toFixed(1)} Cr` : `${lakhs.toFixed(0)} L`;
           
@@ -356,7 +497,7 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
                       </div>
                       <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629', fontWeight: 'bold' }}>₹ {formatCr(pTotalPortfolioLakhs)}</h3>
                     </div>
-                    <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700', marginTop: '0.3rem', marginLeft: '0.1rem' }}>↑ +{project === 'vanya-estate' ? '18.4' : project === 'vanya-meadows' ? '21.0' : '15.2'}% INCREASE</span>
+                    <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700', marginTop: '0.3rem', marginLeft: '0.1rem' }}>↑ +{project === 'vanya-estate' ? '18.4' : project === 'vanya-meadows' ? '21.0' : portfolioIncreasePerc.toFixed(1)}% INCREASE</span>
                   </div>
                   <div className="widget-card" style={{ padding: '1.25rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px' }}>
                     <span style={{ fontSize: '0.68rem', fontWeight: '700', color: '#4b5563', letterSpacing: '0.5px', marginBottom: '0.4rem' }}>CONVERSION RATE</span>
@@ -386,7 +527,7 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
                     <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>₹ {formatCr(pTotalRevenueLakhs)}</h3>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' }}>
-                    <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700' }}>↑ +{project === 'vanya-estate' ? '8.5' : project === 'vanya-meadows' ? '5.2' : '12.4'}% VS LAST QUARTER</span>
+                    <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700' }}>↑ +{project === 'vanya-estate' ? '8.5' : project === 'vanya-meadows' ? '5.2' : revenueIncreasePerc.toFixed(1)}% VS LAST QUARTER</span>
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M9 21v-6h6v6" />
                     </svg>
@@ -401,16 +542,16 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
                         <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
                       </svg>
                     </div>
-                    <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>{soldUnits} <span style={{ fontSize: '1.05rem', color: '#9ca3af', fontWeight: 'normal' }}>/ {totalUnits}</span></h3>
+                    <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>{projectSoldUnitsCount} <span style={{ fontSize: '1.05rem', color: '#9ca3af', fontWeight: 'normal' }}>/ {projectUnitsCount}</span></h3>
                   </div>
                   <div style={{ marginTop: '1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                      <div style={{ background: '#137333', color: 'white', fontSize: '0.58rem', fontWeight: '700', padding: '2px 8px', borderRadius: '4px' }}>{pSoldPerc}%</div>
+                      <div style={{ background: '#137333', color: 'white', fontSize: '0.58rem', fontWeight: '700', padding: '2px 8px', borderRadius: '4px' }}>{projectSoldPerc}%</div>
                       <div style={{ flex: 1, height: '8px', background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${pSoldPerc}%`, background: 'linear-gradient(90deg, #137333, #2d7c5f)', borderRadius: '4px', transition: 'width 0.6s ease' }}></div>
+                        <div style={{ height: '100%', width: `${projectSoldPerc}%`, background: 'linear-gradient(90deg, #137333, #2d7c5f)', borderRadius: '4px', transition: 'width 0.6s ease' }}></div>
                       </div>
                     </div>
-                    <span style={{ fontSize: '0.62rem', color: '#6b7280', fontWeight: '600' }}>{pSoldPerc}% of Total Inventory Sold</span>
+                    <span style={{ fontSize: '0.62rem', color: '#6b7280', fontWeight: '600' }}>{projectSoldPerc}% of Total Inventory Sold</span>
                   </div>
                 </div>
 
@@ -422,10 +563,20 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
                         <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
                       </svg>
                     </div>
-                    <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>{project === 'vanya-estate' ? 32 : project === 'vanya-meadows' ? 45 : 24} Days</h3>
+                    <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>{pAvgSalesCycle} Days</h3>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' }}>
-                    <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700' }}>{project === 'vanya-meadows' ? '◷ STABLE VELOCITY' : `↓ -${project === 'vanya-estate' ? 2 : 4} DAYS IMPROVEMENT`}</span>
+                    <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700' }}>
+                      {project === 'vanya-meadows' ? (
+                        '◷ STABLE VELOCITY'
+                      ) : salesCycleImprovement === 0 ? (
+                        '◷ STABLE VELOCITY'
+                      ) : salesCycleImprovement < 0 ? (
+                        `↓ -${Math.abs(salesCycleImprovement)} DAYS IMPROVEMENT`
+                      ) : (
+                        `↑ +${salesCycleImprovement} DAYS INCREASE`
+                      )}
+                    </span>
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
                     </svg>
