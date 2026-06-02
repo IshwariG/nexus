@@ -477,7 +477,6 @@ export default function ChannelPartnerClient({ username }) {
             <h1 className="serif" style={{ fontSize: '1.35rem', margin: 0, color: 'var(--vanya-green)' }}>Welcome back, Partner! 👋</h1>
             <p className="text-muted" style={{ margin: 0, fontSize: '0.68rem', letterSpacing: '0.5px' }}>PARTNER CODE: {username.toUpperCase()} • BASE COMM RATE: {cpDetails.commission_rate}%</p>
           </div>
-          <button className="btn-dark" onClick={fetchData}>REFRESH TELEMETRY</button>
         </header>
 
         {error && (

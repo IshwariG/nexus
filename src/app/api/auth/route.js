@@ -27,6 +27,10 @@ export async function POST(request) {
        return NextResponse.json({ success: false, error: 'User ID not found in database.' }, { status: 401 });
     }
 
+    if (user.is_active === false) {
+      return NextResponse.json({ success: false, error: 'Your account has been deactivated. Please contact the administrator.' }, { status: 403 });
+    }
+
     if (user.password === password) {
       const cookieStore = await cookies();
       cookieStore.set('user_role', user.role, { path: '/' });

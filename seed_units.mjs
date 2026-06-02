@@ -36,7 +36,7 @@ async function seed() {
       units.push({
         unit_id: unitId.toString(),
         floor: lvl.toString(),
-        type: '4BHK PENTHOUSE',
+        type: '3BHK PENTHOUSE',
         area: '5400',
         price: '₹ 14.25 Cr',
         status: 'AVAILABLE',

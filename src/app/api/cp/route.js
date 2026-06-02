@@ -61,7 +61,7 @@ export async function GET(request) {
     // 5. Fetch Sales users for name lookup
     const { data: allUsers } = await supabase
       .from('Users')
-      .select('username, full_name, employee_id, role, phone')
+      .select('username, full_name, employee_id, role, phone, is_active')
       .eq('role', 'Sales');
 
     // 5. Compute Stats
@@ -110,39 +110,29 @@ export async function DELETE(request) {
   try {
     const { searchParams } = new URL(request.url);
     const username = searchParams.get('username');
+    const action = searchParams.get('action') || 'deactivate';
 
     if (!username) {
       return NextResponse.json({ success: false, error: 'Username is required' }, { status: 400 });
     }
 
-    // 1. Get the CP Profile to get the id (useful to clean up payouts and commissions)
-    const { data: cp } = await supabase
-      .from('CP_Partners')
-      .select('id')
-      .eq('username', username)
-      .maybeSingle();
+    const targetActive = action === 'activate';
 
-    if (cp) {
-      // Delete payouts and commissions referencing cp.id to prevent FK constraint failures
-      await supabase.from('Payouts').delete().eq('cp_id', cp.id);
-      await supabase.from('Commissions').delete().eq('cp_id', cp.id);
-    }
-
-    // 2. Delete CP Partner profile
+    // 1. Soft-delete/reactivate CP Partner profile
     const { error: profileError } = await supabase
       .from('CP_Partners')
-      .delete()
+      .update({ is_active: targetActive })
       .eq('username', username);
     if (profileError) throw profileError;
 
-    // 3. Delete from Users
+    // 2. Soft-delete/reactivate CP user account
     const { error: userError } = await supabase
       .from('Users')
-      .delete()
+      .update({ is_active: targetActive })
       .eq('username', username);
     if (userError) throw userError;
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, message: `Channel Partner ${targetActive ? 'activated' : 'deactivated'} successfully` });
   } catch (error) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

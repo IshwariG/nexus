@@ -181,8 +181,8 @@ export default function InquiryPipelineClient({
     // Pre-select assigned representative or default
     const repId = inq.status && inq.status.includes('|') ? inq.status.split('|')[1] : '';
     
-    // Determine the list of valid sales representatives dynamically
-    const salesReps = allUsers.filter(u => u.role === 'Sales');
+    // Determine the list of valid sales representatives dynamically (active only)
+    const salesReps = allUsers.filter(u => u.role === 'Sales' && u.is_active !== false);
     const dropdownList = salesReps.length > 0 
       ? salesReps.map(r => ({ id: r.employee_id || r.username, name: r.full_name || r.username }))
       : Object.keys(salesmenMap).map(k => ({ id: k, name: salesmenMap[k].name }));
@@ -250,54 +250,102 @@ export default function InquiryPipelineClient({
         icon: '👣'
       });
     }
-    
+    // Calculate a base timestamp for closing events to ensure they always sort at the end.
+    let maxTime = new Date(inq.created_at).getTime();
+    if (isNaN(maxTime)) {
+      maxTime = Date.now();
+    }
+    events.forEach(ev => {
+      const t = new Date(ev.timestamp).getTime();
+      if (!isNaN(t) && t > maxTime) {
+        maxTime = t;
+      }
+    });
+
+    const statusTimestamp = new Date(maxTime + 1000).toISOString();
+
     // 5. Booking purchase check (matched by phone, email or username)
-    const buyer = buyers.find(b => {
+    const cleanPhone = (ph) => {
+      if (!ph) return '';
+      return String(ph).replace(/\D/g, '').slice(-10);
+    };
+
+    const getUnitIdFromInquiry = (inquiry) => {
+      const match = (inquiry.message || '').match(/Unit V-(\w+)/i) || (inquiry.message || '').match(/Unit (\w+)/i) || (inquiry.message || '').match(/unit (\w+)/i);
+      if (match) return match[1];
+      if ((inquiry.source || '').startsWith('UNIT_ASSIGNMENT_')) {
+        return inquiry.source.replace('UNIT_ASSIGNMENT_', '');
+      }
+      return null;
+    };
+
+    const inqUnitId = getUnitIdFromInquiry(inq);
+
+    const matchedBuyers = buyers.filter(b => {
+      if (inqUnitId && String(b.unit_id) === String(inqUnitId)) {
+        return true;
+      }
+      
       const user = (allUsers || []).find(u => u.username === b.username);
-      if (user && user.phone && inq.phone && user.phone.trim() === inq.phone.trim()) {
+      
+      if (user && user.phone && inq.phone && cleanPhone(user.phone) === cleanPhone(inq.phone)) {
         return true;
       }
       if (user && user.email && inq.email && user.email.toLowerCase().trim() === inq.email.toLowerCase().trim()) {
         return true;
       }
-      if (b.username && inq.name && (
-        b.username.toLowerCase().trim() === inq.email?.toLowerCase().trim() ||
-        b.username.toLowerCase().replace(/\s+/g, '') === inq.name.toLowerCase().replace(/\s+/g, '')
-      )) {
+      if (b.username && inq.phone && cleanPhone(b.username) === cleanPhone(inq.phone)) {
+        return true;
+      }
+      if (b.username && inq.email && b.username.toLowerCase().trim() === inq.email.toLowerCase().trim()) {
+        return true;
+      }
+      if (b.username && inq.name && b.username.toLowerCase().replace(/\s+/g, '') === inq.name.toLowerCase().replace(/\s+/g, '')) {
+        return true;
+      }
+      if (user && user.full_name && inq.name && user.full_name.toLowerCase().replace(/\s+/g, '') === inq.name.toLowerCase().replace(/\s+/g, '')) {
         return true;
       }
       return false;
     });
 
-    if (buyer) {
-      const formattedPossession = buyer.possession_date 
-        ? new Date(buyer.possession_date).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })
-        : 'December 2027';
+    const statusText = inq.status ? inq.status.split('|')[0].toUpperCase() : 'NEW';
+    const isConverted = ['CONVERTED', 'BOOKED'].includes(statusText);
 
+    if (matchedBuyers.length > 0) {
+      matchedBuyers.forEach((buyer, bIdx) => {
+        const formattedPossession = buyer.possession_date 
+          ? new Date(buyer.possession_date).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })
+          : 'December 2027';
+
+        const descText = `Contract booking registered for ₹ ${buyer.total_amount} Cr. Paid to date: ₹ ${buyer.amount_paid} Cr. Possession estimate: ${formattedPossession}`;
+
+        let bookingTimeMs = buyer.created_at ? new Date(buyer.created_at).getTime() : null;
+        if (!bookingTimeMs || bookingTimeMs <= maxTime) {
+          bookingTimeMs = maxTime + 2000 + (bIdx * 100);
+        }
+
+        events.push({
+          type: 'booking',
+          title: `Flat Purchase Finalized: Unit ${buyer.unit_id}`,
+          description: descText,
+          timestamp: new Date(bookingTimeMs).toISOString(),
+          icon: '🖋️'
+        });
+      });
+    } else if (isConverted) {
+      const unitText = inqUnitId ? `Unit ${inqUnitId}` : 'Flat/Property';
       events.push({
         type: 'booking',
-        title: `Flat Purchase Finalized: Unit ${buyer.unit_id}`,
-        description: `Contract booking registered for ₹ ${buyer.total_amount} Cr. Paid to date: ₹ ${buyer.amount_paid} Cr. Possession estimate: ${formattedPossession}`,
-        timestamp: buyer.created_at,
+        title: `Flat Purchase Finalized: ${unitText}`,
+        description: `Flat purchase confirmed & logged in conversion records.`,
+        timestamp: new Date(maxTime + 2000).toISOString(),
         icon: '🖋️'
       });
     }
     
     // 6. Current Pipeline Status Event (if not NEW)
-    const statusText = inq.status ? inq.status.split('|')[0].toUpperCase() : 'NEW';
     if (statusText !== 'NEW' && statusText !== 'UNASSIGNED') {
-      // Find the maximum timestamp of the other events so far
-      let maxTime = new Date(inq.created_at).getTime();
-      events.forEach(ev => {
-        const t = new Date(ev.timestamp).getTime();
-        if (t > maxTime) {
-          maxTime = t;
-        }
-      });
-      
-      // Status update event timestamp is 1 second after the latest event so far
-      const statusTimestamp = new Date(maxTime + 1000).toISOString();
-      
       if (statusText === 'LOST') {
         events.push({
           type: 'status_change',
@@ -395,8 +443,8 @@ export default function InquiryPipelineClient({
     document.body.removeChild(link);
   };
 
-  // Dynamically load representatives
-  const salesReps = allUsers.filter(u => u.role === 'Sales');
+  // Dynamically load representatives (active only)
+  const salesReps = allUsers.filter(u => u.role === 'Sales' && u.is_active !== false);
   const repsDropdownList = salesReps.length > 0 
     ? salesReps.map(r => ({ id: r.employee_id || r.username, name: r.full_name || r.username }))
     : Object.keys(salesmenMap).map(k => ({ id: k, name: salesmenMap[k].name }));

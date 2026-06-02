@@ -973,8 +973,9 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
   }, 0);
   const overdueAmountFormatted = formatIndianCurrency(totalOverdueLakhs);
 
-  const handleDeleteUser = async (username, role) => {
-    if (!confirm(`Are you sure you want to delete the user "${username}"?`)) return;
+  const handleDeleteUser = async (username, role, action = 'deactivate') => {
+    const verb = action === 'activate' ? 'reactivate' : 'deactivate';
+    if (!confirm(`Are you sure you want to ${verb} the user "${username}"?`)) return;
     
     try {
       let res;
@@ -982,22 +983,26 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
         res = await fetch(`/api/buyers?username=${username}`, {
           method: 'DELETE'
         });
+      } else if (role === 'Sales') {
+        res = await fetch(`/api/sales?username=${username}&action=${action}`, {
+          method: 'DELETE'
+        });
       } else {
-        res = await fetch(`/api/cp?username=${username}`, {
+        res = await fetch(`/api/cp?username=${username}&action=${action}`, {
           method: 'DELETE'
         });
       }
       
       const data = await res.json();
       if (data.success) {
-        alert(`User "${username}" deleted successfully!`);
+        alert(`User "${username}" ${verb}d successfully!`);
         router.refresh();
         setTimeout(() => window.location.reload(), 300);
       } else {
-        alert(data.error || 'Failed to delete user.');
+        alert(data.error || `Failed to ${verb} user.`);
       }
     } catch (err) {
-      alert('Error deleting user: ' + err.message);
+      alert(`Error trying to ${verb} user: ` + err.message);
     }
   };
 
@@ -2098,20 +2103,27 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                         name: resolvedName,
                         title: resolvedTitle,
                         id: exec.username,
-                        revenue: mockFallback ? mockFallback.revenue : '0.00' // Use mock revenue if available
+                        revenue: mockFallback ? mockFallback.revenue : '0.00', // Use mock revenue if available
+                        isActive: exec.is_active !== false
                       };
                     });
                     
                     const combinedExecs = [...realExecs, ...mockExecs].filter((exec, index, self) => 
                       index === self.findIndex((t) => t.id === exec.id)
-                    );
+                    ).map(exec => {
+                      const dbUser = allUsers.find(u => u.username === exec.id);
+                      return {
+                        ...exec,
+                        isActive: dbUser ? dbUser.is_active !== false : (exec.isActive !== false)
+                      };
+                    });
 
                     return combinedExecs.map((exec, idx) => (
-                      <div key={exec.id || idx} style={{ background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', transition: 'box-shadow 0.2s' }}>
-                        <div style={{ width: '64px', height: '64px', borderRadius: '50%', border: '2px solid var(--vanya-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.75rem' }}>
-                          <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--vanya-green)' }}>{exec.initials}</span>
+                      <div key={exec.id || idx} style={{ background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', opacity: exec.isActive ? 1 : 0.6, transition: 'box-shadow 0.2s' }}>
+                        <div style={{ width: '64px', height: '64px', borderRadius: '50%', border: exec.isActive ? '2px solid var(--vanya-green)' : '2px solid #9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.75rem' }}>
+                          <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: exec.isActive ? 'var(--vanya-green)' : '#9ca3af' }}>{exec.initials}</span>
                         </div>
-                        <strong style={{ fontSize: '0.78rem', color: 'var(--vanya-green)', letterSpacing: '0.5px' }}>{exec.name}</strong>
+                        <strong style={{ fontSize: '0.78rem', color: exec.isActive ? 'var(--vanya-green)' : '#6b7280', letterSpacing: '0.5px' }}>{exec.name} {exec.isActive === false && ' (Inactive)'}</strong>
                         <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: '600', letterSpacing: '0.5px', marginTop: '2px', marginBottom: '1rem' }}>{exec.title}</span>
                         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', marginBottom: '1rem' }}>
                           <span style={{ fontSize: '0.65rem', color: '#6b7280', fontWeight: '600' }}>REVENUE</span>
@@ -2226,11 +2238,31 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                   style={{ padding: '4px 8px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid #ccc' }}
                                 >
                                   <option value="unassigned">Select Rep...</option>
-                                  <option value="SR-9999">Vikram Sethi (SR-9999)</option>
-                                  <option value="SR-1111">Ananya Rao (SR-1111)</option>
-                                  <option value="SR-2222">Rahul Verma (SR-2222)</option>
-                                  <option value="SR-3333">Sneha Patil (SR-3333)</option>
-                                  <option value="SR-4444">Aditya Sharma (SR-4444)</option>
+                                  {(() => {
+                                    const mockExecs = [
+                                      { username: 'SR-9999', full_name: 'Vikram Sethi' },
+                                      { username: 'SR-1111', full_name: 'Ananya Rao' },
+                                      { username: 'SR-2222', full_name: 'Rahul Verma' },
+                                      { username: 'SR-3333', full_name: 'Sneha Patil' },
+                                      { username: 'SR-4444', full_name: 'Aditya Sharma' }
+                                    ];
+                                    const salesUsers = allUsers.filter(u => u.role === 'Sales' && u.is_active !== false);
+                                    const combined = [...salesUsers];
+                                    mockExecs.forEach(m => {
+                                      if (!combined.some(c => c.username === m.username)) {
+                                        combined.push({ username: m.username, role: 'Sales', full_name: m.full_name });
+                                      }
+                                    });
+                                    const filteredCombined = combined.filter(c => {
+                                      const dbUser = allUsers.find(u => u.username === c.username);
+                                      return dbUser ? dbUser.is_active !== false : true;
+                                    });
+                                    return filteredCombined.map(c => (
+                                      <option key={c.username} value={c.username}>
+                                        {c.full_name || c.username} ({c.username})
+                                      </option>
+                                    ));
+                                  })()}
                                 </select>
                                 <button onClick={() => handleAssignLead(inq.id, leadAssignState.salesmanId)} className="btn-dark" style={{ padding: '4px 10px', fontSize: '0.65rem' }}>ALLOCATE</button>
                               </div>
@@ -2554,44 +2586,85 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                 </thead>
                 <tbody>
                   {/* Salesmen list */}
-                  {allUsers.filter(u => u.role === 'Sales').map((s, idx) => (
-                    <tr key={`sales-${idx}`}>
-                      <td><strong>{s.username}</strong></td>
-                      <td><span className="source-pill" style={{ color: '#137333', background: '#e6f4ea' }}>Sales Executive</span></td>
-                      <td style={{ fontStyle: 'italic', fontSize: '0.75rem', color: '#9ca3af' }}>{s.full_name ? `Name: ${s.full_name}` : 'Sales Portal Access'}</td>
-                      <td><span className="badge available">Active Portal</span></td>
-                      <td>
-                        <button 
-                          onClick={() => handleDeleteUser(s.username, 'Sales')}
-                          style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '0.35rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 'bold', transition: 'all 0.2s' }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = '#fecaca'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
-                        >
-                          ❌ Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {allUsers.filter(u => u.role === 'Sales').map((s, idx) => {
+                    const isActive = s.is_active !== false;
+                    return (
+                      <tr key={`sales-${idx}`}>
+                        <td><strong>{s.username}</strong></td>
+                        <td><span className="source-pill" style={{ color: '#137333', background: '#e6f4ea' }}>Sales Executive</span></td>
+                        <td style={{ fontStyle: 'italic', fontSize: '0.75rem', color: '#9ca3af' }}>{s.full_name ? `Name: ${s.full_name}` : 'Sales Portal Access'}</td>
+                        <td>
+                          {isActive ? (
+                            <span className="badge available">Active Portal</span>
+                          ) : (
+                            <span className="badge sold" style={{ background: '#f3f4f6', color: '#6b7280', border: '1px solid #d1d5db' }}>Deactivated</span>
+                          )}
+                        </td>
+                        <td>
+                          {isActive ? (
+                            <button 
+                              onClick={() => handleDeleteUser(s.username, 'Sales', 'deactivate')}
+                              style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '0.35rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 'bold', transition: 'all 0.2s' }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#fecaca'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
+                            >
+                              ❌ Deactivate
+                            </button>
+                          ) : (
+                            <button 
+                              onClick={() => handleDeleteUser(s.username, 'Sales', 'activate')}
+                              style={{ background: '#e6f4ea', color: '#137333', border: 'none', padding: '0.35rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 'bold', transition: 'all 0.2s' }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#c2e7c9'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#e6f4ea'}
+                            >
+                              ✅ Reactivate
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
 
                   {/* Channel Partners list */}
-                  {cpPartners.map((cp, idx) => (
-                    <tr key={`cp-${idx}`}>
-                      <td><strong>{cp.username}</strong></td>
-                      <td><span className="source-pill" style={{ color: 'var(--vanya-gold)', background: '#fdf5e6' }}>Channel Partner</span></td>
-                      <td style={{ fontStyle: 'italic', fontSize: '0.75rem', color: '#9ca3af' }}>Firm: {cp.firm_name}</td>
-                      <td><span className="badge available">Active Portal</span></td>
-                      <td>
-                        <button 
-                          onClick={() => handleDeleteUser(cp.username, 'ChannelPartner')}
-                          style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '0.35rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 'bold', transition: 'all 0.2s' }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = '#fecaca'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
-                        >
-                          ❌ Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {cpPartners.map((cp, idx) => {
+                    const cpUser = allUsers.find(u => u.username === cp.username);
+                    const isActive = cpUser ? cpUser.is_active !== false : cp.is_active !== false;
+                    return (
+                      <tr key={`cp-${idx}`}>
+                        <td><strong>{cp.username}</strong></td>
+                        <td><span className="source-pill" style={{ color: 'var(--vanya-gold)', background: '#fdf5e6' }}>Channel Partner</span></td>
+                        <td style={{ fontStyle: 'italic', fontSize: '0.75rem', color: '#9ca3af' }}>Firm: {cp.firm_name}</td>
+                        <td>
+                          {isActive ? (
+                            <span className="badge available">Active Portal</span>
+                          ) : (
+                            <span className="badge sold" style={{ background: '#f3f4f6', color: '#6b7280', border: '1px solid #d1d5db' }}>Deactivated</span>
+                          )}
+                        </td>
+                        <td>
+                          {isActive ? (
+                            <button 
+                              onClick={() => handleDeleteUser(cp.username, 'ChannelPartner', 'deactivate')}
+                              style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '0.35rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 'bold', transition: 'all 0.2s' }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#fecaca'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
+                            >
+                              ❌ Deactivate
+                            </button>
+                          ) : (
+                            <button 
+                              onClick={() => handleDeleteUser(cp.username, 'ChannelPartner', 'activate')}
+                              style={{ background: '#e6f4ea', color: '#137333', border: 'none', padding: '0.35rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 'bold', transition: 'all 0.2s' }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#c2e7c9'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#e6f4ea'}
+                            >
+                              ✅ Reactivate
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
 
                   {/* Buyers list */}
                   {buyers.map((b, idx) => (

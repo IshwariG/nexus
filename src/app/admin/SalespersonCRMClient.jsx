@@ -113,7 +113,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
       if (tab) setActiveTabState(tab);
       
       const leadId = params.get('leadId');
-      if (leadId) setSelectedLeadIdState(parseInt(leadId));
+      if (leadId) setSelectedLeadIdState(leadId);
     }
   }, []);
 
@@ -215,7 +215,10 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
     totalAmount: '',
     amountPaid: '',
     possessionDate: '2027-12-31',
-    progress: '72'
+    progress: '72',
+    email: '',
+    phone: '',
+    aadhaar: ''
   });
 
   // Calendar state
@@ -428,7 +431,10 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
         password: 'password123',
         totalAmount: '₹ 4.80 Cr',
         amountPaid: '₹ 1.20 Cr',
-        unitId: ''
+        unitId: '',
+        email: lead ? lead.email || '' : '',
+        phone: lead ? lead.phone || '' : '',
+        aadhaar: lead ? lead.aadhaar || '' : ''
       }));
       setIsCloseDealModalOpen(true);
       return;
@@ -459,6 +465,8 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
       return;
     }
     try {
+      const closingLead = inquiries.find(i => i.id === closeDealLeadId);
+
       // 1. Create the Buyer portal login & Details, mark unit as SOLD OUT
       const resBuyer = await fetch('/api/buyers', {
         method: 'POST',
@@ -467,6 +475,9 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
           username: closeDealForm.username,
           password: closeDealForm.password,
           role: 'Buyer',
+          email: closeDealForm.email,
+          phone: closeDealForm.phone,
+          full_name: closingLead?.name || closeDealForm.username,
           unit_id: closeDealForm.unitId,
           total_amount: closeDealForm.totalAmount,
           amount_paid: closeDealForm.amountPaid,
@@ -482,12 +493,12 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
 
       // 2. Update Inquiry status to CONVERTED
       const finalStatus = `CONVERTED|${userId}`;
-      const closingLead = myInquiries.find(i => i.id === closeDealLeadId);
       const resInquiry = await fetch(`/api/inquiries?id=${closeDealLeadId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           status: finalStatus,
+          aadhaar: closeDealForm.aadhaar,
           message: `Closed Deal on Unit V-${closeDealForm.unitId}. Price: ${closeDealForm.totalAmount}. Paid: ${closeDealForm.amountPaid}.`
         })
       });
@@ -496,14 +507,15 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
       if (dataInquiry.success) {
         // 3. Trigger CP commission check — POST a UNIT_ASSIGNMENT_ inquiry so the
         //    commission auto-generation logic in /api/inquiries fires for this buyer's phone
-        if (closingLead?.phone) {
+        const checkPhone = closeDealForm.phone || closingLead?.phone;
+        if (checkPhone) {
           await fetch('/api/inquiries', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              name: closingLead.name || closeDealForm.username,
-              email: closingLead.email || '',
-              phone: closingLead.phone,
+              name: closingLead?.name || closeDealForm.username,
+              email: closeDealForm.email || closingLead?.email || '',
+              phone: checkPhone,
               source: `UNIT_ASSIGNMENT_${closeDealForm.unitId}`,
               status: `CONVERTED|${userId}`,
               message: `Commission trigger for unit ${closeDealForm.unitId}`
@@ -513,8 +525,11 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
 
         alert(`Deal closed successfully!\n\nBuyer login created:\nUsername: ${closeDealForm.username}\nPassword: ${closeDealForm.password}\nFlat V-${closeDealForm.unitId} is marked as SOLD OUT.`);
         setIsCloseDealModalOpen(false);
-        router.refresh();
-        setTimeout(() => window.location.reload(), 300);
+        if (typeof window !== 'undefined') {
+          window.location.href = window.location.pathname;
+        } else {
+          router.refresh();
+        }
       } else {
         alert(dataInquiry.error || 'Failed to update inquiry status.');
       }
@@ -2518,6 +2533,41 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                     style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }} 
                   />
                 </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>BUYER EMAIL ID</label>
+                  <input 
+                    type="email" 
+                    value={closeDealForm.email} 
+                    onChange={e => setCloseDealForm({ ...closeDealForm, email: e.target.value })} 
+                    style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }} 
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>BUYER PHONE NUMBER</label>
+                  <input 
+                    type="tel" 
+                    value={closeDealForm.phone} 
+                    onChange={e => setCloseDealForm({ ...closeDealForm, phone: e.target.value })} 
+                    style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }} 
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>BUYER AADHAAR CARD NUMBER</label>
+                <input 
+                  type="tel" 
+                  minLength="12" 
+                  maxLength="12" 
+                  pattern="[0-9]{12}" 
+                  title="Aadhaar number must be exactly 12 digits"
+                  value={closeDealForm.aadhaar} 
+                  onChange={e => setCloseDealForm({ ...closeDealForm, aadhaar: e.target.value.replace(/[^0-9]/g, '') })} 
+                  style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }} 
+                />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>

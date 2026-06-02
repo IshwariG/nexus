@@ -79,12 +79,21 @@ export default function GridClient({ units, inquiries, buyers = [], users = [], 
       // Find the user details from the Users table
       const user = (users || []).find(u => u.username === buyer.username);
       if (user) {
+        // Resolve Aadhaar from inquiries
+        const matchingInquiry = (inquiries || []).find(inq => 
+          (inq.phone && user.phone && inq.phone === user.phone) || 
+          (inq.email && user.email && inq.email.toLowerCase() === user.email.toLowerCase()) ||
+          (inq.name && user.full_name && inq.name.toLowerCase() === user.full_name.toLowerCase())
+        );
+        const resolvedAadhaar = matchingInquiry?.aadhaar || 'N/A';
+
         setSelectedClient({
           unitId,
           inquiry: {
             name: user.full_name || user.username,
             phone: user.phone || 'N/A',
             email: user.email || 'N/A',
+            aadhaar: resolvedAadhaar,
             message: `Registered Buyer Profile\nUsername: ${buyer.username}\nAmount Paid: ₹ ${buyer.amount_paid} Cr / ₹ ${buyer.total_amount} Cr\nConstruction Progress: ${buyer.construction_progress}%\nPossession Date: ${buyer.possession_date || 'N/A'}`
           }
         });
@@ -759,6 +768,12 @@ export default function GridClient({ units, inquiries, buyers = [], users = [], 
                 <div>
                   <strong style={{fontSize: '0.65rem', letterSpacing: '1px', color: '#888', display: 'block', marginBottom: '0.2rem'}}>EMAIL (IF PROVIDED)</strong>
                   <div>{selectedClient.inquiry.email}</div>
+                </div>
+              )}
+              {selectedClient.inquiry.aadhaar && selectedClient.inquiry.aadhaar !== 'N/A' && (
+                <div>
+                  <strong style={{fontSize: '0.65rem', letterSpacing: '1px', color: '#888', display: 'block', marginBottom: '0.2rem'}}>AADHAAR CARD NUMBER</strong>
+                  <div>{selectedClient.inquiry.aadhaar}</div>
                 </div>
               )}
               <div style={{background: 'var(--admin-bg)', padding: '1rem', border: '1px solid #eee', marginTop: '0.5rem'}}>

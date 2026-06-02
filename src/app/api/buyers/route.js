@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { username, password, role, phone, email, unit_id, total_amount, amount_paid, construction_progress, possession_date } = body;
+    const { username, password, role, phone, email, full_name, unit_id, total_amount, amount_paid, construction_progress, possession_date } = body;
     // Strip '%' sign and ensure construction_progress is stored as integer
     const progressInt = construction_progress !== undefined && construction_progress !== null
       ? parseInt(String(construction_progress).replace('%', ''), 10) || 0
@@ -54,7 +54,14 @@ export async function POST(request) {
     const { error: userError } = await supabase
       .from('Users')
       .insert([
-        { username, password, role, phone: phone ? phone.trim() : null, email: email ? email.trim() : null }
+        { 
+          username, 
+          password, 
+          role, 
+          phone: phone ? phone.trim() : null, 
+          email: email ? email.trim() : null,
+          full_name: full_name ? full_name.trim() : null
+        }
       ]);
 
     if (userError) {

@@ -258,35 +258,35 @@ export default function UnitDetailsPage({ params }) {
     <div className="unit-details-layout">
       {/* Sidebar */}
       <aside className="ud-sidebar">
-        <div className="admin-sidebar-logo" style={{padding: '2rem 1.5rem', borderBottom: '1px solid #e0dfd5'}}>
-          <h2 className="serif" style={{fontSize: '1.2rem', margin: 0, color: 'var(--vanya-green)'}}>VANYA</h2>
-          <p style={{fontSize: '0.6rem', color: '#888', margin: 0, letterSpacing: '1px'}}>HERITAGE COLLECTION</p>
+        <div className="admin-sidebar-logo" style={{padding: '2rem 1.5rem', borderBottom: '1px solid #2c2a27'}}>
+          <h2 className="serif" style={{fontSize: '1.2rem', margin: 0, color: 'var(--vanya-gold)'}}>VANYA</h2>
+          <p style={{fontSize: '0.6rem', color: '#8e8b82', margin: 0, letterSpacing: '1px'}}>HERITAGE COLLECTION</p>
         </div>
         <nav className="admin-nav" style={{flex: 1, paddingTop: '2rem'}}>
-          <Link href="/admin#overview" style={{padding: '1rem 1.5rem', display: 'block', color: '#555', textDecoration: 'none', fontSize: '0.85rem'}}>
+          <Link href="/admin#overview" style={{padding: '1rem 1.5rem', display: 'block', textDecoration: 'none', fontSize: '0.85rem'}}>
             <span style={{marginRight: '0.5rem'}}>📊</span> Dashboard
           </Link>
-          <Link href="/admin#portfolio" style={{padding: '1rem 1.5rem', display: 'block', color: '#555', textDecoration: 'none', fontSize: '0.85rem'}}>
+          <Link href="/admin#portfolio" style={{padding: '1rem 1.5rem', display: 'block', textDecoration: 'none', fontSize: '0.85rem'}}>
             <span style={{marginRight: '0.5rem'}}>🏢</span> Inventory
           </Link>
-          <Link href="/admin#leads" style={{padding: '1rem 1.5rem', display: 'block', color: '#555', textDecoration: 'none', fontSize: '0.85rem'}}>
+          <Link href="/admin#leads" style={{padding: '1rem 1.5rem', display: 'block', textDecoration: 'none', fontSize: '0.85rem'}}>
             <span style={{marginRight: '0.5rem'}}>👥</span> Leads
           </Link>
-          <Link href="/admin#analytics" style={{padding: '1rem 1.5rem', display: 'block', color: '#555', textDecoration: 'none', fontSize: '0.85rem'}}>
+          <Link href="/admin#analytics" style={{padding: '1rem 1.5rem', display: 'block', textDecoration: 'none', fontSize: '0.85rem'}}>
             <span style={{marginRight: '0.5rem'}}>📈</span> Analytics
           </Link>
         </nav>
         
-        <div style={{padding: '2rem 1.5rem'}}>
+        <div style={{padding: '2rem 1.5rem', borderTop: '1px solid #2c2a27'}}>
           <div style={{display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '1.5rem'}}>
-             <div style={{width: '32px', height: '32px', borderRadius: '50%', background: '#333'}}></div>
+             <div style={{width: '32px', height: '32px', borderRadius: '50%', background: 'var(--vanya-gold)', color: '#1c1b1a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.8rem'}}>VS</div>
              <div>
-               <strong style={{fontSize: '0.8rem', display: 'block'}}>Vikram S.</strong>
-               <span style={{fontSize: '0.6rem', color: '#888'}}>EXECUTIVE PORTAL</span>
+               <strong style={{fontSize: '0.8rem', display: 'block', color: 'white'}}>Vikram S.</strong>
+               <span style={{fontSize: '0.6rem', color: '#8e8b82'}}>EXECUTIVE PORTAL</span>
              </div>
           </div>
-          <div style={{fontSize: '0.7rem', color: '#888', marginBottom: '1rem'}}>⚙️ SETTINGS</div>
-          <div style={{fontSize: '0.7rem', color: '#888'}}>❔ SUPPORT</div>
+          <div style={{fontSize: '0.7rem', color: '#8e8b82', marginBottom: '1rem', cursor: 'pointer'}}>⚙️ SETTINGS</div>
+          <div style={{fontSize: '0.7rem', color: '#8e8b82', cursor: 'pointer'}}>❔ SUPPORT</div>
         </div>
       </aside>
 

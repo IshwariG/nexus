@@ -33,7 +33,7 @@ async function updateDB() {
   console.log(`Found ${units.length} units. Updating types and images...`);
   
   for (const unit of units) {
-    let type = '4BHK PENTHOUSE';
+    let type = '3BHK PENTHOUSE';
     let area = '5400 SqFt';
     let price = '₹ 14.25 Cr';
     let img = '/images/unit_interior_1777642600392.png';

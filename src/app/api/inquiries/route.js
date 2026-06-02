@@ -192,12 +192,11 @@ export async function PATCH(request) {
     }
 
     if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 });
-    if (!status) return NextResponse.json({ error: 'status required' }, { status: 400 });
 
     // Detect if this is a site walk-in qualification event (DONE status)
     let isWalkIn = false;
     let cpUsername = null;
-    if (status.startsWith('DONE|')) {
+    if (status && status.startsWith('DONE|')) {
       isWalkIn = true;
       const { data: currentInq } = await supabase
         .from('Inquiries')
@@ -209,9 +208,18 @@ export async function PATCH(request) {
       }
     }
 
+    const updateObj = {};
+    if (status) updateObj.status = status;
+    if (body?.message !== undefined) updateObj.message = body.message;
+    if (body?.aadhaar !== undefined) updateObj.aadhaar = body.aadhaar;
+
+    if (Object.keys(updateObj).length === 0) {
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+    }
+
     const { data, error } = await supabase
       .from('Inquiries')
-      .update({ status })
+      .update(updateObj)
       .eq('id', id)
       .select();
 
