@@ -25,18 +25,18 @@ export default function Home() {
           position: 'relative'
         }}>
           <div className="animate-fade-in" style={{ maxWidth: '600px', margin: '0 auto' }}>
-            <p className="subtitle" style={{ color: '#113629', fontSize: '0.8rem', letterSpacing: '3px', marginTop: '3rem', marginBottom: '1.5rem', fontWeight: 600, textTransform: 'uppercase' }}>
+            <p className="subtitle" style={{ color: 'var(--vanya-green)', fontSize: '0.8rem', letterSpacing: '3px', marginTop: '3rem', marginBottom: '1.5rem', fontWeight: 600, textTransform: 'uppercase' }}>
               PRESERVING THE HERITAGE COLLECTION
             </p>
-            <h1 className="title" style={{ color: '#113629', fontSize: '4.5rem', lineHeight: 1.1, marginBottom: '2rem', fontFamily: 'var(--font-serif)', fontWeight: 500 }}>
+            <h1 className="title" style={{ color: 'var(--vanya-green)', fontSize: '4.5rem', lineHeight: 1.1, marginBottom: '2rem', fontFamily: 'var(--font-serif)', fontWeight: 500 }}>
               Ancestral Wisdom,<br />Modern Grace.
             </h1>
             <p className="description" style={{ color: '#555', fontSize: '1.1rem', marginBottom: '3rem', lineHeight: 1.6 }}>
               Vanya Residences brings an unrivaled experience of pure luxury to the heart of the city, where heritage craftsmanship meets contemporary architectural minimalism.
             </p>
             <div className="hero-actions" style={{ display: 'flex', gap: '1.5rem' }}>
-              <a href="/inventory" className="btn" style={{ backgroundColor: '#113629', color: '#fff', padding: '1rem 2rem', textDecoration: 'none', fontSize: '0.85rem', fontWeight: 600, letterSpacing: '1px' }}>EXPLORE RESIDENCES</a>
-              <a href="/inquiry" className="btn" style={{ backgroundColor: 'transparent', color: '#113629', border: '1px solid #113629', padding: '1rem 2rem', textDecoration: 'none', fontSize: '0.85rem', fontWeight: 600, letterSpacing: '1px' }}>THE VISION</a>
+              <a href="/inventory" className="btn" style={{ backgroundColor: 'var(--vanya-green)', color: '#fff', padding: '1rem 2rem', textDecoration: 'none', fontSize: '0.85rem', fontWeight: 600, letterSpacing: '1px' }}>EXPLORE RESIDENCES</a>
+              <a href="/inquiry" className="btn" style={{ backgroundColor: 'transparent', color: 'var(--vanya-green)', border: '1px solid var(--vanya-green)', padding: '1rem 2rem', textDecoration: 'none', fontSize: '0.85rem', fontWeight: 600, letterSpacing: '1px' }}>THE VISION</a>
             </div>
           </div>
         </div>

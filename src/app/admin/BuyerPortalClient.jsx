@@ -28,13 +28,15 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
     };
   }, []);
 
-  const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      return params.get('tab') || 'dashboard';
+  const [activeTab, setActiveTab] = useState('dashboard');
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab) {
+      setActiveTab(tab);
     }
-    return 'dashboard';
-  });
+  }, []);
 
   const [selectedAccordion, setSelectedAccordion] = useState(null);
   
@@ -93,7 +95,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
         contact: "9999999999"
       },
       theme: {
-        color: "#113629"
+        color: "var(--vanya-green)"
       },
       modal: {
         ondismiss: function() {
@@ -112,7 +114,323 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
       alert('Error opening Razorpay: ' + err.message);
       console.error('Razorpay error:', err);
     }
-  };  const [activeSupportTicket, setActiveSupportTicket] = useState(null);
+  };
+
+  const [activeSupportTicket, setActiveSupportTicket] = useState(null);
+  const [tickets, setTickets] = useState([]);
+  const [referrals, setReferrals] = useState([]);
+  const [newReferralName, setNewReferralName] = useState('');
+  const [newReferralPhone, setNewReferralPhone] = useState('');
+  const [referralMsg, setReferralMsg] = useState('');
+  
+  const [ticketCategory, setTicketCategory] = useState('Leakage issue');
+  const [ticketDesc, setTicketDesc] = useState('');
+  const [ticketMsg, setTicketMsg] = useState('');
+  
+  const [activeSupportSubTab, setActiveSupportSubTab] = useState('faq'); // faq or raise
+  const [chatBotMessages, setChatBotMessages] = useState([
+    { sender: 'bot', text: 'Hello! I am your DreamSpaces Assistant. Select a topic below or ask me anything.', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+  ]);
+  const [chatbotInput, setChatbotInput] = useState('');
+  const [isBotTyping, setIsBotTyping] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [tick, setTick] = useState(0);
+
+  const fetchTickets = async () => {
+    try {
+      const res = await fetch(`/api/tickets?username=${username}`);
+      const data = await res.json();
+      if (data.success) {
+        setTickets(data.tickets || []);
+      }
+    } catch (e) {
+      console.error('Error fetching tickets:', e);
+    }
+  };
+
+  const fetchReferrals = async () => {
+    try {
+      const res = await fetch(`/api/referrals?referrer=${username}`);
+      const data = await res.json();
+      if (data.success) {
+        setReferrals(data.data || []);
+      }
+    } catch (e) {
+      console.error('Error fetching referrals:', e);
+    }
+  };
+
+  useEffect(() => {
+    if (username) {
+      fetchTickets();
+      fetchReferrals();
+    }
+  }, [username]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTick(t => t + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    // Check if any open ticket has elapsed its 5 min SLA, if so, trigger sync
+    const checkEscalations = () => {
+      let needsSync = false;
+      const currTime = new Date();
+      tickets.forEach(t => {
+        if (t.status === 'Open') {
+          const createdTime = new Date(t.created_at);
+          const elapsedMinutes = (currTime.getTime() - createdTime.getTime()) / (1000 * 60);
+          if (elapsedMinutes >= 5) {
+            needsSync = true;
+          }
+        }
+      });
+      if (needsSync) {
+        fetchTickets();
+      }
+    };
+    checkEscalations();
+  }, [tick, tickets]);
+
+  const handleCopyLink = () => {
+    if (typeof window !== 'undefined') {
+      const link = `${window.location.origin}/register?ref=${username}`;
+      navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleRaiseReferral = async (e) => {
+    e.preventDefault();
+    if (!newReferralName.trim() || !newReferralPhone.trim()) {
+      setReferralMsg("Please fill in both name and phone number.");
+      return;
+    }
+    try {
+      const res = await fetch('/api/referrals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          referrer_username: username,
+          friend_name: newReferralName,
+          friend_phone: newReferralPhone
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setReferralMsg("Referral successfully submitted! Your friend is registered.");
+        setNewReferralName('');
+        setNewReferralPhone('');
+        fetchReferrals();
+      } else {
+        setReferralMsg(data.error || "Failed to submit referral.");
+      }
+    } catch(err) {
+      setReferralMsg("Network error while submitting referral.");
+    }
+    setTimeout(() => setReferralMsg(''), 5000);
+  };
+
+  const handleRaiseTicket = async (e) => {
+    e.preventDefault();
+    if (!ticketDesc.trim()) {
+      setTicketMsg("Please enter a description for your grievance.");
+      return;
+    }
+    try {
+      const res = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username,
+          category: ticketCategory,
+          description: ticketDesc
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTicketMsg("Grievance ticket submitted successfully! SLA countdown initiated.");
+        setTicketDesc('');
+        fetchTickets();
+      } else {
+        setTicketMsg(data.error || "Failed to submit ticket.");
+      }
+    } catch(err) {
+      setTicketMsg("Network error while submitting ticket.");
+    }
+    setTimeout(() => setTicketMsg(''), 5000);
+  };
+
+  const handleFAQClick = (q, a) => {
+    setChatBotMessages(prev => [...prev, {
+      sender: 'buyer',
+      text: q,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }]);
+    setIsBotTyping(true);
+    setTimeout(() => {
+      setIsBotTyping(false);
+      setChatBotMessages(prev => [...prev, {
+        sender: 'bot',
+        text: a,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }]);
+    }, 800);
+  };
+
+  const handleChatbotMessage = (inputText) => {
+    if (!inputText.trim()) return;
+
+    const userMsg = {
+      sender: 'buyer',
+      text: inputText,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setChatBotMessages(prev => [...prev, userMsg]);
+    setChatbotInput('');
+    setIsBotTyping(true);
+
+    setTimeout(() => {
+      setIsBotTyping(false);
+      let reply = "";
+      const text = inputText.toLowerCase();
+
+      if (text.includes('payment') || text.includes('pay') || text.includes('due') || text.includes('money') || text.includes('installment')) {
+        reply = "You can pay your upcoming installments using Razorpay directly under the 'Payments' tab. Simply click 'PAY NOW' on your pending milestone.";
+      } else if (text.includes('construction') || text.includes('progress') || text.includes('slab') || text.includes('tower') || text.includes('update')) {
+        reply = "Tower A construction is on track! The 12th Floor slab was completed on 20 May 2026, and brickwork has started.";
+      } else if (text.includes('agreement') || text.includes('allotment') || text.includes('document')) {
+        reply = "You can view and print your stamp-duty compatible draft agreement in the 'Draft Agreement' tab in the sidebar. All final documents are uploaded to the 'Documents' tab.";
+      } else if (text.includes('possession') || text.includes('handover') || text.includes('date')) {
+        reply = `Physical possession is scheduled for ${possessionDate}. Standard inspections and registration alerts will be sent 3 months in advance.`;
+      } else if (text.includes('refer') || text.includes('earn') || text.includes('friend') || text.includes('loyalty') || text.includes('reward')) {
+        reply = "Use the 'Refer & Earn' tab to share your unique referral link! You earn ₹ 5,00,000 equivalent rewards if they buy.";
+      } else if (text.includes('leakage') || text.includes('bathroom') || text.includes('grievance') || text.includes('complaint')) {
+        reply = "Please head over to the 'Raise Grievance' panel in the support section to submit a ticket. We guarantee a 5-minute response SLA, or it will be escalated to leadership.";
+      } else {
+        reply = "I'm sorry, I couldn't find a direct match. Would you like to raise a formal grievance ticket? Click the 'Raise Grievance' tab above, and our support team will handle it within our 5-minute SLA.";
+      }
+
+      setChatBotMessages(prev => [...prev, {
+        sender: 'bot',
+        text: reply,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }]);
+    }, 1000);
+  };
+
+  const getSLAText = (ticket) => {
+    if (ticket.status !== 'Open') {
+      return ticket.status === 'Escalated' ? 'Escalated to Admin' : ticket.status;
+    }
+    const createdTime = new Date(ticket.created_at);
+    const currTime = new Date();
+    const elapsedMs = currTime.getTime() - createdTime.getTime();
+    const totalSlaMs = 5 * 60 * 1000;
+    const remainingMs = totalSlaMs - elapsedMs;
+
+    if (remainingMs <= 0) {
+      return "Escalated to Admin";
+    }
+
+    const remainingSecs = Math.floor(remainingMs / 1000);
+    const m = Math.floor(remainingSecs / 60);
+    const s = remainingSecs % 60;
+    return `SLA Escalation: ${m}m ${s}s`;
+  };
+  const handlePrintAgreement = () => {
+    const printWindow = window.open('', '_blank');
+    const localFormatINR = (val) => {
+      if (val >= 10000000) return '₹ ' + (val / 10000000).toFixed(2) + ' Cr';
+      if (val >= 100000) return '₹ ' + (val / 100000).toFixed(2) + ' L';
+      return '₹ ' + val.toLocaleString('en-IN');
+    };
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Builder-Buyer Agreement - Vanya Residences</title>
+          <style>
+            body { font-family: serif; padding: 40px; color: #111; line-height: 1.6; }
+            .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #111; padding-bottom: 20px; }
+            .title { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
+            .subtitle { font-size: 14px; text-transform: uppercase; color: #555; }
+            .details-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+            .details-table th, .details-table td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+            .details-table th { background-color: #f5f5f5; }
+            .section-title { font-size: 18px; margin-top: 30px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+            .signature-section { margin-top: 60px; display: flex; justify-content: space-between; }
+            .signature-box { border-top: 1px solid #111; width: 200px; text-align: center; padding-top: 5px; }
+            @media print {
+              .print-btn-container { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="title">BUILDER-BUYER AGREEMENT</div>
+            <div class="subtitle">VANYA RESIDENCES - PRESTIGE LIVING</div>
+          </div>
+          <p>This agreement is entered into on this day between <strong>DreamSpaces Developers Private Limited</strong> (hereinafter called "Builder") and the buyer as detailed below:</p>
+          
+          <table class="details-table">
+            <tr>
+              <th>Buyer Name</th>
+              <td style="text-transform: uppercase;">${username}</td>
+              <th>Unit Number</th>
+              <td>V-${userUnit.unit_id}</td>
+            </tr>
+            <tr>
+              <th>Tower / Block</th>
+              <td>${towerName}</td>
+              <th>Floor</th>
+              <td>${floorWithSuffix}</td>
+            </tr>
+            <tr>
+              <th>Carpet Area</th>
+              <td>${userUnit.area} Sq.Ft.</td>
+              <th>Super Built-up Area</th>
+              <td>${Math.round(parseInt(userUnit.area) * 1.12)} Sq.Ft.</td>
+            </tr>
+            <tr>
+              <th>Total Agreement Value</th>
+              <td>${localFormatINR(totalNum)}</td>
+              <th>Amount Paid</th>
+              <td>${localFormatINR(paidNum)}</td>
+            </tr>
+            <tr>
+              <th>Pending Balance</th>
+              <td>${localFormatINR(pendingNum)}</td>
+              <th>Possession Date</th>
+              <td>${possessionDate}</td>
+            </tr>
+          </table>
+
+          <div class="section-title">1. ALLOTMENT & PRICE SPECIFICATIONS</div>
+          <p>The Builder hereby agrees to sell and the Buyer hereby agrees to purchase the residential Unit detailed above, constructed in accordance with RERA standards and approved layout designs. The overall price is inclusive of base cost, car parking spaces, and club-house membership tags.</p>
+
+          <div class="section-title">2. CONSTRUCTION PROGRESS & TIMELINES</div>
+          <p>The Builder undertakes to complete the construction of the allotted unit and deliver physical possession by the designated Possession Date, subject to standard force majeure clauses and timely clearance of scheduled milestone payments by the Buyer.</p>
+
+          <div class="section-title">3. STATUTORY COMPLIANCES & OUTSTANDINGS</div>
+          <p>The Buyer shall be responsible for stamp duty, registration charges, GST, and maintenance deposits as applicable at the time of final sale deed execution.</p>
+
+          <div class="signature-section">
+            <div class="signature-box">For DreamSpaces Developers</div>
+            <div class="signature-box" style="text-transform: uppercase;">Allottee Signature (${username})</div>
+          </div>
+
+          <div class="print-btn-container" style="text-align: center; margin-top: 50px;">
+            <button onclick="window.print()" style="padding: 10px 20px; font-size: 14px; cursor: pointer; background: var(--vanya-green); color: white; border: none; border-radius: 4px;">Print Agreement</button>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
   
   // Tab sub-filters
   const [paymentSubTab, setPaymentSubTab] = useState('schedule');
@@ -348,24 +666,24 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
   };
 
   return (
-    <div className="admin-layout" style={{ background: '#f8f9fb' }}>
+    <div className="admin-layout" style={{ background: 'var(--admin-bg)' }}>
       
       {/* SIDEBAR NAVIGATION */}
       <aside className="admin-sidebar" style={{ background: '#ffffff', borderRight: '1px solid #f1f3f5', display: 'flex', flexDirection: 'column', width: '260px', overflowY: 'auto' }}>
         <div className="admin-sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1.5rem 1.75rem', borderBottom: '1px solid #f1f3f5' }}>
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#c2a661" strokeWidth="2.5">
-            <rect x="3" y="10" width="4" height="11" rx="1" fill="#c2a661" />
-            <rect x="10" y="4" width="4" height="17" rx="1" fill="#113629" stroke="#113629" />
-            <rect x="17" y="7" width="4" height="14" rx="1" fill="#c2a661" />
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--vanya-gold)" strokeWidth="2.5">
+            <rect x="3" y="10" width="4" height="11" rx="1" fill="var(--vanya-gold)" />
+            <rect x="10" y="4" width="4" height="17" rx="1" fill="var(--vanya-green)" stroke="var(--vanya-green)" />
+            <rect x="17" y="7" width="4" height="14" rx="1" fill="var(--vanya-gold)" />
           </svg>
           <div>
-            <h2 className="serif" style={{ margin: 0, fontSize: '1.15rem', color: '#113629', fontWeight: 'bold', letterSpacing: '0.5px', lineHeight: 1.1 }}>DreamSpaces</h2>
-            <span style={{ fontSize: '0.58rem', color: '#c2a661', letterSpacing: '0.8px', textTransform: 'uppercase', fontWeight: 'bold' }}>Buyer Portal</span>
+            <h2 className="serif" style={{ margin: 0, fontSize: '1.15rem', color: 'var(--vanya-green)', fontWeight: 'bold', letterSpacing: '0.5px', lineHeight: 1.1 }}>DreamSpaces</h2>
+            <span style={{ fontSize: '0.58rem', color: 'var(--vanya-gold)', letterSpacing: '0.8px', textTransform: 'uppercase', fontWeight: 'bold' }}>Buyer Portal</span>
           </div>
         </div>
         
         <div style={{ padding: '1.25rem 1.75rem', borderBottom: '1px solid #f1f3f5' }}>
-          <strong style={{ fontSize: '0.82rem', color: '#113629', display: 'block', textTransform: 'capitalize' }}>{username}</strong>
+          <strong style={{ fontSize: '0.82rem', color: 'var(--vanya-green)', display: 'block', textTransform: 'capitalize' }}>{username}</strong>
           <span className="text-muted" style={{ fontSize: '0.62rem', letterSpacing: '0.5px' }}>RESIDENT OWNER</span>
         </div>
 
@@ -382,6 +700,9 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
           <button className={activeTab === 'documents' ? 'active' : ''} onClick={() => changeTab('documents')}>
             <span className="nav-icon">📂</span> Documents
           </button>
+          <button className={activeTab === 'agreement' ? 'active' : ''} onClick={() => changeTab('agreement')}>
+            <span className="nav-icon">📜</span> Draft Agreement
+          </button>
           <button className={activeTab === 'construction' ? 'active' : ''} onClick={() => changeTab('construction')}>
             <span className="nav-icon">🏗️</span> Construction Updates
           </button>
@@ -393,6 +714,9 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
           </button>
           <button className={activeTab === 'notifications' ? 'active' : ''} onClick={() => changeTab('notifications')}>
             <span className="nav-icon">🔔</span> Notifications
+          </button>
+          <button className={activeTab === 'referrals' ? 'active' : ''} onClick={() => changeTab('referrals')}>
+            <span className="nav-icon">🤝</span> Refer & Earn
           </button>
           <button className={activeTab === 'support' ? 'active' : ''} onClick={() => changeTab('support')}>
             <span className="nav-icon">🛠️</span> Support
@@ -426,11 +750,11 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
         {/* HEADER BAR */}
         <header className="admin-header" style={{ background: 'white', padding: '1rem 2.5rem', borderBottom: '1px solid #f1f3f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <h1 className="serif" style={{ fontSize: '1.35rem', margin: 0, color: '#113629', textTransform: 'capitalize' }}>Welcome back, {username}! 👋</h1>
+            <h1 className="serif" style={{ fontSize: '1.35rem', margin: 0, color: 'var(--vanya-green)', textTransform: 'capitalize' }}>Welcome back, {username}! 👋</h1>
             <p className="text-muted" style={{ margin: 0, fontSize: '0.68rem', letterSpacing: '0.5px' }}>UNIT ID: {unitId} • POSSESSION: {possessionDate}</p>
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: '#c2a661' }}>PROJECT SUITE</span>
+            <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--vanya-gold)' }}>PROJECT SUITE</span>
             <select style={{ padding: '6px 12px', fontSize: '0.75rem', border: '1px solid #ccc', borderRadius: '6px', background: 'white' }}>
               <option>Skyview Tower A - {unitId}</option>
             </select>
@@ -443,10 +767,10 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
             
             {/* Horizontal Journey Timeline */}
             <div className="widget-card" style={{ marginBottom: '1.5rem', background: '#white' }}>
-              <h4 className="serif" style={{ margin: '0 0 1.25rem 0', color: '#113629', fontSize: '1.1rem' }}>Your Journey</h4>
+              <h4 className="serif" style={{ margin: '0 0 1.25rem 0', color: 'var(--vanya-green)', fontSize: '1.1rem' }}>Your Journey</h4>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', padding: '0 1rem' }}>
                 <div style={{ position: 'absolute', top: '16px', left: '2rem', right: '2rem', height: '3px', background: '#e2e8f0', zIndex: 1 }}>
-                  <div style={{ width: '68%', height: '100%', background: '#c2a661' }}></div>
+                  <div style={{ width: '68%', height: '100%', background: 'var(--vanya-gold)' }}></div>
                 </div>
                 {journeySteps.map((s, idx) => (
                   <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', zIndex: 2 }}>
@@ -454,7 +778,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                       width: '32px',
                       height: '32px',
                       borderRadius: '50%',
-                      background: s.status === 'completed' ? '#137333' : s.status === 'active' ? '#c2a661' : '#fff',
+                      background: s.status === 'completed' ? '#137333' : s.status === 'active' ? 'var(--vanya-gold)' : '#fff',
                       border: s.status === 'pending' ? '2px solid #cbd5e1' : 'none',
                       color: s.status === 'pending' ? '#64748b' : '#fff',
                       display: 'flex',
@@ -465,7 +789,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                     }}>
                       {s.status === 'completed' ? '✓' : s.status === 'active' ? '🏗️' : idx + 1}
                     </div>
-                    <strong style={{ fontSize: '0.75rem', marginTop: '0.5rem', color: '#113629' }}>{s.step}</strong>
+                    <strong style={{ fontSize: '0.75rem', marginTop: '0.5rem', color: 'var(--vanya-green)' }}>{s.step}</strong>
                     <span className="text-muted" style={{ fontSize: '0.62rem', marginTop: '1px' }}>{s.date}</span>
                   </div>
                 ))}
@@ -478,40 +802,40 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
               {/* Left Column: Flat Details & Booking Details */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 <div className="widget-card" style={{ margin: 0 }}>
-                  <h3 className="serif" style={{ margin: '0 0 1.25rem 0', color: '#113629', fontSize: '1.15rem' }}>Flat Details</h3>
+                  <h3 className="serif" style={{ margin: '0 0 1.25rem 0', color: 'var(--vanya-green)', fontSize: '1.15rem' }}>Flat Details</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', fontSize: '0.82rem' }}>
                     <div>
                       <span style={{ fontSize: '0.65rem', color: '#9ca3af', display: 'block', fontWeight: 'bold' }}>PROJECT & TOWER</span>
-                      <strong style={{ color: '#113629' }}>{towerName}, V-{userUnit.unit_id}</strong>
+                      <strong style={{ color: 'var(--vanya-green)' }}>{towerName}, V-{userUnit.unit_id}</strong>
                     </div>
                     <div>
                       <span style={{ fontSize: '0.65rem', color: '#9ca3af', display: 'block', fontWeight: 'bold' }}>TYPE</span>
-                      <strong style={{ color: '#113629' }}>{userUnit.type}</strong>
+                      <strong style={{ color: 'var(--vanya-green)' }}>{userUnit.type}</strong>
                     </div>
                     <div>
                       <span style={{ fontSize: '0.65rem', color: '#9ca3af', display: 'block', fontWeight: 'bold' }}>CARPET AREA</span>
-                      <strong style={{ color: '#113629' }}>{userUnit.area} Sq.Ft.</strong>
+                      <strong style={{ color: 'var(--vanya-green)' }}>{userUnit.area} Sq.Ft.</strong>
                     </div>
                   </div>
                   <div style={{ marginTop: '1.5rem' }}>
-                    <span onClick={() => changeTab('my-flat')} style={{ color: '#c2a661', fontWeight: 'bold', fontSize: '0.75rem', cursor: 'pointer' }}>View Flat Details &gt;</span>
+                    <span onClick={() => changeTab('my-flat')} style={{ color: 'var(--vanya-gold)', fontWeight: 'bold', fontSize: '0.75rem', cursor: 'pointer' }}>View Flat Details &gt;</span>
                   </div>
                 </div>
 
                 <div className="widget-card" style={{ margin: 0 }}>
-                  <h3 className="serif" style={{ margin: '0 0 1.25rem 0', color: '#113629', fontSize: '1.15rem' }}>Booking Details</h3>
+                  <h3 className="serif" style={{ margin: '0 0 1.25rem 0', color: 'var(--vanya-green)', fontSize: '1.15rem' }}>Booking Details</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', fontSize: '0.82rem' }}>
                     <div>
                       <span style={{ fontSize: '0.65rem', color: '#9ca3af', display: 'block', fontWeight: 'bold' }}>BOOKING DATE</span>
-                      <strong style={{ color: '#113629' }}>{formatShortDate(baseBookingDate)}</strong>
+                      <strong style={{ color: 'var(--vanya-green)' }}>{formatShortDate(baseBookingDate)}</strong>
                     </div>
                     <div>
                       <span style={{ fontSize: '0.65rem', color: '#9ca3af', display: 'block', fontWeight: 'bold' }}>BOOKING AMOUNT</span>
-                      <strong style={{ color: '#113629' }}>{formatINR(bookingAmt)}</strong>
+                      <strong style={{ color: 'var(--vanya-green)' }}>{formatINR(bookingAmt)}</strong>
                     </div>
                     <div>
                       <span style={{ fontSize: '0.65rem', color: '#9ca3af', display: 'block', fontWeight: 'bold' }}>BOOKING NO.</span>
-                      <strong style={{ color: '#113629' }}>BK-{rawUnitId}</strong>
+                      <strong style={{ color: 'var(--vanya-green)' }}>BK-{rawUnitId}</strong>
                     </div>
                   </div>
                 </div>
@@ -521,8 +845,8 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 <div className="widget-card" style={{ margin: 0 }}>
                   <div className="flex-between" style={{ marginBottom: '1.25rem' }}>
-                    <h3 className="serif" style={{ margin: 0, color: '#113629', fontSize: '1.15rem' }}>Payment Overview</h3>
-                    <span onClick={() => changeTab('payments')} style={{ color: '#c2a661', fontSize: '0.72rem', fontWeight: 'bold', cursor: 'pointer' }}>View Payments &gt;</span>
+                    <h3 className="serif" style={{ margin: 0, color: 'var(--vanya-green)', fontSize: '1.15rem' }}>Payment Overview</h3>
+                    <span onClick={() => changeTab('payments')} style={{ color: 'var(--vanya-gold)', fontSize: '0.72rem', fontWeight: 'bold', cursor: 'pointer' }}>View Payments &gt;</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.82rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.4rem' }}>
@@ -541,15 +865,15 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                 </div>
 
                 <div className="widget-card" style={{ display: 'flex', flexDirection: 'column', margin: 0 }}>
-                  <h3 className="serif" style={{ margin: '0 0 1.25rem 0', color: '#113629', fontSize: '1.15rem' }}>Next Payment</h3>
+                  <h3 className="serif" style={{ margin: '0 0 1.25rem 0', color: 'var(--vanya-green)', fontSize: '1.15rem' }}>Next Payment</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', fontSize: '0.82rem', marginBottom: '1.25rem' }}>
                     <div>
                       <span style={{ fontSize: '0.65rem', color: '#9ca3af', display: 'block', fontWeight: 'bold' }}>DUE DATE</span>
-                      <strong style={{ color: '#113629' }}>{nextPendingInstallment.due}</strong>
+                      <strong style={{ color: 'var(--vanya-green)' }}>{nextPendingInstallment.due}</strong>
                     </div>
                     <div>
                       <span style={{ fontSize: '0.65rem', color: '#9ca3af', display: 'block', fontWeight: 'bold' }}>DUE AMOUNT</span>
-                      <strong style={{ color: '#113629' }}>{nextPendingInstallment.dueAmt}</strong>
+                      <strong style={{ color: 'var(--vanya-green)' }}>{nextPendingInstallment.dueAmt}</strong>
                     </div>
                   </div>
                   <button 
@@ -574,8 +898,8 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
               <div className="widget-card" style={{ margin: 0 }}>
                 <div className="flex-between" style={{ marginBottom: '1.25rem' }}>
-                  <h3 className="serif" style={{ margin: 0, color: '#113629', fontSize: '1.15rem' }}>Construction Progress</h3>
-                  <span onClick={() => changeTab('construction')} style={{ color: '#c2a661', fontSize: '0.72rem', fontWeight: 'bold', cursor: 'pointer' }}>View Updates &gt;</span>
+                  <h3 className="serif" style={{ margin: 0, color: 'var(--vanya-green)', fontSize: '1.15rem' }}>Construction Progress</h3>
+                  <span onClick={() => changeTab('construction')} style={{ color: 'var(--vanya-gold)', fontSize: '0.72rem', fontWeight: 'bold', cursor: 'pointer' }}>View Updates &gt;</span>
                 </div>
                 <div style={{ marginTop: '0.75rem' }}>
                   <div className="flex-between" style={{ marginBottom: '0.5rem', fontSize: '0.82rem' }}>
@@ -600,7 +924,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                   flexShrink: 0
                 }}></div>
                 <div>
-                  <h4 className="serif" style={{ margin: '0 0 0.25rem 0', color: '#113629', fontSize: '1rem' }}>Latest Update</h4>
+                  <h4 className="serif" style={{ margin: '0 0 0.25rem 0', color: 'var(--vanya-green)', fontSize: '1rem' }}>Latest Update</h4>
                   <p style={{ margin: 0, fontSize: '0.78rem', color: '#4b5563', lineHeight: 1.4 }}>Tower A - 12th Floor slab completed. Brickwork initiated in lower segments.</p>
                   <span className="text-muted" style={{ display: 'block', fontSize: '0.62rem', marginTop: '0.4rem' }}>PUBLISHED: 20 May 2026</span>
                 </div>
@@ -625,7 +949,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                   borderRadius: '12px'
                 }}></div>
                 <div>
-                  <h3 className="serif" style={{ margin: '0 0 0.5rem 0', color: '#113629', fontSize: '1.3rem' }}>{towerName}</h3>
+                  <h3 className="serif" style={{ margin: '0 0 0.5rem 0', color: 'var(--vanya-green)', fontSize: '1.3rem' }}>{towerName}</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', fontSize: '0.82rem', color: '#4b5563', borderTop: '1px solid #f1f3f5', paddingTop: '0.75rem', marginTop: '0.5rem' }}>
                     <div><strong>Flat Unit:</strong> V-{userUnit.unit_id}, {floorWithSuffix}</div>
                     <div><strong>Residence Design:</strong> {userUnit.type}</div>
@@ -680,12 +1004,12 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                         justifyContent: 'space-between',
                         alignItems: 'center',
                         fontWeight: 'bold',
-                        color: '#113629',
+                        color: 'var(--vanya-green)',
                         fontSize: '0.85rem'
                       }}
                     >
                       <span>{acc.title}</span>
-                      <span style={{ fontSize: '0.68rem', color: '#c2a661' }}>{selectedAccordion === index ? '▲' : '▼'}</span>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--vanya-gold)' }}>{selectedAccordion === index ? '▲' : '▼'}</span>
                     </button>
                     {selectedAccordion === index && (
                       <div style={{ padding: '1.25rem', background: '#fdfcf9', fontSize: '0.8rem', borderTop: '1px solid #f1f3f5', lineHeight: 1.5, color: '#4b5563' }}>
@@ -707,7 +1031,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
               <div className="widget-card" style={{ margin: 0 }}>
-                <h3 className="serif" style={{ margin: '0 0 1.25rem 0', color: '#113629' }}>Flat Information</h3>
+                <h3 className="serif" style={{ margin: '0 0 1.25rem 0', color: 'var(--vanya-green)' }}>Flat Information</h3>
                 <table className="table-standard" style={{ fontSize: '0.82rem' }}>
                   <tbody>
                     <tr><td><strong>Tower</strong></td><td>{towerName}</td></tr>
@@ -725,8 +1049,8 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
 
               <div className="widget-card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', margin: 0 }}>
                 <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 className="serif" style={{ margin: 0, color: '#113629' }}>Unit Plan</h3>
-                  <span onClick={() => alert('Opening schematic blueprint view...')} style={{ fontSize: '0.72rem', color: '#c2a661', fontWeight: 'bold', cursor: 'pointer' }}>View Full Screen &gt;</span>
+                  <h3 className="serif" style={{ margin: 0, color: 'var(--vanya-green)' }}>Unit Plan</h3>
+                  <span onClick={() => alert('Opening schematic blueprint view...')} style={{ fontSize: '0.72rem', color: 'var(--vanya-gold)', fontWeight: 'bold', cursor: 'pointer' }}>View Full Screen &gt;</span>
                 </div>
                 <div style={{
                   backgroundImage: "url('/images/floor_plan_3bhk.png')",
@@ -751,7 +1075,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
               <div className="kpi-card">
                 <span>TOTAL PRICE</span>
-                <h2 style={{ fontSize: '1.6rem', color: '#113629', margin: '4px 0' }}>{formatINR(totalNum)}</h2>
+                <h2 style={{ fontSize: '1.6rem', color: 'var(--vanya-green)', margin: '4px 0' }}>{formatINR(totalNum)}</h2>
               </div>
               <div className="kpi-card">
                 <span>PAID AMOUNT</span>
@@ -776,7 +1100,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                 </div>
                 <div>
                   <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: 'bold' }}>PAID PERCENTAGE</span>
-                  <h2 style={{ fontSize: '1.35rem', color: '#113629', margin: '2px 0 0 0' }}>{paidPercentage}%</h2>
+                  <h2 style={{ fontSize: '1.35rem', color: 'var(--vanya-green)', margin: '2px 0 0 0' }}>{paidPercentage}%</h2>
                 </div>
               </div>
             </div>
@@ -879,7 +1203,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                       <button onClick={() => alert(`Downloading ${doc.name}...`)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '1.1rem', opacity: 0.7 }}>📥</button>
                     </div>
                     <div>
-                      <strong style={{ fontSize: '0.8rem', display: 'block', color: '#113629' }}>{doc.name}</strong>
+                      <strong style={{ fontSize: '0.8rem', display: 'block', color: 'var(--vanya-green)' }}>{doc.name}</strong>
                       <span className="text-muted" style={{ fontSize: '0.68rem', display: 'block', marginTop: '2px' }}>PDF • {doc.size}</span>
                     </div>
                     <span className="text-muted" style={{ fontSize: '0.62rem', borderTop: '1px solid #eee', paddingTop: '0.5rem', marginTop: '0.25rem' }}>UPLOADED: {doc.date}</span>
@@ -903,7 +1227,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
               <div className="widget-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', margin: 0 }}>
                 <span className="text-muted" style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold' }}>Overall Progress</span>
-                <h2 style={{ fontSize: '3rem', color: '#113629', margin: '0.5rem 0', fontWeight: 'bold' }}>{progressPercent}%</h2>
+                <h2 style={{ fontSize: '3rem', color: 'var(--vanya-green)', margin: '0.5rem 0', fontWeight: 'bold' }}>{progressPercent}%</h2>
                 <div style={{ background: '#f1f3f5', height: '8px', width: '80%', borderRadius: '4px', overflow: 'hidden' }}>
                   <div style={{ background: '#D9A036', width: `${progressPercent}%`, height: '100%' }}></div>
                 </div>
@@ -936,7 +1260,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                       <div key={idx} style={{ border: '1px solid #f1f3f5', borderRadius: '8px', overflow: 'hidden' }}>
                         <div style={{ backgroundImage: "url('/images/uc1.png')", height: '110px', backgroundSize: 'cover', backgroundPosition: 'center' }}></div>
                         <div style={{ padding: '8px 10px' }}>
-                          <strong style={{ fontSize: '0.75rem', display: 'block', color: '#113629' }}>{upd.title}</strong>
+                          <strong style={{ fontSize: '0.75rem', display: 'block', color: 'var(--vanya-green)' }}>{upd.title}</strong>
                           <span className="text-muted" style={{ fontSize: '0.62rem', display: 'block', marginTop: '2px' }}>{upd.date}</span>
                         </div>
                       </div>
@@ -974,7 +1298,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
         {activeTab === 'amenities' && (
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem' }}>
             <div className="widget-card">
-              <h3 className="serif" style={{ margin: '0 0 0.25rem 0', color: '#113629', fontSize: '1.3rem' }}>World-Class Amenities</h3>
+              <h3 className="serif" style={{ margin: '0 0 0.25rem 0', color: 'var(--vanya-green)', fontSize: '1.3rem' }}>World-Class Amenities</h3>
               <p className="text-muted" style={{ fontSize: '0.78rem', marginBottom: '2rem' }}>Sleek modular layouts designed for a premium lifestyle.</p>
               
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem' }}>
@@ -994,7 +1318,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                 ].map((am, idx) => (
                   <div key={idx} style={{ border: '1px solid #f1f3f5', borderRadius: '12px', padding: '1.5rem 1.25rem', textAlign: 'center', background: '#fafafa', display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center' }}>
                     <span style={{ fontSize: '2rem' }}>{am.icon}</span>
-                    <strong style={{ fontSize: '0.82rem', color: '#113629' }}>{am.name}</strong>
+                    <strong style={{ fontSize: '0.82rem', color: 'var(--vanya-green)' }}>{am.name}</strong>
                   </div>
                 ))}
               </div>
@@ -1014,14 +1338,14 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
               
               {/* Sidebar chats threads */}
               <div className="widget-card" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '1rem', margin: 0 }}>
-                <h4 className="serif" style={{ margin: '0 0 1rem 0', color: '#113629', fontSize: '1rem' }}>Conversations</h4>
+                <h4 className="serif" style={{ margin: '0 0 1rem 0', color: 'var(--vanya-green)', fontSize: '1rem' }}>Conversations</h4>
                 
                 <button 
                   onClick={() => setActiveChatThread('team')}
                   className={`btn-outline ${activeChatThread === 'team' ? 'active' : ''}`}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '10px', width: '100%', textAlign: 'left', border: 'none', borderRadius: '8px' }}
                 >
-                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#113629', color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }}>DS</div>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--vanya-green)', color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }}>DS</div>
                   <div>
                     <strong style={{ fontSize: '0.8rem', display: 'block' }}>DreamSpaces Team</strong>
                     <span style={{ fontSize: '0.62rem', color: '#888' }}>Concierge Support</span>
@@ -1033,9 +1357,9 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                   className={`btn-outline ${activeChatThread === 'sales' ? 'active' : ''}`}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '10px', width: '100%', textAlign: 'left', border: 'none', borderRadius: '8px' }}
                 >
-                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#c2a661', color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }}>RM</div>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--vanya-gold)', color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }}>RV</div>
                   <div>
-                    <strong style={{ fontSize: '0.8rem', display: 'block' }}>Rahul Mehta</strong>
+                    <strong style={{ fontSize: '0.8rem', display: 'block' }}>Rahul Verma</strong>
                     <span style={{ fontSize: '0.62rem', color: '#888' }}>Sales Representative</span>
                   </div>
                 </button>
@@ -1056,12 +1380,12 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
               {/* Active chat pane */}
               <div className="widget-card" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1.25rem', margin: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.75rem', marginBottom: '0.75rem' }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: activeChatThread === 'team' ? '#113629' : activeChatThread === 'sales' ? '#c2a661' : '#9ca3af', color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {activeChatThread === 'team' ? 'DS' : activeChatThread === 'sales' ? 'RM' : 'CS'}
+                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: activeChatThread === 'team' ? 'var(--vanya-green)' : activeChatThread === 'sales' ? 'var(--vanya-gold)' : '#9ca3af', color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {activeChatThread === 'team' ? 'DS' : activeChatThread === 'sales' ? 'RV' : 'CS'}
                   </div>
                   <div>
-                    <strong style={{ fontSize: '0.85rem', display: 'block', color: '#113629' }}>
-                      {activeChatThread === 'team' ? 'DreamSpaces Team' : activeChatThread === 'sales' ? 'Rahul Mehta' : 'Customer Support'}
+                    <strong style={{ fontSize: '0.85rem', display: 'block', color: 'var(--vanya-green)' }}>
+                      {activeChatThread === 'team' ? 'DreamSpaces Team' : activeChatThread === 'sales' ? 'Rahul Verma' : 'Customer Support'}
                     </strong>
                     <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: 'bold' }}>● ONLINE</span>
                   </div>
@@ -1087,7 +1411,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
 
                 <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
                   <input type="text" value={newMsg} onChange={(e) => setNewMsg(e.target.value)} placeholder="Type your message..." style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '0.82rem' }} />
-                  <button type="submit" className="btn-dark" style={{ padding: '8px 16px', fontSize: '0.8rem', background: '#113629', border: 'none', color: 'white', borderRadius: '6px' }}>SEND</button>
+                  <button type="submit" className="btn-dark" style={{ padding: '8px 16px', fontSize: '0.8rem', background: 'var(--vanya-green)', border: 'none', color: 'white', borderRadius: '6px' }}>SEND</button>
                 </form>
               </div>
 
@@ -1100,7 +1424,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem' }}>
             <div className="widget-card">
               <div className="flex-between mb-2" style={{ borderBottom: '1px solid #f1f3f5', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
-                <h3 className="serif" style={{ margin: 0, color: '#113629' }}>Notifications</h3>
+                <h3 className="serif" style={{ margin: 0, color: 'var(--vanya-green)' }}>Notifications</h3>
                 <span onClick={() => alert('All notifications marked as read.')} style={{ color: '#D9A036', fontSize: '0.72rem', fontWeight: 'bold', cursor: 'pointer' }}>Mark all as read</span>
               </div>
               
@@ -1110,9 +1434,9 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                   { text: "Construction update for Tower A is available.", sub: "Check photo log under Construction tab", date: "20 May 2026, 04:30 PM" },
                   { text: "Your document [Payment Receipt - Mar] is uploaded.", sub: "Agreements and Receipts folder", date: "15 May 2026, 11:20 AM" },
                   { text: "Upcoming payment of ₹ 2,45,000 is due on 25 May 2026.", sub: "Instalment schedule 4th stage", date: "10 May 2026, 09:00 AM" },
-                  { text: "Site visit scheduled on 25 May 2026 at 11:00 AM.", sub: "Accompanied by Rahul Mehta (Sales Rep)", date: "09 May 2026, 05:30 PM" }
+                  { text: "Site visit scheduled on 25 May 2026 at 11:00 AM.", sub: "Accompanied by Rahul Verma (Sales Rep)", date: "09 May 2026, 05:30 PM" }
                 ].map((notif, idx) => (
-                  <div key={idx} style={{ padding: '1rem', background: idx < 2 ? '#faf6eb' : '#fff', borderLeft: idx < 2 ? '4px solid #D9A036' : '4px solid #eee', borderRadius: '6px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div key={idx} style={{ padding: '1rem', background: idx < 2 ? 'var(--admin-surface)' : '#fff', borderLeft: idx < 2 ? '4px solid #D9A036' : '4px solid #eee', borderRadius: '6px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <div style={{ width: '8px', height: '8px', background: idx < 2 ? '#D9A036' : 'transparent', borderRadius: '50%' }}></div>
                     <div>
                       <strong>{notif.text}</strong>
@@ -1132,66 +1456,489 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
         {activeTab === 'support' && (
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem' }}>
             <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-              <h1 className="serif" style={{ fontSize: '2rem', color: '#113629', margin: '0 0 0.25rem 0', fontWeight: 'bold' }}>Support</h1>
-              <span style={{ fontSize: '0.82rem', color: '#6b7280' }}>We are here to help you</span>
+              <h1 className="serif" style={{ fontSize: '2rem', color: 'var(--vanya-green)', margin: '0 0 0.25rem 0', fontWeight: 'bold' }}>Grievance & FAQ Support Center</h1>
+              <span style={{ fontSize: '0.82rem', color: '#6b7280' }}>Submit grievance tickets with a 5-minute resolution SLA and interact with our AI Assistant</span>
             </div>
 
+            {/* KPI STATS FOR TICKETS */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
-              <div className="kpi-card" style={{ cursor: 'pointer', textAlign: 'center', padding: '1.25rem' }} onClick={() => alert('Opening ticket raising window...')}>
-                <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>🎫</span>
-                <strong style={{ fontSize: '0.85rem', color: '#113629' }}>Raise a Ticket</strong>
-                <span className="text-muted" style={{ display: 'block', fontSize: '0.65rem', marginTop: '4px' }}>Create a request and our team will assist you</span>
+              <div className="kpi-card">
+                <span>ACTIVE COMPLAINTS</span>
+                <h2 style={{ fontSize: '1.6rem', color: 'var(--vanya-green)', margin: '4px 0' }}>{tickets.filter(t => t.status === 'Open').length}</h2>
               </div>
-              <div className="kpi-card" style={{ cursor: 'pointer', textAlign: 'center', padding: '1.25rem' }} onClick={() => alert('View FAQ list.')}>
-                <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>❓</span>
-                <strong style={{ fontSize: '0.85rem', color: '#113629' }}>FAQ</strong>
-                <span className="text-muted" style={{ display: 'block', fontSize: '0.65rem', marginTop: '4px' }}>Find answers to frequently asked questions</span>
+              <div className="kpi-card">
+                <span>ESCALATED TO LEADERSHIP</span>
+                <h2 style={{ fontSize: '1.6rem', color: '#c62828', margin: '4px 0' }}>{tickets.filter(t => t.status === 'Escalated').length}</h2>
               </div>
-              <div className="kpi-card" style={{ textAlign: 'center', padding: '1.25rem' }}>
-                <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>📞</span>
-                <strong style={{ fontSize: '0.85rem', color: '#113629' }}>Call Us</strong>
-                <strong style={{ display: 'block', fontSize: '0.85rem', color: '#c2a661', marginTop: '4px' }}>+91 98765 43210</strong>
-                <span className="text-muted" style={{ display: 'block', fontSize: '0.65rem', marginTop: '4px' }}>Mon - Sat (10 AM - 7 PM)</span>
+              <div className="kpi-card">
+                <span>RESOLVED ISSUES</span>
+                <h2 style={{ fontSize: '1.6rem', color: '#137333', margin: '4px 0' }}>{tickets.filter(t => t.status === 'Closed').length}</h2>
               </div>
-              <div className="kpi-card" style={{ textAlign: 'center', padding: '1.25rem' }}>
-                <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>✉️</span>
-                <strong style={{ fontSize: '0.85rem', color: '#113629' }}>Email Us</strong>
-                <strong style={{ display: 'block', fontSize: '0.82rem', color: '#c2a661', marginTop: '4px' }}>support@dreamspaces.com</strong>
-                <span className="text-muted" style={{ display: 'block', fontSize: '0.65rem', marginTop: '4px' }}>We reply within 24 hrs</span>
+              <div className="kpi-card">
+                <span>GUARANTEED RESPONSE SLA</span>
+                <h2 style={{ fontSize: '1.6rem', color: '#D9A036', margin: '4px 0' }}>5 Minutes</h2>
               </div>
             </div>
 
-            <div className="widget-card">
-              <h3 className="serif" style={{ margin: '0 0 1.25rem 0', color: '#113629' }}>My Tickets</h3>
-              <table className="table-standard">
-                <thead>
-                  <tr>
-                    <th>TICKET ID</th>
-                    <th>DESCRIPTION</th>
-                    <th>CREATED DATE</th>
-                    <th>STATUS</th>
-                  </tr>
-                </thead>
+            {/* TWO COLUMN GRID: FAQ / GRIEVANCE FORM & REGISTERED TICKETS */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.5rem' }}>
+              
+              {/* LEFT COLUMN: FAQ BOT & FORM */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div className="widget-card" style={{ margin: 0, padding: '1.5rem' }}>
+                  <div style={{ display: 'flex', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.75rem', marginBottom: '1rem', gap: '1rem' }}>
+                    <button 
+                      onClick={() => setActiveSupportSubTab('faq')}
+                      className={`btn-outline ${activeSupportSubTab === 'faq' ? 'active' : ''}`}
+                      style={{ padding: '6px 14px', fontSize: '0.75rem', textTransform: 'uppercase', borderRadius: '6px' }}
+                    >
+                      💬 FAQ Assistant
+                    </button>
+                    <button 
+                      onClick={() => setActiveSupportSubTab('raise')}
+                      className={`btn-outline ${activeSupportSubTab === 'raise' ? 'active' : ''}`}
+                      style={{ padding: '6px 14px', fontSize: '0.75rem', textTransform: 'uppercase', borderRadius: '6px' }}
+                    >
+                      ⚠️ Raise Grievance
+                    </button>
+                  </div>
+
+                  {activeSupportSubTab === 'faq' ? (
+                    <div>
+                      <h4 className="serif" style={{ color: 'var(--vanya-green)', marginBottom: '0.5rem', fontSize: '1.05rem' }}>AI FAQ Chatbot</h4>
+                      
+                      {/* FAQ Topics Selection */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+                        <button 
+                          className="btn-outline" 
+                          style={{ padding: '4px 10px', fontSize: '0.65rem', borderRadius: '4px' }}
+                          onClick={() => handleFAQClick(
+                            "What is the current construction status?", 
+                            "Tower A is at slab milestone on the 12th floor. Plastering of lower zones is active. Possession remains scheduled for Dec 2026."
+                          )}
+                        >
+                          🏗️ Construction Status
+                        </button>
+                        <button 
+                          className="btn-outline" 
+                          style={{ padding: '4px 10px', fontSize: '0.65rem', borderRadius: '4px' }}
+                          onClick={() => handleFAQClick(
+                            "How do I clear my pending payment milestone?", 
+                            "Go to the 'Payments' tab in your sidebar, view your installment ledger, and click 'PAY NOW' next to any pending bill to clear it securely via Razorpay."
+                          )}
+                        >
+                          💳 Payment Milestone
+                        </button>
+                        <button 
+                          className="btn-outline" 
+                          style={{ padding: '4px 10px', fontSize: '0.65rem', borderRadius: '4px' }}
+                          onClick={() => handleFAQClick(
+                            "How can I download my builder-buyer agreement?", 
+                            "A printable draft builder-buyer agreement is hosted under the 'Draft Agreement' tab. If you need signed versions, download them from the 'Documents' tab."
+                          )}
+                        >
+                          📜 Buyer Agreements
+                        </button>
+                        <button 
+                          className="btn-outline" 
+                          style={{ padding: '4px 10px', fontSize: '0.65rem', borderRadius: '4px' }}
+                          onClick={() => handleFAQClick(
+                            "What amenities are available?", 
+                            "Vanya Residences supports multiple luxury amenities: Sky Lounge Clubhouse, Olympic-sized swimming pool, health gymnasium, yoga deck, and jogging tracks."
+                          )}
+                        >
+                          🌟 Luxury Amenities
+                        </button>
+                      </div>
+
+                      {/* Chat dialog viewport */}
+                      <div style={{ height: '220px', overflowY: 'auto', border: '1px solid #f1f3f5', background: '#fafafa', borderRadius: '8px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+                        {chatBotMessages.map((m, idx) => (
+                          <div key={idx} style={{ 
+                            alignSelf: m.sender === 'buyer' ? 'flex-end' : 'flex-start', 
+                            background: m.sender === 'buyer' ? '#D9A036' : '#fff', 
+                            color: m.sender === 'buyer' ? 'white' : '#333', 
+                            padding: '8px 12px', 
+                            borderRadius: '8px', 
+                            maxWidth: '75%', 
+                            fontSize: '0.78rem', 
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)' 
+                          }}>
+                            <div>{m.text}</div>
+                            <span style={{ fontSize: '0.58rem', opacity: 0.7, display: 'block', textAlign: 'right', marginTop: '4px' }}>{m.time}</span>
+                          </div>
+                        ))}
+                        {isBotTyping && (
+                          <div style={{ alignSelf: 'flex-start', background: '#fff', padding: '8px 12px', borderRadius: '8px', fontSize: '0.78rem', color: '#999', fontStyle: 'italic' }}>
+                            Assistant is typing...
+                          </div>
+                        )}
+                      </div>
+
+                      <form 
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          handleChatbotMessage(chatbotInput);
+                        }} 
+                        style={{ display: 'flex', gap: '0.5rem' }}
+                      >
+                        <input 
+                          type="text" 
+                          value={chatbotInput} 
+                          onChange={(e) => setChatbotInput(e.target.value)} 
+                          placeholder="Ask a question (e.g. 'possession date' or 'payment')..." 
+                          style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '0.82rem' }} 
+                        />
+                        <button type="submit" className="btn-dark" style={{ padding: '8px 16px', fontSize: '0.8rem', background: 'var(--vanya-green)', border: 'none', color: 'white', borderRadius: '6px', cursor: 'pointer' }}>SEND</button>
+                      </form>
+                    </div>
+                  ) : (
+                    <div>
+                      <h4 className="serif" style={{ color: 'var(--vanya-green)', marginBottom: '0.75rem', fontSize: '1.05rem' }}>Submit a Grievance Ticket</h4>
+                      
+                      {ticketMsg && (
+                        <div style={{ background: '#e6f4ea', color: '#137333', padding: '8px 12px', borderRadius: '6px', marginBottom: '1rem', fontSize: '0.78rem' }}>
+                          {ticketMsg}
+                        </div>
+                      )}
+
+                      <form onSubmit={handleRaiseTicket} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <div className="form-group">
+                          <label style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Grievance Category</label>
+                          <select 
+                            value={ticketCategory} 
+                            onChange={(e) => setTicketCategory(e.target.value)} 
+                            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #ccc', background: 'white', fontSize: '0.82rem' }}
+                          >
+                            <option value="Leakage issue">Leakage issue</option>
+                            <option value="Bathroom fixtures">Bathroom fixtures</option>
+                            <option value="Handover delays">Handover delays</option>
+                            <option value="General maintenance">General maintenance</option>
+                            <option value="Payments reflection">Payments reflection</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+                        <div className="form-group">
+                          <label style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Describe your issue</label>
+                          <textarea 
+                            value={ticketDesc} 
+                            onChange={(e) => setTicketDesc(e.target.value)} 
+                            rows="4" 
+                            placeholder="Detail your issue. Our team is bound by a 5-minute response SLA before leadership escalation..."
+                            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '0.82rem', resize: 'vertical' }}
+                          />
+                        </div>
+                        <button type="submit" className="btn-dark" style={{ width: '100%', padding: '10px', fontSize: '0.8rem', background: '#D9A036', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
+                          SUBMIT GRIEVANCE
+                        </button>
+                      </form>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* RIGHT COLUMN: TICKET REGISTRY & STATUS */}
+              <div className="widget-card" style={{ margin: 0, padding: '1.5rem' }}>
+                <h3 className="serif" style={{ margin: '0 0 1rem 0', color: 'var(--vanya-green)', fontSize: '1.15rem' }}>Your Registered Grievances</h3>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="table-standard" style={{ fontSize: '0.78rem' }}>
+                    <thead>
+                      <tr>
+                        <th>CATEGORY</th>
+                        <th>DESCRIPTION</th>
+                        <th>STATUS</th>
+                        <th>SLA STATUS / ESCALATION</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tickets.length === 0 ? (
+                        <tr>
+                          <td colSpan="4" style={{ textAlign: 'center', color: '#9ca3af', padding: '2rem' }}>No grievances registered yet.</td>
+                        </tr>
+                      ) : (
+                        tickets.map((t, idx) => (
+                          <tr key={idx}>
+                            <td><strong>{t.category}</strong></td>
+                            <td style={{ maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t.description}>
+                              {t.description}
+                            </td>
+                            <td>
+                              <span className={`badge ${t.status === 'Closed' ? 'available' : t.status === 'Escalated' ? 'reserved' : 'negotiation'}`}>
+                                {t.status}
+                              </span>
+                            </td>
+                            <td>
+                              {t.status === 'Open' ? (
+                                <span style={{ color: '#D9A036', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                  ⏳ {getSLAText(t)}
+                                </span>
+                              ) : t.status === 'Escalated' ? (
+                                <span style={{ color: '#c62828', fontWeight: 'bold' }}>
+                                  🚨 Escalated to Leadership
+                                </span>
+                              ) : (
+                                <span style={{ color: '#137333' }}>✅ Resolved</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== 10.5. DRAFT AGREEMENT PAGE ==================== */}
+        {activeTab === 'agreement' && (
+          <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <div>
+                <h1 className="serif" style={{ fontSize: '1.8rem', color: 'var(--vanya-green)', margin: 0, fontWeight: 'bold' }}>Builder-Buyer Agreement</h1>
+                <span style={{ fontSize: '0.82rem', color: '#6b7280' }}>Review and print a stamp-duty compatible draft agreement of unit V-{userUnit.unit_id}</span>
+              </div>
+              <button 
+                onClick={handlePrintAgreement}
+                className="btn-dark"
+                style={{ padding: '10px 20px', borderRadius: '8px', background: '#D9A036', border: 'none', color: 'white', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                🖨️ Print Agreement Draft
+              </button>
+            </div>
+
+            <div className="widget-card" style={{ 
+              background: '#fcfaf5', 
+              border: '2px solid #e8dfcc', 
+              borderRadius: '12px', 
+              padding: '3rem 4rem', 
+              boxShadow: '0 4px 15px rgba(0,0,0,0.02)',
+              fontFamily: 'serif',
+              color: '#2b2a27',
+              lineHeight: 1.6,
+              maxWidth: '850px',
+              margin: '0 auto',
+              maxHeight: '700px',
+              overflowY: 'auto'
+            }}>
+              
+              {/* Header Scroll Look */}
+              <div style={{ textAlign: 'center', borderBottom: '2px solid #8c7647', paddingBottom: '1.5rem', marginBottom: '2.5rem' }}>
+                <h2 style={{ fontSize: '2rem', letterSpacing: '2px', color: 'var(--vanya-green)', margin: '0 0 0.5rem 0', fontFamily: 'serif' }}>BUILDER-BUYER AGREEMENT</h2>
+                <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#8c7647', letterSpacing: '3px', fontWeight: 'bold' }}>PRESTAGE DEVELOPERS • VANYA RESIDENCES</div>
+              </div>
+
+              <p style={{ textIndent: '2rem', marginBottom: '1.5rem', textAlign: 'justify' }}>
+                This agreement is entered into on this day between <strong>DreamSpaces Developers Private Limited</strong>, having its registered office at Prestige Tower, Pune, hereinafter referred to as the <strong>Builder</strong>, and the allottee detailed below, hereinafter referred to as the <strong>Buyer</strong>.
+              </p>
+
+              <h4 style={{ borderBottom: '1px solid #e8dfcc', paddingBottom: '0.4rem', color: 'var(--vanya-green)', marginTop: '2rem' }}>SCHEDULE A: ALLOTMENT SPECIFICATIONS</h4>
+              <table style={{ width: '100%', borderCollapse: 'collapse', margin: '1rem 0 2rem 0', fontSize: '0.85rem' }}>
                 <tbody>
-                  {[
-                    { id: "#DB-1021", title: "Payment not reflected", date: "20 May 2026", status: "Open" },
-                    { id: "#DB-9984", title: "RERA carpet size verification", date: "15 Apr 2026", status: "Closed" }
-                  ].map((t, idx) => (
-                    <tr key={idx}>
-                      <td><strong>{t.id}</strong></td>
-                      <td>{t.title}</td>
-                      <td>{t.date}</td>
-                      <td>
-                        <span className={`badge ${t.status === 'Open' ? 'negotiation' : 'available'}`}>
-                          {t.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  <tr style={{ borderBottom: '1px solid #f1ece1' }}>
+                    <td style={{ padding: '8px 0', fontWeight: 'bold', width: '35%' }}>Allottee / Buyer Name:</td>
+                    <td style={{ padding: '8px 0', textTransform: 'uppercase' }}>{username}</td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #f1ece1' }}>
+                    <td style={{ padding: '8px 0', fontWeight: 'bold' }}>Allotted Unit ID:</td>
+                    <td>V-{userUnit.unit_id} ({floorWithSuffix})</td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #f1ece1' }}>
+                    <td style={{ padding: '8px 0', fontWeight: 'bold' }}>Tower Block:</td>
+                    <td>{towerName}</td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #f1ece1' }}>
+                    <td style={{ padding: '8px 0', fontWeight: 'bold' }}>Carpet Area:</td>
+                    <td>{userUnit.area} Sq.Ft.</td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #f1ece1' }}>
+                    <td style={{ padding: '8px 0', fontWeight: 'bold' }}>Super Built-Up Area:</td>
+                    <td>{Math.round(parseInt(userUnit.area) * 1.12)} Sq.Ft.</td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #f1ece1' }}>
+                    <td style={{ padding: '8px 0', fontWeight: 'bold' }}>Total Agreement Value:</td>
+                    <td style={{ fontWeight: 'bold', color: 'var(--vanya-green)' }}>{formatINR(totalNum)}</td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #f1ece1' }}>
+                    <td style={{ padding: '8px 0', fontWeight: 'bold' }}>Amount Settled (Paid):</td>
+                    <td style={{ color: '#137333', fontWeight: 'bold' }}>{formatINR(paidNum)}</td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #f1ece1' }}>
+                    <td style={{ padding: '8px 0', fontWeight: 'bold' }}>Pending Balance Outstanding:</td>
+                    <td style={{ color: '#c62828', fontWeight: 'bold' }}>{formatINR(pendingNum)}</td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid #f1ece1' }}>
+                    <td style={{ padding: '8px 0', fontWeight: 'bold' }}>Estimated Possession:</td>
+                    <td>{possessionDate}</td>
+                  </tr>
                 </tbody>
               </table>
-              <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
-                <span onClick={() => alert('Opening ticket list ledger...')} style={{ color: '#D9A036', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>View All Tickets</span>
+
+              <h4 style={{ borderBottom: '1px solid #e8dfcc', paddingBottom: '0.4rem', color: 'var(--vanya-green)', marginTop: '2rem' }}>1. COVENANTS OF ALLOTMENT</h4>
+              <p style={{ textAlign: 'justify', fontSize: '0.9rem', marginBottom: '1rem' }}>
+                1.1. The Builder represents that they have clear, absolute, and marketable title to the land parcel details, and have received building plan layout sanctions under RERA authority.
+              </p>
+              <p style={{ textAlign: 'justify', fontSize: '0.9rem', marginBottom: '1rem' }}>
+                1.2. The Buyer agrees to clear milestones and installments as per the Construction Linked Plan (CLP) layout detailed in the 'Payments' ledger. Delays in installment payments carry interest penalties as per RERA terms.
+              </p>
+
+              <h4 style={{ borderBottom: '1px solid #e8dfcc', paddingBottom: '0.4rem', color: 'var(--vanya-green)', marginTop: '2rem' }}>2. PHYSICAL POSSESSION AND TIMELINES</h4>
+              <p style={{ textAlign: 'justify', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                2.1. Construction milestones (slab completions, brickworks, internal fitouts) shall be updated continuously in the buyer portal. Final possession handover, deed execution, and keys delivery are contingent upon receiving the final occupancy certificate and clear receipt ledger from the accounting office.
+              </p>
+
+              <div style={{ marginTop: '4rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                <div style={{ borderTop: '1px solid #8c7647', width: '200px', textAlign: 'center', paddingTop: '0.5rem' }}>
+                  DreamSpaces Signatory
+                </div>
+                <div style={{ borderTop: '1px solid #8c7647', width: '200px', textAlign: 'center', paddingTop: '0.5rem', textTransform: 'uppercase' }}>
+                  {username} (Buyer Allottee)
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* ==================== 10.6. REFER AND EARN (LOYALTY) PAGE ==================== */}
+        {activeTab === 'referrals' && (
+          <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem' }}>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h1 className="serif" style={{ fontSize: '1.8rem', color: 'var(--vanya-green)', margin: 0, fontWeight: 'bold' }}>Refer & Earn Loyalty Board</h1>
+              <span style={{ fontSize: '0.82rem', color: '#6b7280' }}>Introduce friends and family to DreamSpaces and earn premium payouts up to ₹ 30,000!</span>
+            </div>
+
+            {/* KPI Stat counters */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
+              <div className="kpi-card">
+                <span>TOTAL REFERRED</span>
+                <h2 style={{ fontSize: '1.6rem', color: 'var(--vanya-green)', margin: '4px 0' }}>{referrals.length}</h2>
+              </div>
+              <div className="kpi-card">
+                <span>SITE VISITS COMPLETED</span>
+                <h2 style={{ fontSize: '1.6rem', color: '#D9A036', margin: '4px 0' }}>{referrals.filter(r => r.status === 'WALKED_IN' || r.status === 'BOOKED').length}</h2>
+              </div>
+              <div className="kpi-card">
+                <span>UNLOCKED REWARDS</span>
+                <h2 style={{ fontSize: '1.6rem', color: '#137333', margin: '4px 0' }}>
+                  ₹ {referrals.reduce((acc, curr) => {
+                    if (curr.status === 'BOOKED') return acc + 30000;
+                    if (curr.status === 'WALKED_IN') return acc + 5000;
+                    return acc;
+                  }, 0).toLocaleString('en-IN')}
+                </h2>
+              </div>
+              <div className="kpi-card">
+                <span>BOOKED RESIDENCES</span>
+                <h2 style={{ fontSize: '1.6rem', color: 'var(--vanya-green)', margin: '4px 0' }}>{referrals.filter(r => r.status === 'BOOKED').length}</h2>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.5rem' }}>
+              {/* LEFT COLUMN: Refer-a-Friend Form & Copy Link widget */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <div className="widget-card" style={{ margin: 0, padding: '1.5rem' }}>
+                  <h3 className="serif" style={{ margin: '0 0 1rem 0', color: 'var(--vanya-green)', fontSize: '1.15rem' }}>Invite Your Circle</h3>
+                  
+                  {referralMsg && (
+                    <div style={{ background: '#e6f4ea', color: '#137333', padding: '8px 12px', borderRadius: '6px', marginBottom: '1rem', fontSize: '0.78rem' }}>
+                      {referralMsg}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleRaiseReferral} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div className="form-group">
+                      <label style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Friend's Name</label>
+                      <input 
+                        type="text" 
+                        value={newReferralName} 
+                        onChange={(e) => setNewReferralName(e.target.value)} 
+                        placeholder="Enter full name..."
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '0.82rem' }}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Friend's Phone Number</label>
+                      <input 
+                        type="text" 
+                        value={newReferralPhone} 
+                        onChange={(e) => setNewReferralPhone(e.target.value)} 
+                        placeholder="Enter 10-digit number..."
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '0.82rem' }}
+                      />
+                    </div>
+                    <button type="submit" className="btn-dark" style={{ width: '100%', padding: '10px', fontSize: '0.8rem', background: '#D9A036', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>
+                      SEND INVITATION
+                    </button>
+                  </form>
+                </div>
+
+                <div className="widget-card" style={{ margin: 0, padding: '1.5rem' }}>
+                  <h3 className="serif" style={{ margin: '0 0 0.5rem 0', color: 'var(--vanya-green)', fontSize: '1.15rem' }}>Share Referral Link</h3>
+                  <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0 0 1rem 0' }}>Copy this unique link to share directly on WhatsApp or social networks.</p>
+                  
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input 
+                      type="text" 
+                      readOnly 
+                      value={typeof window !== 'undefined' ? `${window.location.origin}/register?ref=${username}` : `http://localhost:3000/register?ref=${username}`} 
+                      style={{ flex: 1, padding: '8px 10px', borderRadius: '6px', border: '1px solid #ccc', background: '#fafafa', fontSize: '0.78rem' }}
+                    />
+                    <button 
+                      onClick={handleCopyLink}
+                      className="btn-dark" 
+                      style={{ padding: '8px 14px', background: 'var(--vanya-green)', border: 'none', color: 'white', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer', minWidth: '80px' }}
+                    >
+                      {copied ? 'Copied! ✅' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* RIGHT COLUMN: Referred List status tracking */}
+              <div className="widget-card" style={{ margin: 0, padding: '1.5rem' }}>
+                <h3 className="serif" style={{ margin: '0 0 1rem 0', color: 'var(--vanya-green)', fontSize: '1.15rem' }}>Referrals Tracking</h3>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="table-standard" style={{ fontSize: '0.78rem' }}>
+                    <thead>
+                      <tr>
+                        <th>NAME</th>
+                        <th>PHONE</th>
+                        <th>STATUS</th>
+                        <th>REWARDS EARNED</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {referrals.length === 0 ? (
+                        <tr>
+                          <td colSpan="4" style={{ textAlign: 'center', color: '#9ca3af', padding: '2rem' }}>No referrals submitted yet.</td>
+                        </tr>
+                      ) : (
+                        referrals.map((r, idx) => (
+                          <tr key={idx}>
+                            <td><strong>{r.friend_name}</strong></td>
+                            <td>{r.friend_phone}</td>
+                            <td>
+                              <span className={`badge ${r.status === 'BOOKED' ? 'available' : r.status === 'WALKED_IN' ? 'negotiation' : 'reserved'}`}>
+                                {r.status}
+                              </span>
+                            </td>
+                            <td style={{ fontWeight: 'bold' }}>
+                              {r.status === 'BOOKED' ? (
+                                <span style={{ color: '#137333' }}>₹ 30,000 Unlocked 🏆</span>
+                              ) : r.status === 'WALKED_IN' ? (
+                                <span style={{ color: '#D9A036' }}>₹ 5,000 Unlocked 🚶</span>
+                              ) : (
+                                <span style={{ color: '#9ca3af' }}>₹ 0 (Site visit pending)</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
@@ -1210,7 +1957,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                     height: '72px',
                     borderRadius: '50%',
                     background: '#e5f5ea',
-                    color: '#113629',
+                    color: 'var(--vanya-green)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1219,11 +1966,11 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                     fontFamily: "'Playfair Display', serif",
                     marginBottom: '0.75rem'
                   }}>{username.charAt(0).toUpperCase()}</div>
-                  <h3 className="serif" style={{ margin: 0, color: '#113629', fontSize: '1.25rem', textTransform: 'capitalize' }}>{username}</h3>
+                  <h3 className="serif" style={{ margin: 0, color: 'var(--vanya-green)', fontSize: '1.25rem', textTransform: 'capitalize' }}>{username}</h3>
                   <span className="text-muted" style={{ fontSize: '0.72rem' }}>{emailAddress}</span>
                 </div>
 
-                <h3 className="serif" style={{ margin: '0 0 1.25rem 0', color: '#113629', fontSize: '1.1rem' }}>Personal Information</h3>
+                <h3 className="serif" style={{ margin: '0 0 1.25rem 0', color: 'var(--vanya-green)', fontSize: '1.1rem' }}>Personal Information</h3>
                 
                 {profileMsg && (
                   <div style={{ background: '#e6f4ea', color: '#137333', padding: '8px 12px', borderRadius: '6px', marginBottom: '1rem', fontSize: '0.78rem' }}>
@@ -1235,7 +1982,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #fafafa', paddingBottom: '0.5rem' }}>
                     <div style={{ flex: 1 }}>
                       <span style={{ fontSize: '0.65rem', color: '#9ca3af', display: 'block', fontWeight: 'bold' }}>FULL NAME</span>
-                      <strong style={{ color: '#113629', textTransform: 'capitalize' }}>{username}</strong>
+                      <strong style={{ color: 'var(--vanya-green)', textTransform: 'capitalize' }}>{username}</strong>
                     </div>
                   </div>
 
@@ -1333,7 +2080,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
               {/* Change Password Card */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 <div className="widget-card" style={{ margin: 0 }}>
-                  <h3 className="serif" style={{ margin: '0 0 1.25rem 0', color: '#113629', fontSize: '1.1rem' }}>Change Password</h3>
+                  <h3 className="serif" style={{ margin: '0 0 1.25rem 0', color: 'var(--vanya-green)', fontSize: '1.1rem' }}>Change Password</h3>
                   
                   {passwordMsg && (
                     <div style={{ background: '#fce8e6', color: '#c5221f', padding: '8px 12px', borderRadius: '6px', marginBottom: '1rem', fontSize: '0.78rem' }}>
@@ -1389,7 +2136,7 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                         setTimeout(() => setPasswordMsg(''), 5000);
                       }} 
                       className="btn-dark" 
-                      style={{ width: '100%', padding: '10px', fontSize: '0.75rem', background: '#113629', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+                      style={{ width: '100%', padding: '10px', fontSize: '0.75rem', background: 'var(--vanya-green)', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
                     >
                       UPDATE PASSWORD
                     </button>

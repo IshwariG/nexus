@@ -25,12 +25,12 @@ export default function AdminProjectSelector() {
         disabled={isPending}
         style={{
           background: 'white',
-          border: '1px solid #c2a661',
+          border: '1px solid var(--vanya-gold)',
           padding: '8px 36px 8px 16px',
           borderRadius: '8px',
           fontSize: '0.78rem',
           fontWeight: '600',
-          color: '#113629',
+          color: 'var(--vanya-green)',
           outline: 'none',
           cursor: 'pointer',
           boxShadow: '0 2px 8px rgba(194, 166, 97, 0.1)',
@@ -53,7 +53,7 @@ export default function AdminProjectSelector() {
         transform: 'translateY(-50%)',
         pointerEvents: 'none',
         fontSize: '0.6rem',
-        color: '#c2a661'
+        color: 'var(--vanya-gold)'
       }}>▼</span>
     </div>
   );

@@ -34,6 +34,7 @@ export default async function AdminDashboard(props) {
   let commissions = [];
   let currentBuyer = null;
   let allUsers = [];
+  let opportunities = [];
   
   try {
     const { data: iData } = await supabase.from('Inquiries').select('*').order('created_at', { ascending: false });
@@ -54,6 +55,9 @@ export default async function AdminDashboard(props) {
     const { data: commData } = await supabase.from('Commissions').select('*').order('created_at', { ascending: false });
     if (commData) commissions = commData;
 
+    const { data: oppData } = await supabase.from('Opportunities').select('*').order('created_at', { ascending: false });
+    if (oppData) opportunities = oppData;
+
     if (userRole === 'Buyer') {
       currentBuyer = buyers.find(b => b.username === userId);
     }
@@ -71,5 +75,5 @@ export default async function AdminDashboard(props) {
     return <ChannelPartnerClient username={userId} />;
   }
   
-  return <AdminViewClient inquiries={inquiries} units={units} buyers={buyers} cpPartners={cpPartners} commissions={commissions} project={project} allUsers={allUsers} />;
+  return <AdminViewClient inquiries={inquiries} units={units} buyers={buyers} cpPartners={cpPartners} commissions={commissions} project={project} allUsers={allUsers} opportunities={opportunities} />;
 }

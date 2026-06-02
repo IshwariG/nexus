@@ -131,7 +131,7 @@ export default function SalesmanInquiryPipelineClient({ initialInquiries, salesm
                     {isUncontacted ? (
                       <button 
                         className="btn-dark" 
-                        style={{ padding: '6px 12px', fontSize: '0.65rem', background: '#c2a661', color: '#fff', border: 'none', cursor: 'pointer' }}
+                        style={{ padding: '6px 12px', fontSize: '0.65rem', background: 'var(--vanya-gold)', color: '#fff', border: 'none', cursor: 'pointer' }}
                         disabled={updatingId === inq.id}
                         onClick={() => handleToggleContact(inq.id, inq.status)}
                       >

@@ -1,10 +1,11 @@
 "use client";
 import React, { useMemo, useState } from 'react';
 
-export default function GridClient({ units, inquiries, buyers = [], project = 'vanya-residences' }) {
+export default function GridClient({ units, inquiries, buyers = [], users = [], project = 'vanya-residences' }) {
   const [selectedClient, setSelectedClient] = useState(null);
   const [activePhase, setActivePhase] = useState(1);
   const [velocityRange, setVelocityRange] = useState('MONTH');
+  const [velocityOffset, setVelocityOffset] = useState(0);
   const gridLevels = activePhase === 1 ? [5, 4, 3, 2, 1] : [10, 9, 8, 7, 6];
 
   // Dynamically filter or simulate units based on project
@@ -72,16 +73,75 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
   }
 
   const handleCellClick = (unitId) => {
-    // Look for client details in the Inquiries side-channel
+    // 1. Check if there is an active buyer in BuyerDetails for this unit
+    const buyer = buyers.find(b => b.unit_id && b.unit_id.toString() === unitId.toString());
+    if (buyer) {
+      // Find the user details from the Users table
+      const user = (users || []).find(u => u.username === buyer.username);
+      if (user) {
+        setSelectedClient({
+          unitId,
+          inquiry: {
+            name: user.full_name || user.username,
+            phone: user.phone || 'N/A',
+            email: user.email || 'N/A',
+            message: `Registered Buyer Profile\nUsername: ${buyer.username}\nAmount Paid: ₹ ${buyer.amount_paid} Cr / ₹ ${buyer.total_amount} Cr\nConstruction Progress: ${buyer.construction_progress}%\nPossession Date: ${buyer.possession_date || 'N/A'}`
+          }
+        });
+        return;
+      } else {
+        // Fallback if user profile is missing but buyer details exist
+        setSelectedClient({
+          unitId,
+          inquiry: {
+            name: buyer.username,
+            phone: 'N/A',
+            email: 'N/A',
+            message: `Registered Buyer Profile\nAmount Paid: ₹ ${buyer.amount_paid} Cr / ₹ ${buyer.total_amount} Cr\nConstruction Progress: ${buyer.construction_progress}%`
+          }
+        });
+        return;
+      }
+    }
+
+    // 2. If no active buyer, look for client details in the Inquiries side-channel matching tag_color
+    const uData = projectUnits.find(u => parseInt(u.unit_id) === unitId);
+    const expectedNameOrUser = uData?.tag_color;
+
+    if (expectedNameOrUser && !['green', 'red', 'blue'].includes(expectedNameOrUser)) {
+      // Try to find an inquiry that matches the tag_color (case insensitive username or name)
+      const matchingInquiry = inquiries.find(inq => 
+        inq.source === `UNIT_ASSIGNMENT_${unitId}` && 
+        (inq.name?.toLowerCase() === expectedNameOrUser.toLowerCase() || 
+         inq.phone === expectedNameOrUser)
+      );
+      if (matchingInquiry) {
+        setSelectedClient({ unitId, inquiry: matchingInquiry });
+        return;
+      }
+
+      // Try to find a user profile that matches the tag_color as username
+      const user = (users || []).find(u => u.username?.toLowerCase() === expectedNameOrUser.toLowerCase());
+      if (user) {
+        setSelectedClient({
+          unitId,
+          inquiry: {
+            name: user.full_name || user.username,
+            phone: user.phone || 'N/A',
+            email: user.email || 'N/A',
+            message: 'Assigned user profile (No active purchase details found).'
+          }
+        });
+        return;
+      }
+    }
+
+    // 3. Fallback: find the latest inquiry for this unit assignment
     const inquiry = inquiries.find(inq => inq.source === `UNIT_ASSIGNMENT_${unitId}`);
     if (inquiry) {
       setSelectedClient({ unitId, inquiry });
-    } else {
-      // If no details exist, show placeholder or lookup info
-      const uData = projectUnits.find(u => parseInt(u.unit_id) === unitId);
-      if (uData && uData.tag_color && !['green', 'red', 'blue'].includes(uData.tag_color)) {
-        setSelectedClient({ unitId, inquiry: { name: uData.tag_color, message: 'Details missing in standard pipeline.' } });
-      }
+    } else if (uData && uData.tag_color && !['green', 'red', 'blue'].includes(uData.tag_color)) {
+      setSelectedClient({ unitId, inquiry: { name: uData.tag_color, message: 'Details missing in standard pipeline.' } });
     }
   };
 
@@ -123,6 +183,15 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
 
   const velocityBars = useMemo(() => {
     const now = new Date();
+    if (velocityRange === 'WEEK') {
+      now.setDate(now.getDate() + (velocityOffset * 7));
+    } else if (velocityRange === 'MONTH') {
+      now.setDate(1);
+      now.setMonth(now.getMonth() + velocityOffset);
+    } else if (velocityRange === 'H1' || velocityRange === 'H2') {
+      now.setFullYear(now.getFullYear() + velocityOffset);
+    }
+
     const payments = (buyers || [])
       .map((b) => ({ amtLakhs: parseAmountVal(b.amount_paid), dt: b.created_at ? new Date(b.created_at) : null }))
       .filter((p) => p.dt && !Number.isNaN(p.dt.getTime()) && p.amtLakhs > 0);
@@ -177,7 +246,7 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
       if (b) b.valueLakhs += p.amtLakhs;
     });
     return buckets.map((b) => ({ label: b.label, value: b.valueLakhs / 100 }));
-  }, [buyers, velocityRange]);
+  }, [buyers, velocityRange, velocityOffset]);
 
   const realAvgPriceLakhs = useMemo(() => {
     const prices = projectUnits.map(u => parseAmountVal(u.price)).filter(p => p > 0);
@@ -318,8 +387,8 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
       {/* Analytical Performance Report */}
       <div className="performance-section mb-2">
         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-          <h3 className="serif" style={{ fontSize: '2.2rem', color: '#113629', margin: '0 0 0.4rem 0' }}>Analytical Performance Report</h3>
-          <div style={{ width: '60px', height: '3px', background: '#c2a661', margin: '0 auto 0.5rem auto', borderRadius: '2px' }}></div>
+          <h3 className="serif" style={{ fontSize: '2.2rem', color: 'var(--vanya-green)', margin: '0 0 0.4rem 0' }}>Analytical Performance Report</h3>
+          <div style={{ width: '60px', height: '3px', background: 'var(--vanya-gold)', margin: '0 auto 0.5rem auto', borderRadius: '2px' }}></div>
           <p style={{ fontSize: '0.8rem', color: '#9ca3af', margin: 0 }}>
             Aggregate sales intelligence & velocity tracking (Phase {activePhase})
           </p>
@@ -366,7 +435,7 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
                         strokeLinecap="round" style={{ transition: 'stroke-dasharray 0.8s ease' }} />
                     </svg>
                     <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                      <h2 className="serif" style={{ margin: 0, fontSize: '2.2rem', color: '#113629', fontWeight: 'bold', lineHeight: 1 }}>{totalUnits}</h2>
+                      <h2 className="serif" style={{ margin: 0, fontSize: '2.2rem', color: 'var(--vanya-green)', fontWeight: 'bold', lineHeight: 1 }}>{totalUnits}</h2>
                       <span style={{ fontSize: '0.58rem', color: '#9ca3af', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>TOTAL UNITS</span>
                     </div>
                   </div>
@@ -396,7 +465,7 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
                 <div className="widget-card" style={{ padding: '1.5rem', background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                     <div>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#113629', letterSpacing: '0.5px' }}>MONTHLY SALES VELOCITY</span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--vanya-green)', letterSpacing: '0.5px' }}>MONTHLY SALES VELOCITY</span>
                       <div style={{ display: 'flex', gap: '1rem', marginTop: '0.3rem', fontSize: '0.65rem', fontWeight: 'bold' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#137333' }}>
                           <span style={{ width: '8px', height: '8px', background: '#137333', borderRadius: '50%', display: 'inline-block' }}></span> REVENUE
@@ -406,16 +475,36 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
                         </span>
                       </div>
                     </div>
-                    <select
-                      value={velocityRange}
-                      onChange={(e) => setVelocityRange(e.target.value)}
-                      style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem', border: '1px solid #d1d5db', borderRadius: '6px', background: '#fff', color: '#374151', fontWeight: '600' }}
-                    >
-                      <option value="WEEK">Week</option>
-                      <option value="MONTH">Month</option>
-                      <option value="H1">Jan - Jun</option>
-                      <option value="H2">Jul - Dec</option>
-                    </select>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <button 
+                        type="button"
+                        onClick={() => setVelocityOffset(prev => prev - 1)}
+                        style={{ background: '#f1f3f5', border: 'none', borderRadius: '4px', padding: '0.3rem 0.6rem', cursor: 'pointer', color: '#4b5563', fontSize: '0.9rem', fontWeight: 'bold' }}
+                      >
+                        &lt;
+                      </button>
+                      <select
+                        value={velocityRange}
+                        onChange={(e) => {
+                          setVelocityRange(e.target.value);
+                          setVelocityOffset(0);
+                        }}
+                        style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem', border: '1px solid #d1d5db', borderRadius: '6px', background: '#fff', color: '#374151', fontWeight: '600', outline: 'none', cursor: 'pointer' }}
+                      >
+                        <option value="WEEK">Week</option>
+                        <option value="MONTH">Month</option>
+                        <option value="H1">Jan - Jun</option>
+                        <option value="H2">Jul - Dec</option>
+                      </select>
+                      <button 
+                        type="button"
+                        onClick={() => setVelocityOffset(prev => prev + 1)}
+                        disabled={velocityOffset >= 0}
+                        style={{ background: velocityOffset >= 0 ? '#f9fafb' : '#f1f3f5', border: 'none', borderRadius: '4px', padding: '0.3rem 0.6rem', cursor: velocityOffset >= 0 ? 'not-allowed' : 'pointer', color: velocityOffset >= 0 ? '#d1d5db' : '#4b5563', fontSize: '0.9rem', fontWeight: 'bold' }}
+                      >
+                        &gt;
+                      </button>
+                    </div>
                   </div>
                   {/* SVG Bar chart */}
                   {(() => {
@@ -484,7 +573,7 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
                           <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                         </svg>
                       </div>
-                      <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629', fontWeight: 'bold' }}>₹ {formatCr(pAvgPriceLakhs)}</h3>
+                      <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>₹ {formatCr(pAvgPriceLakhs)}</h3>
                     </div>
                   </div>
                   <div className="widget-card" style={{ padding: '1.25rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px' }}>
@@ -495,7 +584,7 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
                           <rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 7V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3" />
                         </svg>
                       </div>
-                      <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629', fontWeight: 'bold' }}>₹ {formatCr(pTotalPortfolioLakhs)}</h3>
+                      <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>₹ {formatCr(pTotalPortfolioLakhs)}</h3>
                     </div>
                     <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700', marginTop: '0.3rem', marginLeft: '0.1rem' }}>↑ +{project === 'vanya-estate' ? '18.4' : project === 'vanya-meadows' ? '21.0' : portfolioIncreasePerc.toFixed(1)}% INCREASE</span>
                   </div>
@@ -507,7 +596,7 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
                           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
                         </svg>
                       </div>
-                      <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629', fontWeight: 'bold' }}>{pConversionRate}%</h3>
+                      <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{pConversionRate}%</h3>
                     </div>
                     <span style={{ fontSize: '0.65rem', color: '#6b7280', fontWeight: '600', marginTop: '0.3rem', marginLeft: '0.1rem' }}>LEAD TO DEPOSIT</span>
                   </div>
@@ -524,7 +613,7 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
                         <text x="7" y="18" fill="#137333" stroke="none" fontSize="18" fontWeight="bold" fontFamily="serif">₹</text>
                       </svg>
                     </div>
-                    <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>₹ {formatCr(pTotalRevenueLakhs)}</h3>
+                    <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>₹ {formatCr(pTotalRevenueLakhs)}</h3>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' }}>
                     <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700' }}>↑ +{project === 'vanya-estate' ? '8.5' : project === 'vanya-meadows' ? '5.2' : revenueIncreasePerc.toFixed(1)}% VS LAST QUARTER</span>
@@ -542,7 +631,7 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
                         <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
                       </svg>
                     </div>
-                    <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>{projectSoldUnitsCount} <span style={{ fontSize: '1.05rem', color: '#9ca3af', fontWeight: 'normal' }}>/ {projectUnitsCount}</span></h3>
+                    <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{projectSoldUnitsCount} <span style={{ fontSize: '1.05rem', color: '#9ca3af', fontWeight: 'normal' }}>/ {projectUnitsCount}</span></h3>
                   </div>
                   <div style={{ marginTop: '1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
@@ -563,7 +652,7 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
                         <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
                       </svg>
                     </div>
-                    <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>{pAvgSalesCycle} Days</h3>
+                    <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{pAvgSalesCycle} Days</h3>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' }}>
                     <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700' }}>
@@ -652,13 +741,13 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
         <div style={{position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}}>
           <div style={{background: 'white', padding: '3rem', width: '100%', maxWidth: '450px', boxShadow: '0 20px 60px rgba(0,0,0,0.05)', border: '1px solid #eee', position: 'relative'}}>
             <button onClick={() => setSelectedClient(null)} style={{position: 'absolute', top: '1rem', right: '1.5rem', background: 'transparent', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#888'}}>&times;</button>
-            <h2 className="serif" style={{color: '#113629', marginBottom: '0.5rem', fontSize: '1.8rem'}}>Unit {selectedClient.unitId} Assignment</h2>
+            <h2 className="serif" style={{color: 'var(--vanya-green)', marginBottom: '0.5rem', fontSize: '1.8rem'}}>Unit {selectedClient.unitId} Assignment</h2>
             <p style={{color: '#888', fontSize: '0.8rem', marginBottom: '2rem', letterSpacing: '0.5px'}}>Confidential Client Record</p>
             
             <div style={{display: 'flex', flexDirection: 'column', gap: '1.2rem', fontSize: '0.9rem', color: '#555'}}>
               <div>
                 <strong style={{fontSize: '0.65rem', letterSpacing: '1px', color: '#888', display: 'block', marginBottom: '0.2rem'}}>FULL NAME</strong>
-                <div style={{color: '#113629', fontWeight: 600, fontSize: '1.1rem'}}>{selectedClient.inquiry.name}</div>
+                <div style={{color: 'var(--vanya-green)', fontWeight: 600, fontSize: '1.1rem'}}>{selectedClient.inquiry.name}</div>
               </div>
               {selectedClient.inquiry.phone && (
                 <div>
@@ -672,7 +761,7 @@ export default function GridClient({ units, inquiries, buyers = [], project = 'v
                   <div>{selectedClient.inquiry.email}</div>
                 </div>
               )}
-              <div style={{background: '#faf9f6', padding: '1rem', border: '1px solid #eee', marginTop: '0.5rem'}}>
+              <div style={{background: 'var(--admin-bg)', padding: '1rem', border: '1px solid #eee', marginTop: '0.5rem'}}>
                 <strong style={{fontSize: '0.65rem', letterSpacing: '1px', color: '#888', display: 'block', marginBottom: '0.5rem'}}>ADDITIONAL DETAILS</strong>
                 <div style={{whiteSpace: 'pre-wrap', lineHeight: 1.6}}>{selectedClient.inquiry.message}</div>
               </div>

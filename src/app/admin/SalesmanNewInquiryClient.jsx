@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 
 export default function SalesmanNewInquiryClient({ userId, buttonClass = "btn-sales-new", label = "+ NEW INQUIRY" }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [formData, setFormData] = useState({ name: '', email: '', phone: '', source: 'Salesman Generated', pincode: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '', aadhaar: '', source: 'Salesman Generated', pincode: '' });
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -13,13 +13,18 @@ export default function SalesmanNewInquiryClient({ userId, buttonClass = "btn-sa
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await fetch('/api/inquiries', {
+    const res = await fetch('/api/inquiries', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...formData, message: `Pincode: ${formData.pincode}`, salesman_id: userId })
     });
-    setIsOpen(false);
-    window.location.reload();
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.warning || data.error || 'Failed to submit lead');
+    } else {
+      setIsOpen(false);
+      window.location.reload();
+    }
   };
 
   const modalContent = isOpen && mounted ? (
@@ -32,7 +37,7 @@ export default function SalesmanNewInquiryClient({ userId, buttonClass = "btn-sa
         <form onSubmit={handleSubmit} style={{display: 'flex', flexDirection: 'column', gap: '1.2rem'}}>
           <div>
             <label style={{display:'block', fontSize:'0.75rem', fontWeight:'bold', color:'#666', marginBottom:'0.3rem'}}>CLIENT NAME *</label>
-            <input type="text" placeholder="Full Name" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} style={{width:'100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius:'4px', background:'#f9f9f9', color:'#333'}} />
+            <input type="text" placeholder="Full Name" required pattern="[A-Za-z\s]+" title="Please enter letters only" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} style={{width:'100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius:'4px', background:'#f9f9f9', color:'#333'}} />
           </div>
           <div>
             <label style={{display:'block', fontSize:'0.75rem', fontWeight:'bold', color:'#666', marginBottom:'0.3rem'}}>EMAIL ADDRESS *</label>
@@ -40,17 +45,21 @@ export default function SalesmanNewInquiryClient({ userId, buttonClass = "btn-sa
           </div>
           <div>
             <label style={{display:'block', fontSize:'0.75rem', fontWeight:'bold', color:'#666', marginBottom:'0.3rem'}}>PHONE NUMBER *</label>
-            <input type="tel" placeholder="Phone Number" required value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} style={{width:'100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius:'4px', background:'#f9f9f9', color:'#333'}} />
+            <input type="tel" placeholder="Phone Number (10 Digits)" required minLength="10" maxLength="10" pattern="[0-9]{10}" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value.replace(/[^0-9]/g, '')})} style={{width:'100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius:'4px', background:'#f9f9f9', color:'#333'}} />
+          </div>
+          <div>
+            <label style={{display:'block', fontSize:'0.75rem', fontWeight:'bold', color:'#666', marginBottom:'0.3rem'}}>AADHAAR CARD NUMBER *</label>
+            <input type="tel" placeholder="Aadhaar Card Number (12 Digits)" required minLength="12" maxLength="12" pattern="[0-9]{12}" value={formData.aadhaar} onChange={e => setFormData({...formData, aadhaar: e.target.value.replace(/[^0-9]/g, '')})} style={{width:'100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius:'4px', background:'#f9f9f9', color:'#333'}} />
           </div>
           <div>
             <label style={{display:'block', fontSize:'0.75rem', fontWeight:'bold', color:'#666', marginBottom:'0.3rem'}}>PINCODE *</label>
-            <input type="text" placeholder="Pincode / Zip Code" required value={formData.pincode} onChange={e => setFormData({...formData, pincode: e.target.value})} style={{width:'100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius:'4px', background:'#f9f9f9', color:'#333'}} />
+            <input type="tel" placeholder="Pincode / Zip Code" required minLength="6" maxLength="6" pattern="[0-9]{6}" value={formData.pincode} onChange={e => setFormData({...formData, pincode: e.target.value.replace(/[^0-9]/g, '')})} style={{width:'100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius:'4px', background:'#f9f9f9', color:'#333'}} />
           </div>
           <div>
             <label style={{display:'block', fontSize:'0.75rem', fontWeight:'bold', color:'#666', marginBottom:'0.3rem'}}>SOURCE</label>
             <input type="text" placeholder="Source (e.g. Call, Referral)" value={formData.source} onChange={e => setFormData({...formData, source: e.target.value})} style={{width:'100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius:'4px', background:'#f9f9f9', color:'#333'}} />
           </div>
-          <button type="submit" style={{background:'#113629', color:'white', border:'none', padding: '1rem', borderRadius:'4px', cursor:'pointer', fontWeight:'bold', letterSpacing:'1px', marginTop:'0.5rem'}}>SUBMIT LEAD</button>
+          <button type="submit" style={{background:'var(--vanya-green)', color:'white', border:'none', padding: '1rem', borderRadius:'4px', cursor:'pointer', fontWeight:'bold', letterSpacing:'1px', marginTop:'0.5rem'}}>SUBMIT LEAD</button>
         </form>
       </div>
     </div>

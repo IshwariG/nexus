@@ -40,7 +40,7 @@ export default function VisitManagerClient({ inquiryId, currentStatus, salesmanI
       style={{
         padding: '4px 10px', 
         fontSize: '0.65rem', 
-        background: '#113629',
+        background: 'var(--vanya-green)',
         border: 'none',
         borderRadius: '4px',
         color: 'white',

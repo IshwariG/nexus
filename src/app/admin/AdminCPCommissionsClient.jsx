@@ -76,7 +76,7 @@ export default function AdminCPCommissionsClient({ initialCommissions, cpPartner
       {toast && (
         <div style={{
           position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
-          background: toast.type === 'success' ? '#113629' : '#c53030',
+          background: toast.type === 'success' ? 'var(--vanya-green)' : '#c53030',
           color: 'white', padding: '0.85rem 1.5rem', borderRadius: '8px',
           fontSize: '0.82rem', fontWeight: '600', zIndex: 99999,
           boxShadow: '0 8px 24px rgba(0,0,0,0.2)', whiteSpace: 'nowrap',
@@ -89,7 +89,7 @@ export default function AdminCPCommissionsClient({ initialCommissions, cpPartner
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1.5rem', position: 'relative' }}>
         <div style={{ flex: 1, textAlign: 'center' }}>
-          <h3 className="serif" style={{ margin: '0 0 0.25rem 0', fontSize: '1.5rem', color: '#113629' }}>Channel Partner Commissions & Payouts</h3>
+          <h3 className="serif" style={{ margin: '0 0 0.25rem 0', fontSize: '1.5rem', color: 'var(--vanya-green)' }}>Channel Partner Commissions & Payouts</h3>
           <p className="text-muted" style={{ margin: 0, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Review, approve, and disburse referred sales commissions to brokers</p>
         </div>
       </div>
@@ -97,9 +97,9 @@ export default function AdminCPCommissionsClient({ initialCommissions, cpPartner
       {/* KPI Summary Row */}
       {commissions.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
-          <div style={{ background: '#f8f9fb', border: '1px solid #e8eaed', borderRadius: '10px', padding: '1rem', textAlign: 'center' }}>
+          <div style={{ background: 'var(--admin-bg)', border: '1px solid #e8eaed', borderRadius: '10px', padding: '1rem', textAlign: 'center' }}>
             <div style={{ fontSize: '0.65rem', fontWeight: '700', color: '#6b7280', letterSpacing: '1px', marginBottom: '0.4rem' }}>TOTAL COMMISSION POOL</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#113629', fontFamily: 'Playfair Display, serif' }}>{formatINR(totalAll)}</div>
+            <div style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--vanya-green)', fontFamily: 'Playfair Display, serif' }}>{formatINR(totalAll)}</div>
           </div>
           <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '1rem', textAlign: 'center' }}>
             <div style={{ fontSize: '0.65rem', fontWeight: '700', color: '#166534', letterSpacing: '1px', marginBottom: '0.4rem' }}>TOTAL DISBURSED</div>
@@ -136,7 +136,7 @@ export default function AdminCPCommissionsClient({ initialCommissions, cpPartner
                   V-{c.unit_id}
                 </span>
               </td>
-              <td><strong style={{ color: '#113629', fontSize: '1rem' }}>{c.amount}</strong></td>
+              <td><strong style={{ color: 'var(--vanya-green)', fontSize: '1rem' }}>{c.amount}</strong></td>
               <td>
                 <span className={`badge ${c.status === 'PAID' ? 'available' : c.status === 'APPROVED' ? 'negotiation' : 'reserved'}`}>
                   {c.status === 'PAID' ? '✅ PAID' : c.status === 'APPROVED' ? '⏳ APPROVED' : '🔵 PENDING'}
@@ -147,7 +147,7 @@ export default function AdminCPCommissionsClient({ initialCommissions, cpPartner
                   {c.status === 'PENDING' && (
                     <button
                       className="btn-dark"
-                      style={{ padding: '4px 12px', fontSize: '0.65rem', background: '#c2a661', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'white' }}
+                      style={{ padding: '4px 12px', fontSize: '0.65rem', background: 'var(--vanya-gold)', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'white' }}
                       disabled={updatingId === c.id}
                       onClick={() => handleUpdateStatus(c.id, 'APPROVED')}
                     >

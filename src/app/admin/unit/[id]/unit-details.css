@@ -83,7 +83,7 @@
 }
 
 .ud-badge {
-  background: var(--vanya-green, #113629);
+  background: var(--vanya-green, var(--vanya-green));
   padding: 4px 10px;
   font-size: 0.65rem;
   font-weight: 600;
@@ -159,7 +159,7 @@
 }
 
 .ud-btn-outline {
-  background: var(--vanya-green, #113629);
+  background: var(--vanya-green, var(--vanya-green));
   border: 1px solid rgba(255,255,255,0.2);
   color: white;
   padding: 0.8rem 1.5rem;

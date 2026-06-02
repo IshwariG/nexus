@@ -4,10 +4,51 @@ import { supabase } from '@/lib/supabase';
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { cp_username, client_name, email, phone, pref_type, message } = body;
+    const { cp_username, client_name, email, phone, aadhaar, pref_type, message } = body;
 
     if (!cp_username || !client_name || !phone) {
       return NextResponse.json({ success: false, error: 'CP Username, Client Name, and Phone are required' }, { status: 400 });
+    }
+
+    // --- Duplicate Lead Check ---
+    const phoneVal = phone.trim();
+    const emailVal = email ? email.trim() : '';
+    const aadhaarVal = aadhaar ? aadhaar.trim() : '';
+
+    if (phoneVal || emailVal || aadhaarVal) {
+      let query = supabase.from('Inquiries').select('id, name, source, created_at, phone, email, aadhaar');
+      const orConditions = [];
+      if (phoneVal) orConditions.push(`phone.eq.${phoneVal}`);
+      if (emailVal) orConditions.push(`email.eq.${emailVal}`);
+      if (aadhaarVal) orConditions.push(`aadhaar.eq.${aadhaarVal}`);
+
+      if (orConditions.length > 0) {
+        query = query.or(orConditions.join(','));
+        const { data: existingLeads, error: checkError } = await query.order('created_at', { ascending: true });
+        if (checkError) throw checkError;
+
+        if (existingLeads && existingLeads.length > 0) {
+          const first = existingLeads[0];
+          const rawSource = first.source || '';
+          const sourceStr = rawSource.startsWith('CP_Referral|')
+            ? `Channel Partner (${rawSource.split('|')[1]})`
+            : rawSource;
+          
+          let duplicateField = '';
+          if (phoneVal && first.phone === phoneVal) {
+            duplicateField = 'Phone Number';
+          } else if (aadhaarVal && first.aadhaar === aadhaarVal) {
+            duplicateField = 'Aadhaar Card';
+          } else if (emailVal && first.email === emailVal) {
+            duplicateField = 'Email Address';
+          }
+
+          return NextResponse.json({
+            success: false,
+            error: `Duplicate registration: This client is already registered in the system with the same ${duplicateField || 'details'}. First registered on ${new Date(first.created_at).toLocaleDateString()} via ${sourceStr || 'Direct Sales'}.`
+          }, { status: 409 });
+        }
+      }
     }
 
     // 1. Assign to a Sales Executive using round-robin logic
@@ -47,6 +88,7 @@ export async function POST(request) {
           name: client_name,
           email: email || '',
           phone: phone,
+          aadhaar: aadhaarVal || null,
           message: composedMessage,
           source: `CP_Referral|${cp_username}`,
           status: finalStatus

@@ -58,6 +58,12 @@ export async function GET(request) {
 
     if (payError) throw payError;
 
+    // 5. Fetch Sales users for name lookup
+    const { data: allUsers } = await supabase
+      .from('Users')
+      .select('username, full_name, employee_id, role, phone')
+      .eq('role', 'Sales');
+
     // 5. Compute Stats
     // Parse numeric commission amounts (e.g., "₹ 28.50 L" -> 28.50)
     const parseAmount = (amtStr) => {
@@ -91,7 +97,8 @@ export async function GET(request) {
       stats,
       leads,
       commissions,
-      payouts
+      payouts,
+      allUsers: allUsers || []
     });
 
   } catch (error) {

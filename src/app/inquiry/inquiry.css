@@ -1,7 +1,7 @@
 .inquiry-page {
   min-height: 100vh;
   position: relative;
-  background-color: #113629;
+  background-color: var(--color-light); /* White background */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -14,17 +14,20 @@
   background-image: url('/images/hero_building_1777640070355.png');
   background-size: cover;
   background-position: center;
-  opacity: 0.2;
+  opacity: 0.08;
   z-index: 0;
 }
 
 .inquiry-container {
   position: relative;
   z-index: 10;
-  background-color: #fdfcfa;
+  background-color: var(--color-light);
   width: 100%;
   max-width: 1000px;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+  box-shadow: 0 10px 40px rgba(28,27,26,0.06);
+  border: 1px solid rgba(28,27,26,0.08);
+  border-radius: 6px;
+  overflow: hidden;
 }
 
 .inquiry-content {
@@ -35,16 +38,17 @@
 .inquiry-text {
   flex: 1;
   padding: 4rem;
-  border-right: 1px solid rgba(0,0,0,0.05);
+  border-right: 1px solid rgba(28,27,26,0.08);
   display: flex;
   flex-direction: column;
   justify-content: center;
+  background-color: var(--color-light);
 }
 
 .inquiry-title {
-  font-size: 3.5rem;
+  font-size: 3rem;
   line-height: 1.1;
-  color: #113629;
+  color: var(--vanya-green);
   margin-bottom: 2rem;
 }
 
@@ -52,7 +56,7 @@
   color: var(--color-text-dark);
   margin-bottom: 3rem;
   font-size: 1rem;
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 .inquiry-meta {
@@ -68,17 +72,18 @@
   font-size: 0.8rem;
   letter-spacing: 1px;
   text-transform: uppercase;
-  font-weight: 500;
+  font-weight: 700;
 }
 
 .meta-icon {
   font-size: 1.2rem;
+  color: var(--vanya-gold);
 }
 
 .inquiry-form-container {
   flex: 1;
   padding: 4rem;
-  background-color: #fbfaf8;
+  background-color: var(--color-surface); /* Warm off-white surface */
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -94,7 +99,7 @@
   width: 100%;
   background: transparent;
   border: none;
-  border-bottom: 1px solid rgba(0,0,0,0.1);
+  border-bottom: 1px solid rgba(28,27,26,0.15);
   padding: 1rem 0;
   font-family: var(--font-sans);
   font-size: 1rem;
@@ -104,7 +109,7 @@
 
 .inquiry-input:focus {
   outline: none;
-  border-bottom-color: #113629;
+  border-bottom-color: var(--vanya-gold);
 }
 
 .inquiry-textarea {
@@ -113,30 +118,34 @@
 }
 
 .field-label {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   text-transform: uppercase;
   letter-spacing: 1px;
   color: var(--color-muted);
+  font-weight: 700;
   margin-bottom: 1rem;
 }
 
 .interest-options {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
   flex-wrap: wrap;
 }
 
 .interest-option {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   text-transform: uppercase;
   letter-spacing: 1px;
   padding: 0.5rem 1rem;
-  border: 1px solid rgba(0,0,0,0.1);
+  border: 1px solid rgba(28,27,26,0.15);
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  transition: all 0.3s;
+  border-radius: 4px;
+  font-weight: 700;
+  background-color: var(--color-light);
+  transition: all 0.2s;
 }
 
 .interest-option input[type="radio"] {
@@ -144,15 +153,28 @@
 }
 
 .interest-option.active, .interest-option:has(input:checked) {
-  background-color: #113629;
-  color: var(--color-text-light);
-  border-color: #113629;
+  background-color: var(--vanya-gold);
+  color: #1c1b1a; /* Charcoal text on butter yellow */
+  border-color: var(--vanya-gold);
 }
 
 .submit-btn {
   width: 100%;
   padding: 1.2rem;
   margin-top: 1rem;
+  background-color: var(--vanya-gold);
+  color: #1c1b1a;
+  border: none;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.submit-btn:hover {
+  background-color: #e5ab1f;
 }
 
 .form-disclaimer {

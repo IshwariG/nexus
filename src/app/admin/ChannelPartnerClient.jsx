@@ -3,14 +3,34 @@
 import React, { useState, useEffect } from 'react';
 import './admin.css';
 
+
+const maskPhone = (phoneStr) => {
+  if (!phoneStr) return 'N/A';
+  const cleaned = phoneStr.trim();
+  if (cleaned.length <= 4) return '******';
+  return '******' + cleaned.slice(-4);
+};
+
+const maskEmail = (emailStr) => {
+  if (!emailStr) return 'N/A';
+  const parts = emailStr.split('@');
+  if (parts.length < 2) return '***';
+  const name = parts[0];
+  const domain = parts[1];
+  if (name.length <= 2) return '***@' + domain;
+  return name.charAt(0) + '***' + name.slice(-1) + '@' + domain;
+};
+
 export default function ChannelPartnerClient({ username }) {
-  const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      return params.get('tab') || 'dashboard';
+  const [activeTab, setActiveTab] = useState('dashboard');
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab) {
+      setActiveTab(tab);
     }
-    return 'dashboard';
-  });
+  }, []);
 
   const [selectedLeadId, setSelectedLeadId] = useState(null);
   const [data, setData] = useState(null);
@@ -30,6 +50,7 @@ export default function ChannelPartnerClient({ username }) {
   const [clientName, setClientName] = useState('');
   const [clientEmail, setClientEmail] = useState('');
   const [clientPhone, setClientPhone] = useState('');
+  const [clientAadhaar, setClientAadhaar] = useState('');
   const [prefLocation, setPrefLocation] = useState('Baner, Pune');
   const [prefType, setPrefType] = useState('3BHK Penthouse');
   const [budgetRange, setBudgetRange] = useState('1.0 - 1.5 Cr');
@@ -156,6 +177,7 @@ export default function ChannelPartnerClient({ username }) {
           client_name: clientName,
           email: clientEmail,
           phone: clientPhone,
+          aadhaar: clientAadhaar,
           pref_type: prefType,
           message: `Preference: ${prefType}. Location: ${prefLocation}. Budget: ${budgetRange}. Source: ${leadSource}. Remarks: ${remarks}`
         })
@@ -166,6 +188,7 @@ export default function ChannelPartnerClient({ username }) {
         setClientName('');
         setClientEmail('');
         setClientPhone('');
+        setClientAadhaar('');
         setRemarks('');
         fetchData();
         setTimeout(() => {
@@ -221,21 +244,52 @@ export default function ChannelPartnerClient({ username }) {
     return '₹ ' + val.toLocaleString('en-IN');
   };
 
+  const [schedulingLeadId, setSchedulingLeadId] = useState(null);
+  const [visitDateTime, setVisitDateTime] = useState('');
+  const [visitMsg, setVisitMsg] = useState(null);
+
+  const handleScheduleVisit = async (leadId) => {
+    if (!visitDateTime) { setVisitMsg({ type: 'error', text: 'Please select a date & time.' }); return; }
+    setSchedulingLeadId(leadId);
+    setVisitMsg(null);
+    try {
+      const res = await fetch(`/api/inquiries?id=${leadId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: `VISIT_SCHEDULED|${username}|${visitDateTime}` })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setVisitMsg({ type: 'success', text: `✅ Site visit scheduled for ${new Date(visitDateTime).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}` });
+        setVisitDateTime('');
+        fetchData();
+      } else {
+        setVisitMsg({ type: 'error', text: json.error || 'Failed to schedule visit.' });
+      }
+    } catch (e) {
+      setVisitMsg({ type: 'error', text: 'Network error scheduling visit.' });
+    } finally {
+      setSchedulingLeadId(null);
+    }
+  };
+
   const getStatusBadge = (statusStr) => {
     if (!statusStr) return <span className="badge available">NEW</span>;
     const rawStatus = statusStr.split('|')[0].toUpperCase();
     if (rawStatus === 'NEW') return <span className="badge available">NEW</span>;
     if (rawStatus === 'CONTACTED') return <span className="badge negotiation">UNDER REVIEW</span>;
+    if (rawStatus === 'VISIT_SCHEDULED') return <span className="badge reserved" style={{ background: '#e8f5e9', color: '#2e7d32', border: '1px solid #a5d6a7' }}>🏠 VISIT SCHEDULED</span>;
     if (rawStatus === 'QUALIFIED') return <span className="badge reserved">APPROVED</span>;
+    if (rawStatus === 'CONVERTED' || rawStatus === 'DONE' || rawStatus === 'BOOKED') return <span className="badge available" style={{ background: '#e8f5e9', color: '#1b5e20' }}>✅ CLOSED</span>;
     if (rawStatus === 'LOST') return <span className="badge sold">REJECTED</span>;
     return <span className="badge available">{rawStatus}</span>;
   };
 
   if (loading && !data) {
     return (
-      <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', background: '#f8f9fb', flexDirection: 'column', gap: '1rem' }}>
-        <div style={{ fontSize: '1.2rem', fontFamily: 'Playfair Display, serif', color: '#113629', fontWeight: 600 }}>Loading CP Partner Portal...</div>
-        <div style={{ width: '40px', height: '40px', border: '3px solid #c2a661', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+      <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', background: 'var(--admin-bg)', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ fontSize: '1.2rem', fontFamily: 'Playfair Display, serif', color: 'var(--vanya-green)', fontWeight: 600 }}>Loading CP Partner Portal...</div>
+        <div style={{ width: '40px', height: '40px', border: '3px solid var(--vanya-gold)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
         <style dangerouslySetInnerHTML={{__html: `@keyframes spin { to { transform: rotate(360deg); } }`}} />
       </div>
     );
@@ -245,6 +299,7 @@ export default function ChannelPartnerClient({ username }) {
   const leads = data?.leads || [];
   const commissions = data?.commissions || [];
   const payouts = data?.payouts || [];
+  const allUsers = data?.allUsers || [];
 
   // Parse and calculate metrics from database
   // totalEarningsVal = what has actually been PAID OUT (from Payouts records)
@@ -314,8 +369,9 @@ export default function ChannelPartnerClient({ username }) {
       const statusText = l.status ? l.status.split('|')[0].toUpperCase() : 'NEW';
       if (myLeadsSubTab === 'new' && statusText === 'NEW') return true;
       if (myLeadsSubTab === 'under-review' && (statusText === 'CONTACTED' || statusText === 'UNDER REVIEW')) return true;
+      if (myLeadsSubTab === 'visit-scheduled' && statusText === 'VISIT_SCHEDULED') return true;
       if (myLeadsSubTab === 'approved' && (statusText === 'QUALIFIED' || statusText === 'APPROVED')) return true;
-      if (myLeadsSubTab === 'converted' && (statusText === 'CONVERTED' || statusText === 'SOLD OUT')) return true;
+      if (myLeadsSubTab === 'converted' && (statusText === 'CONVERTED' || statusText === 'SOLD OUT' || statusText === 'DONE' || statusText === 'BOOKED')) return true;
       if (myLeadsSubTab === 'rejected' && (statusText === 'LOST' || statusText === 'REJECTED')) return true;
       return false;
     });
@@ -360,17 +416,17 @@ export default function ChannelPartnerClient({ username }) {
     .sort((a, b) => b.earnings - a.earnings);
 
   return (
-    <div className="admin-layout" style={{ background: '#f8f9fb' }}>
+    <div className="admin-layout" style={{ background: 'var(--admin-bg)' }}>
       
       {/* SIDEBAR NAVIGATION */}
       <aside className="admin-sidebar" style={{ background: '#ffffff', borderRight: '1px solid #f1f3f5', display: 'flex', flexDirection: 'column', width: '260px', overflowY: 'auto' }}>
         <div className="admin-sidebar-logo">
           <h2>DreamSpaces</h2>
-          <p style={{ color: '#c2a661', fontSize: '0.6rem', letterSpacing: '1px' }}>CP PARTNER PORTAL</p>
+          <p style={{ color: 'var(--vanya-gold)', fontSize: '0.6rem', letterSpacing: '1px' }}>CP PARTNER PORTAL</p>
         </div>
         
         <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #f1f3f5' }}>
-          <strong style={{ fontSize: '0.82rem', color: '#113629', display: 'block' }}>{cpDetails.firm_name}</strong>
+          <strong style={{ fontSize: '0.82rem', color: 'var(--vanya-green)', display: 'block' }}>{cpDetails.firm_name}</strong>
           <span className="text-muted" style={{ fontSize: '0.62rem', letterSpacing: '0.5px' }}>RERA: {cpDetails.rera_number}</span>
         </div>
 
@@ -418,7 +474,7 @@ export default function ChannelPartnerClient({ username }) {
         {/* HEADER BAR */}
         <header className="admin-header" style={{ background: 'white', padding: '1rem 2.5rem', borderBottom: '1px solid #f1f3f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <h1 className="serif" style={{ fontSize: '1.35rem', margin: 0, color: '#113629' }}>Welcome back, Partner! 👋</h1>
+            <h1 className="serif" style={{ fontSize: '1.35rem', margin: 0, color: 'var(--vanya-green)' }}>Welcome back, Partner! 👋</h1>
             <p className="text-muted" style={{ margin: 0, fontSize: '0.68rem', letterSpacing: '0.5px' }}>PARTNER CODE: {username.toUpperCase()} • BASE COMM RATE: {cpDetails.commission_rate}%</p>
           </div>
           <button className="btn-dark" onClick={fetchData}>REFRESH TELEMETRY</button>
@@ -469,7 +525,7 @@ export default function ChannelPartnerClient({ username }) {
                 <h3 className="serif" style={{ margin: '0 0 1rem 0' }}>Earnings Overview</h3>
                 <div style={{ position: 'relative', height: '160px', width: '100%' }}>
                   <svg viewBox="0 0 500 150" width="100%" height="100%" preserveAspectRatio="none">
-                    <path d="M 0 130 L 100 110 L 200 70 L 300 85 L 400 45 L 500 20" fill="none" stroke="#c2a661" strokeWidth="3" />
+                    <path d="M 0 130 L 100 110 L 200 70 L 300 85 L 400 45 L 500 20" fill="none" stroke="var(--vanya-gold)" strokeWidth="3" />
                     <line x1="0" y1="130" x2="500" y2="130" stroke="#eee" />
                   </svg>
                 </div>
@@ -478,7 +534,7 @@ export default function ChannelPartnerClient({ username }) {
               {/* Lead Status Donut Chart */}
               <div className="widget-card" style={{ display: 'flex', flexDirection: 'column' }}>
                 <h3 className="serif" style={{ margin: '0 0 1rem 0' }}>Lead Status</h3>
-                <div className="donut-chart-mock" style={{ background: 'conic-gradient(#137333 0% 60%, #c2a661 60% 85%, #c62828 85% 100%)' }}>
+                <div className="donut-chart-mock" style={{ background: 'conic-gradient(#137333 0% 60%, var(--vanya-gold) 60% 85%, #c62828 85% 100%)' }}>
                   <div className="donut-inner">
                     <h2 className="serif">{leads.length}</h2>
                     <span>TOTAL LEADS</span>
@@ -486,7 +542,7 @@ export default function ChannelPartnerClient({ username }) {
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 1rem', fontSize: '0.7rem', marginTop: 'auto', justifyContent: 'center' }}>
                   <span><span className="dot" style={{ background: '#137333' }}></span> Converted (60%)</span>
-                  <span><span className="dot" style={{ background: '#c2a661' }}></span> Under Review (25%)</span>
+                  <span><span className="dot" style={{ background: 'var(--vanya-gold)' }}></span> Under Review (25%)</span>
                   <span><span className="dot" style={{ background: '#c62828' }}></span> Rejected (15%)</span>
                 </div>
               </div>
@@ -497,7 +553,7 @@ export default function ChannelPartnerClient({ username }) {
               <div className="widget-card">
                 <div className="flex-between mb-2">
                   <h3 className="serif" style={{ margin: 0 }}>Recent Leads</h3>
-                  <button onClick={() => changeTab('my-leads')} style={{ background: 'none', border: 'none', color: '#c2a661', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>View All Leads</button>
+                  <button onClick={() => changeTab('my-leads')} style={{ background: 'none', border: 'none', color: 'var(--vanya-gold)', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>View All Leads</button>
                 </div>
                 <table className="table-standard">
                   <thead>
@@ -522,7 +578,7 @@ export default function ChannelPartnerClient({ username }) {
               <div className="widget-card" style={{ display: 'flex', flexDirection: 'column' }}>
                 <div className="flex-between mb-2">
                   <h3 className="serif" style={{ margin: 0 }}>Earnings Summary</h3>
-                  <button onClick={() => changeTab('earnings')} style={{ background: 'none', border: 'none', color: '#c2a661', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>View Payments</button>
+                  <button onClick={() => changeTab('earnings')} style={{ background: 'none', border: 'none', color: 'var(--vanya-gold)', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>View Payments</button>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', fontSize: '0.8rem', marginTop: '1rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.5rem' }}>
@@ -559,17 +615,21 @@ export default function ChannelPartnerClient({ username }) {
               <form onSubmit={handleSubmitReferral} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div className="form-group">
                   <label>Full Name *</label>
-                  <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} required placeholder="e.g. Riya Sharma" />
+                  <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} required placeholder="e.g. Riya Sharma" pattern="[A-Za-z\s]+" title="Please enter letters only" />
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div className="form-group">
                     <label>Mobile Number *</label>
-                    <input type="tel" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} required placeholder="+91 98765 43210" />
+                    <input type="tel" value={clientPhone} onChange={(e) => setClientPhone(e.target.value.replace(/[^0-9]/g, ''))} required minLength="10" maxLength="10" pattern="[0-9]{10}" placeholder="10-digit Phone" />
                   </div>
                   <div className="form-group">
-                    <label>Email Address</label>
-                    <input type="email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} placeholder="riya@domain.com" />
+                    <label>Aadhaar Card Number *</label>
+                    <input type="tel" value={clientAadhaar} onChange={(e) => setClientAadhaar(e.target.value.replace(/[^0-9]/g, ''))} required minLength="12" maxLength="12" pattern="[0-9]{12}" placeholder="12-digit Aadhaar Card" />
                   </div>
+                </div>
+                <div className="form-group">
+                  <label>Email Address</label>
+                  <input type="email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} placeholder="riya@domain.com" />
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div className="form-group">
@@ -626,14 +686,14 @@ export default function ChannelPartnerClient({ username }) {
               <div className="flex-between mb-2" style={{ borderBottom: '1px solid #f1f3f5', paddingBottom: '1rem' }}>
                 {/* Status Filter Tab Pills */}
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  {['all', 'new', 'under-review', 'approved', 'converted', 'rejected'].map(t => (
+                  {['all', 'new', 'under-review', 'visit-scheduled', 'approved', 'converted', 'rejected'].map(t => (
                     <button 
                       key={t}
                       onClick={() => setMyLeadsSubTab(t)}
                       className={`btn-outline ${myLeadsSubTab === t ? 'active' : ''}`}
                       style={{ padding: '6px 12px', fontSize: '0.72rem', textTransform: 'uppercase', borderRadius: '4px' }}
                     >
-                      {t.replace('-', ' ')}
+                      {t === 'visit-scheduled' ? '🏠 Visit Scheduled' : t.replace('-', ' ')}
                     </button>
                   ))}
                 </div>
@@ -671,7 +731,7 @@ export default function ChannelPartnerClient({ username }) {
                       <tr key={l.id || i}>
                         <td>
                           <strong>{l.name}</strong><br/>
-                          <span className="text-muted" style={{ fontSize: '0.75rem' }}>{l.phone}</span>
+                          <span className="text-muted" style={{ fontSize: '0.75rem' }}>📞 {l.phone || 'N/A'}</span>
                         </td>
                         <td>{req}</td>
                         <td>{budget}</td>
@@ -710,11 +770,11 @@ export default function ChannelPartnerClient({ username }) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', fontSize: '0.82rem' }}>
                   <div>
                     <span style={{ fontSize: '0.65rem', color: '#999', display: 'block', fontWeight: 'bold' }}>MOBILE NUMBER</span>
-                    <strong>{selectedLead.phone}</strong>
+                    <strong style={{ color: 'var(--vanya-green)', fontSize: '1rem' }}>📞 {selectedLead.phone || 'N/A'}</strong>
                   </div>
                   <div>
                     <span style={{ fontSize: '0.65rem', color: '#999', display: 'block', fontWeight: 'bold' }}>EMAIL ADDRESS</span>
-                    <strong>{selectedLead.email || 'N/A'}</strong>
+                    <strong>✉️ {selectedLead.email || 'N/A'}</strong>
                   </div>
                   <div>
                     <span style={{ fontSize: '0.65rem', color: '#999', display: 'block', fontWeight: 'bold' }}>PREFERRED LOCATION</span>
@@ -735,7 +795,7 @@ export default function ChannelPartnerClient({ username }) {
                 </div>
                 <div style={{ marginTop: '1.5rem' }}>
                   <span style={{ fontSize: '0.65rem', color: '#999', display: 'block', fontWeight: 'bold' }}>ADDITIONAL NOTES</span>
-                  <div style={{ background: '#faf9f6', padding: '0.75rem', borderRadius: '6px', border: '1px solid #f1eede', marginTop: '0.25rem', fontSize: '0.8rem' }}>
+                  <div style={{ background: 'var(--admin-bg)', padding: '0.75rem', borderRadius: '6px', border: '1px solid #f1eede', marginTop: '0.25rem', fontSize: '0.8rem' }}>
                     {selectedLead.message || 'No additional remarks.'}
                   </div>
                 </div>
@@ -753,7 +813,7 @@ export default function ChannelPartnerClient({ username }) {
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                      <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: selectedLead.status?.includes('|') ? '#137333' : '#c2a661', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem' }}>
+                      <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: selectedLead.status?.includes('|') ? '#137333' : 'var(--vanya-gold)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem' }}>
                         {selectedLead.status?.includes('|') ? '✓' : '●'}
                       </div>
                       <div>
@@ -775,15 +835,87 @@ export default function ChannelPartnerClient({ username }) {
 
                 <div className="widget-card">
                   <h3 className="serif" style={{ margin: '0 0 1rem 0' }}>Assigned To</h3>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <div className="sm-avatar bg-blue" style={{ width: '42px', height: '42px' }}>RM</div>
-                    <div>
-                      <strong>Rahul Mehta</strong>
-                      <span className="text-muted" style={{ display: 'block', fontSize: '0.72rem' }}>Sales Executive</span>
-                    </div>
-                    <a href="tel:+918765432109" style={{ marginLeft: 'auto', background: '#e8f0fe', padding: '8px', borderRadius: '50%', textDecoration: 'none' }}>📞</a>
-                  </div>
+                  {(() => {
+                    // Extract salesman ID from status e.g. "CONTACTED|SR-1001" or "VISIT_SCHEDULED|cp101|2026-06-10T10:00"
+                    const statusParts = (selectedLead.status || '').split('|');
+                    const stage = statusParts[0]?.toUpperCase();
+                    // For VISIT_SCHEDULED the cp set it, salesman may not be assigned yet
+                    const salesmanId = stage === 'VISIT_SCHEDULED' ? statusParts[2] : statusParts[1];
+                    const salesman = salesmanId
+                      ? allUsers.find(u => u.username === salesmanId || u.employee_id === salesmanId)
+                      : null;
+
+                    if (!salesman && !salesmanId) {
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: '#f1f5f9', border: '2px dashed #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>👤</div>
+                          <div>
+                            <strong style={{ color: '#9ca3af' }}>Not Assigned Yet</strong>
+                            <span className="text-muted" style={{ display: 'block', fontSize: '0.72rem' }}>Awaiting Sales Concierge</span>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const displayName = salesman?.full_name || salesmanId || 'Sales Executive';
+                    const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+                    const avatarColors = ['#1a73e8', '#137333', '#d9a036', '#c62828', '#7c3aed'];
+                    const colorIdx = initials.charCodeAt(0) % avatarColors.length;
+
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: avatarColors[colorIdx], color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.9rem', flexShrink: 0 }}>
+                          {initials}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <strong style={{ display: 'block' }}>{displayName}</strong>
+                          <span className="text-muted" style={{ fontSize: '0.72rem' }}>Sales Executive{salesman?.employee_id ? ` · ${salesman.employee_id}` : ''}</span>
+                        </div>
+                        {salesman?.phone && (
+                          <a href={`tel:${salesman.phone}`} style={{ background: '#e8f0fe', padding: '8px', borderRadius: '50%', textDecoration: 'none', fontSize: '1rem' }}>📞</a>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
+
+                {/* ---- SCHEDULE SITE VISIT CARD ---- */}
+                {(() => {
+                  const st = (selectedLead.status || '').split('|')[0].toUpperCase();
+                  const isAlreadyScheduled = st === 'VISIT_SCHEDULED';
+                  const isClosed = ['CONVERTED', 'DONE', 'BOOKED', 'LOST'].includes(st);
+                  if (isClosed) return null;
+                  return (
+                    <div className="widget-card" style={{ borderTop: '3px solid var(--vanya-green)' }}>
+                      <h3 className="serif" style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', color: 'var(--vanya-green)' }}>🏠 Schedule Site Visit</h3>
+                      {isAlreadyScheduled && (
+                        <div style={{ background: '#e8f5e9', color: '#2e7d32', padding: '0.5rem 0.75rem', borderRadius: '6px', fontSize: '0.78rem', marginBottom: '0.75rem' }}>
+                          ✅ Visit already scheduled. You can reschedule below.
+                        </div>
+                      )}
+                      {visitMsg && (
+                        <div style={{ background: visitMsg.type === 'success' ? '#e6f4ea' : '#fce8e6', color: visitMsg.type === 'success' ? '#137333' : '#c5221f', padding: '0.6rem 0.8rem', borderRadius: '6px', fontSize: '0.78rem', marginBottom: '0.75rem' }}>
+                          {visitMsg.text}
+                        </div>
+                      )}
+                      <label style={{ fontSize: '0.65rem', fontWeight: 'bold', color: '#888', display: 'block', marginBottom: '0.35rem' }}>SELECT DATE & TIME</label>
+                      <input
+                        type="datetime-local"
+                        value={visitDateTime}
+                        onChange={e => setVisitDateTime(e.target.value)}
+                        min={new Date().toISOString().slice(0, 16)}
+                        style={{ width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.82rem', marginBottom: '0.75rem' }}
+                      />
+                      <button
+                        onClick={() => handleScheduleVisit(selectedLead.id)}
+                        disabled={schedulingLeadId === selectedLead.id || !visitDateTime}
+                        style={{ width: '100%', background: 'var(--vanya-green)', color: 'white', border: 'none', borderRadius: '6px', padding: '0.7rem', fontWeight: 'bold', fontSize: '0.8rem', cursor: visitDateTime ? 'pointer' : 'not-allowed', opacity: visitDateTime ? 1 : 0.6 }}
+                      >
+                        {schedulingLeadId === selectedLead.id ? 'SCHEDULING...' : '📅 CONFIRM SITE VISIT'}
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -831,7 +963,7 @@ export default function ChannelPartnerClient({ username }) {
                         const heightPerc = Math.max((d.value / maxVal) * 100, 2);
                         return (
                           <div key={idx} className="bar-col">
-                            <div className="bar" title={formatAmountINR(d.value)} style={{ height: `${heightPerc}%`, background: '#c2a661' }}></div>
+                            <div className="bar" title={formatAmountINR(d.value)} style={{ height: `${heightPerc}%`, background: 'var(--vanya-gold)' }}></div>
                             <span>{d.label}</span>
                           </div>
                         );
@@ -848,7 +980,7 @@ export default function ChannelPartnerClient({ username }) {
                   {topProjectsSorted.slice(0, 5).map((p, idx) => (
                     <div key={idx} className="flex-between" style={{ borderBottom: '1px solid #f1f3f5', paddingBottom: '0.4rem' }}>
                       <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>{idx + 1}. {p.name}</span>
-                      <strong style={{ color: '#c2a661' }}>{formatAmountINR(p.earnings)}</strong>
+                      <strong style={{ color: 'var(--vanya-gold)' }}>{formatAmountINR(p.earnings)}</strong>
                     </div>
                   ))}
                 </div>
@@ -1037,15 +1169,15 @@ export default function ChannelPartnerClient({ username }) {
               
               {/* Left sidebar chats threads */}
               <div className="widget-card" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '1rem', overflowY: 'auto' }}>
-                <h4 className="serif" style={{ margin: '0 0 0.75rem 0', color: '#113629' }}>Active Chats</h4>
+                <h4 className="serif" style={{ margin: '0 0 0.75rem 0', color: 'var(--vanya-green)' }}>Active Chats</h4>
                 <button 
                   onClick={() => setActiveThread('rahul')}
                   className={`btn-outline ${activeThread === 'rahul' ? 'active' : ''}`}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '10px', width: '100%', textAlign: 'left', border: 'none' }}
                 >
-                  <div className="sm-avatar bg-blue" style={{ width: '32px', height: '32px' }}>RM</div>
+                  <div className="sm-avatar bg-blue" style={{ width: '32px', height: '32px' }}>RV</div>
                   <div>
-                    <strong style={{ fontSize: '0.8rem', display: 'block' }}>Rahul Mehta</strong>
+                    <strong style={{ fontSize: '0.8rem', display: 'block' }}>Rahul Verma</strong>
                     <span style={{ fontSize: '0.62rem', color: '#888' }}>Sales Executive</span>
                   </div>
                 </button>
@@ -1079,11 +1211,11 @@ export default function ChannelPartnerClient({ username }) {
               <div className="widget-card" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1.25rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.75rem', marginBottom: '0.75rem' }}>
                   <div className="sm-avatar bg-blue" style={{ width: '36px', height: '36px' }}>
-                    {activeThread === 'rahul' ? 'RM' : activeThread === 'admin' ? 'AS' : 'NS'}
+                    {activeThread === 'rahul' ? 'RV' : activeThread === 'admin' ? 'AS' : 'NS'}
                   </div>
                   <div>
                     <strong style={{ fontSize: '0.85rem', display: 'block' }}>
-                      {activeThread === 'rahul' ? 'Rahul Mehta' : activeThread === 'admin' ? 'Admin Support' : 'Neha Sharma'}
+                      {activeThread === 'rahul' ? 'Rahul Verma' : activeThread === 'admin' ? 'Admin Support' : 'Neha Sharma'}
                     </strong>
                     <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: 'bold' }}>● ONLINE</span>
                   </div>
@@ -1091,7 +1223,7 @@ export default function ChannelPartnerClient({ username }) {
 
                 <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #f1f3f5', padding: '1rem', borderRadius: '8px', background: '#fafafa', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {chatMessages[activeThread]?.map((m, idx) => (
-                    <div key={idx} style={{ alignSelf: m.sender === 'cp' ? 'flex-end' : 'flex-start', background: m.sender === 'cp' ? '#c2a661' : '#fff', color: m.sender === 'cp' ? 'white' : '#333', padding: '8px 12px', borderRadius: '8px', maxWidth: '70%', fontSize: '0.8rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                    <div key={idx} style={{ alignSelf: m.sender === 'cp' ? 'flex-end' : 'flex-start', background: m.sender === 'cp' ? 'var(--vanya-gold)' : '#fff', color: m.sender === 'cp' ? 'white' : '#333', padding: '8px 12px', borderRadius: '8px', maxWidth: '70%', fontSize: '0.8rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
                       <div>{m.text}</div>
                       <span style={{ fontSize: '0.58rem', opacity: 0.7, display: 'block', textAlign: 'right', marginTop: '4px' }}>{m.time}</span>
                     </div>
@@ -1114,11 +1246,11 @@ export default function ChannelPartnerClient({ username }) {
             <div className="widget-card">
               <div className="flex-between mb-2" style={{ borderBottom: '1px solid #f1f3f5', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
                 <h3 className="serif" style={{ margin: 0 }}>Broker Notifications</h3>
-                <button onClick={() => alert('All notifications marked as read.')} style={{ background: 'none', border: 'none', color: '#c2a661', fontSize: '0.72rem', fontWeight: 'bold', cursor: 'pointer' }}>Mark all as read</button>
+                <button onClick={() => alert('All notifications marked as read.')} style={{ background: 'none', border: 'none', color: 'var(--vanya-gold)', fontSize: '0.72rem', fontWeight: 'bold', cursor: 'pointer' }}>Mark all as read</button>
               </div>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                <div style={{ padding: '1rem', background: '#faf6eb', borderLeft: '4px solid #c2a661', borderRadius: '6px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ padding: '1rem', background: 'var(--admin-surface)', borderLeft: '4px solid var(--vanya-gold)', borderRadius: '6px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   <div style={{ width: '8px', height: '8px', background: '#ef6c00', borderRadius: '50%' }}></div>
                   <div>
                     <strong>Your lead Vikas Singh has been approved!</strong>
@@ -1126,7 +1258,7 @@ export default function ChannelPartnerClient({ username }) {
                   </div>
                 </div>
 
-                <div style={{ padding: '1rem', background: '#faf6eb', borderLeft: '4px solid #c2a661', borderRadius: '6px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ padding: '1rem', background: 'var(--admin-surface)', borderLeft: '4px solid var(--vanya-gold)', borderRadius: '6px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   <div style={{ width: '8px', height: '8px', background: '#ef6c00', borderRadius: '50%' }}></div>
                   <div>
                     <strong>You have earned ₹15,000 for a new booking.</strong>
@@ -1153,7 +1285,7 @@ export default function ChannelPartnerClient({ username }) {
                 <div style={{ padding: '1rem', background: '#fff', borderLeft: '4px solid #eee', borderRadius: '6px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   <div style={{ width: '8px', height: '8px', background: 'transparent', borderRadius: '50%' }}></div>
                   <div>
-                    <strong>Your referred lead Meena Joshi has been assigned to Rahul Mehta.</strong>
+                    <strong>Your referred lead Meena Joshi has been assigned to Rahul Verma.</strong>
                     <div className="text-muted" style={{ fontSize: '0.68rem', marginTop: '2px' }}>3 days ago</div>
                   </div>
                 </div>

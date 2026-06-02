@@ -8,9 +8,9 @@ export default function GlobalVisitsClient({ inquiries }) {
   const salesmanNames = {
     'SR-9999': 'Vikram Sethi',
     'SR-1111': 'Ananya Rao',
-    'SR-2222': 'Karan Malhotra',
-    'SR-3333': 'Priya Sharma',
-    'SR-4444': 'Rohan Verma'
+    'SR-2222': 'Rahul Verma',
+    'SR-3333': 'Sneha Patil',
+    'SR-4444': 'Aditya Sharma'
   };
 
   const filteredVisits = inquiries.filter(inq => {
@@ -31,7 +31,7 @@ export default function GlobalVisitsClient({ inquiries }) {
     <div id="visits" className="widget-card mt-2">
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2rem', gap: '1rem', width: '100%' }}>
         <div style={{ textAlign: 'center' }}>
-          <h3 className="section-title serif" style={{margin: '0 0 0.25rem 0', fontSize: '1.5rem', color: '#113629'}}>Project-wide Scheduled Visits</h3>
+          <h3 className="section-title serif" style={{margin: '0 0 0.25rem 0', fontSize: '1.5rem', color: 'var(--vanya-green)'}}>Project-wide Scheduled Visits</h3>
           <p className="text-muted" style={{margin:0, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px'}}>Global tracking of site walkthroughs and meeting statuses</p>
         </div>
         <div className="search-box">
@@ -95,7 +95,7 @@ export default function GlobalVisitsClient({ inquiries }) {
         <div>Showing {filteredVisits.length} of {filteredVisits.length} entries</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <button style={{ border: 'none', background: 'none', cursor: 'pointer', opacity: 0.5, fontSize: '0.85rem' }}>‹</button>
-          <button style={{ border: 'none', background: '#113629', color: 'white', width: '26px', height: '26px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>1</button>
+          <button style={{ border: 'none', background: 'var(--vanya-green)', color: 'white', width: '26px', height: '26px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>1</button>
           <button style={{ border: 'none', background: 'none', cursor: 'pointer', opacity: 0.5, fontSize: '0.85rem' }}>›</button>
         </div>
         <div>

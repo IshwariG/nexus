@@ -4,14 +4,15 @@
    ============================================================ */
 
 :root {
-  --brand-green: #113629;
-  --brand-gold: #C9A84C;
-  --brand-gold-hover: #b8962e;
-  --brand-bg: #f7f6f2;
-  --border: #e5e7eb;
-  --text-dark: #1a1a1a;
-  --text-muted: #6b7280;
-  --text-mid: #374151;
+  --brand-green: var(--vanya-green);
+  --brand-gold: hsl(43, 96%, 56%); /* Butter golden yellow */
+  --brand-gold-hover: #e5ab1f;
+  --brand-bg: #ffffff; /* White background */
+  --brand-surface: hsl(45, 30%, 97%); /* Warm off-white surface */
+  --border: #e2dfd7;
+  --text-dark: #1c1b1a;
+  --text-muted: #8e8b82;
+  --text-mid: #5a5750;
   --white: #ffffff;
 }
 
@@ -40,7 +41,7 @@ body {
 
 /* ── Left Pane ── */
 .login-left-pane {
-  background: var(--brand-bg);
+  background: var(--brand-surface);
   padding: 3rem 3.5rem;
   display: flex;
   flex-direction: column;
@@ -354,20 +355,20 @@ body {
 /* ── Continue / Login Button ── */
 .continue-btn {
   background: var(--brand-gold);
-  color: white;
+  color: #1c1b1a; /* Charcoal text for high contrast on yellow */
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   height: 48px;
   font-size: 0.92rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
   width: 100%;
-  transition: background 0.2s, transform 0.15s;
-  letter-spacing: 0.3px;
+  transition: all 0.2s;
+  letter-spacing: 0.5px;
 }
 
 .continue-btn:hover:not(:disabled) {

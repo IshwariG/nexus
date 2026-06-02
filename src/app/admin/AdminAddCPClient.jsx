@@ -21,6 +21,7 @@ export default function AdminAddCPClient() {
     const formData = {
       username: e.target.username.value,
       phone: e.target.phone.value,
+      email: e.target.email.value,
       password: e.target.password.value,
       firm_name: e.target.firm_name.value,
       rera_number: e.target.rera_number.value,
@@ -70,12 +71,18 @@ export default function AdminAddCPClient() {
               </div>
               <div className="form-group">
                 <label>Registered Phone Number</label>
-                <input name="phone" placeholder="e.g. 9876543210" required />
+                <input name="phone" type="tel" placeholder="10-digit Phone" required minLength={10} maxLength={10} pattern="[0-9]{10}" onInput={(e) => e.target.value = e.target.value.replace(/[^0-9]/g, '')} title="Please enter a valid 10-digit phone number" />
               </div>
             </div>
-            <div className="form-group">
-              <label>Portal Password</label>
-              <input name="password" type="password" placeholder="Create portal password" required />
+            <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
+              <div className="form-group">
+                <label>Portal Password</label>
+                <input name="password" type="password" placeholder="Create portal password" required />
+              </div>
+              <div className="form-group">
+                <label>Email Address</label>
+                <input name="email" type="email" placeholder="e.g. partner@firm.com" required />
+              </div>
             </div>
           </div>
 
@@ -115,7 +122,7 @@ export default function AdminAddCPClient() {
           <button type="submit" className="btn-dark mt-2" style={{
             width: '100%',
             padding: '1.25rem',
-            background: 'linear-gradient(135deg, #113629 0%, #1a4d35 100%)',
+            background: 'linear-gradient(135deg, var(--vanya-green) 0%, #2d2d2d 100%)',
             fontSize: '0.8rem',
             letterSpacing: '2px',
             boxShadow: '0 10px 20px rgba(17, 54, 41, 0.2)'
@@ -129,7 +136,7 @@ export default function AdminAddCPClient() {
 
   return (
     <>
-      <button className="btn-dark" style={{ background: '#c2a661', color: 'white', border: 'none', padding: '0.55rem 1.1rem', fontSize: '0.67rem', cursor: 'pointer', borderRadius: '7px', fontWeight: '500' }} onClick={() => setIsOpen(true)}>ADD NEW CP PARTNER</button>
+      <button className="btn-dark" style={{ background: 'var(--vanya-gold)', color: 'white', border: 'none', padding: '0.55rem 1.1rem', fontSize: '0.67rem', cursor: 'pointer', borderRadius: '7px', fontWeight: '500' }} onClick={() => setIsOpen(true)}>ADD NEW CP PARTNER</button>
       {mounted && isOpen && createPortal(modalContent, document.body)}
     </>
   );

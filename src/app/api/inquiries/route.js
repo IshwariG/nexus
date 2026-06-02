@@ -19,6 +19,46 @@ export async function POST(request) {
   try {
     const data = await request.json();
     
+    // --- Duplicate Detection ---
+    const emailVal = data.email ? data.email.trim() : '';
+    const phoneVal = data.phone ? data.phone.trim() : '';
+    const aadhaarVal = data.aadhaar ? data.aadhaar.trim() : '';
+
+    if (emailVal || phoneVal || aadhaarVal) {
+      let query = supabase.from('Inquiries').select('id, name, source, created_at, email, phone, aadhaar');
+      const orConditions = [];
+      if (emailVal) orConditions.push(`email.eq.${emailVal}`);
+      if (phoneVal) orConditions.push(`phone.eq.${phoneVal}`);
+      if (aadhaarVal) orConditions.push(`aadhaar.eq.${aadhaarVal}`);
+
+      if (orConditions.length > 0) {
+        query = query.or(orConditions.join(','));
+        const { data: existingLeads } = await query.order('created_at', { ascending: true });
+        
+        if (existingLeads && existingLeads.length > 0) {
+          const first = existingLeads[0];
+          const rawSource = first.source || '';
+          const sourceStr = rawSource.startsWith('CP_Referral|') 
+            ? `Channel Partner (${rawSource.split('|')[1]})` 
+            : rawSource;
+          
+          let duplicateField = '';
+          if (phoneVal && first.phone === phoneVal) {
+            duplicateField = 'Phone Number';
+          } else if (aadhaarVal && first.aadhaar === aadhaarVal) {
+            duplicateField = 'Aadhaar Card';
+          } else if (emailVal && first.email === emailVal) {
+            duplicateField = 'Email Address';
+          }
+
+          return NextResponse.json({
+            error: 'Duplicate registration detected',
+            warning: `This lead is already registered in the system with the same ${duplicateField || 'details'}. First captured on ${new Date(first.created_at).toLocaleDateString()} via ${sourceStr || 'Direct Sales'}.`
+          }, { status: 409 });
+        }
+      }
+    }
+
     // Round-robin assignment if not explicitly assigned
     const salesmen = ['SR-9999', 'SR-1111', 'SR-2222', 'SR-3333', 'SR-4444'];
     let nextSalesman = salesmen[0];
@@ -55,6 +95,7 @@ export async function POST(request) {
           name: data.name,
           email: data.email,
           phone: data.phone,
+          aadhaar: data.aadhaar || null,
           message: data.message || '',
           source: data.source || 'Website',
           status: finalStatus
@@ -132,7 +173,7 @@ export async function POST(request) {
 
     return NextResponse.json(newInquiry, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to submit inquiry' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Failed to submit inquiry' }, { status: 500 });
   }
 }
 
@@ -153,6 +194,21 @@ export async function PATCH(request) {
     if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 });
     if (!status) return NextResponse.json({ error: 'status required' }, { status: 400 });
 
+    // Detect if this is a site walk-in qualification event (DONE status)
+    let isWalkIn = false;
+    let cpUsername = null;
+    if (status.startsWith('DONE|')) {
+      isWalkIn = true;
+      const { data: currentInq } = await supabase
+        .from('Inquiries')
+        .select('source')
+        .eq('id', id)
+        .maybeSingle();
+      if (currentInq && currentInq.source && currentInq.source.startsWith('CP_Referral|')) {
+        cpUsername = currentInq.source.split('|')[1];
+      }
+    }
+
     const { data, error } = await supabase
       .from('Inquiries')
       .update({ status })
@@ -160,6 +216,27 @@ export async function PATCH(request) {
       .select();
 
     if (error) throw error;
+
+    // If walk-in physical arrival occurs, promote Inquiry to Opportunities with 30-day CP tagging rules
+    if (isWalkIn) {
+      try {
+        await supabase
+          .from('Opportunities')
+          .insert([
+            {
+              inquiry_id: id,
+              walk_in_date: new Date().toISOString(),
+              tag_start_date: new Date().toISOString(),
+              tag_end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+              cp_username: cpUsername,
+              status: 'QUALIFIED'
+            }
+          ]);
+      } catch (err) {
+        console.warn('Failed to insert Opportunity metadata (make sure Opportunities table exists):', err.message);
+      }
+    }
+
     return NextResponse.json({ success: true, data });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to update inquiry' }, { status: 500 });

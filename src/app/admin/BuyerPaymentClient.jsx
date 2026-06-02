@@ -52,7 +52,7 @@ export default function BuyerPaymentClient({ unitId, amountDue }) {
         {step === 2 && (
           <div className="animate-fade-in">
             <h4 style={{fontSize: '0.8rem', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '1px'}}>Bank Escrow Details</h4>
-            <div style={{background: '#113629', color: '#fff', padding: '1.5rem', borderRadius: '12px', marginBottom: '1.5rem'}}>
+            <div style={{background: 'var(--vanya-green)', color: '#fff', padding: '1.5rem', borderRadius: '12px', marginBottom: '1.5rem'}}>
               <div className="mb-1">
                 <span style={{fontSize: '0.6rem', opacity: 0.6}}>ACCOUNT NAME</span>
                 <p style={{margin: 0, fontWeight: 600}}>VANYA RESIDENCES ESCROW A/C</p>

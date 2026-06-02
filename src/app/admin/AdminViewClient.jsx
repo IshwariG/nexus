@@ -13,13 +13,291 @@ import AdminCPCommissionsClient from './AdminCPCommissionsClient';
 import AdminGlobalSearchClient from './AdminGlobalSearchClient';
 import AdminAddSalesClient from './AdminAddSalesClient';
 import AdminAddCPClient from './AdminAddCPClient';
-import AdminProjectSelector from './AdminProjectSelector';
 import AdminAlertsCard from './AdminAlertsCard';
 import { revertToAdmin, logoutUser, impersonateSales } from './actions';
 
-export default function AdminViewClient({ inquiries, units, buyers, cpPartners, commissions, project, allUsers = [] }) {
+export default function AdminViewClient({ inquiries, units, buyers, cpPartners, commissions, project, allUsers = [], opportunities = [] }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('dashboard');
+
+  // Call logs states
+  const [allCallLogs, setAllCallLogs] = useState([]);
+
+  // Alert logs dismissed state (must be initialized before notificationAlerts useMemo)
+  const [dismissedAlertIds, setDismissedAlertIds] = useState([]);
+
+  // Dynamic notification & alert counts
+  const notificationAlerts = useMemo(() => {
+    const pendingVisitsCount = inquiries.filter(inq => 
+      inq.status && inq.status.startsWith('SCHEDULED|')
+    ).length;
+
+    const unassignedLeadsCount = inquiries.filter(inq => {
+      const isInternalAction = 
+        (inq.source || '').startsWith('UNIT_ASSIGNMENT_') || 
+        (inq.status || '').startsWith('SCHEDULED|') ||
+        (inq.status || '').startsWith('DONE|');
+
+      if (isInternalAction) return false;
+      
+      if (!inq.status) return true;
+      const parts = inq.status.split('|');
+      return parts.length === 1 || parts[1] === 'unassigned';
+    }).length;
+
+    const availableUnitsCount = units.filter(u => u.status === 'AVAILABLE').length;
+    const totalUnitsCount = units.length || 1;
+    const availablePercentage = Math.round((availableUnitsCount / totalUnitsCount) * 100);
+    const isLowInventory = availablePercentage < 40;
+
+    const items = [];
+    if (unassignedLeadsCount > 0 && !dismissedAlertIds.includes('unassigned-leads')) {
+      items.push({
+        id: 'unassigned-leads',
+        text: `${unassignedLeadsCount} unassigned pipeline leads waiting for allocation.`,
+        icon: '👤',
+        color: 'var(--vanya-gold)'
+      });
+    }
+    if (pendingVisitsCount > 0 && !dismissedAlertIds.includes('pending-visits')) {
+      items.push({
+        id: 'pending-visits',
+        text: `${pendingVisitsCount} upcoming client site visits pending briefings.`,
+        icon: '📅',
+        color: 'var(--vanya-gold)'
+      });
+    }
+    if (isLowInventory && !dismissedAlertIds.includes('low-inventory')) {
+      items.push({
+        id: 'low-inventory',
+        text: `Low Inventory Alert: ${availablePercentage}% available units left.`,
+        icon: '🚨',
+        color: '#c53030'
+      });
+    }
+
+    // Add recent CP referrals dynamically
+    const recentCpReferrals = inquiries
+      .filter(inq => inq.source?.startsWith('CP_Referral|'))
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 2);
+
+    recentCpReferrals.forEach(inq => {
+      const cpName = inq.source.split('|')[1];
+      const alertId = `cp-ref-${inq.id}`;
+      if (!dismissedAlertIds.includes(alertId)) {
+        items.push({
+          id: alertId,
+          text: `New CP referral (${cpName}): ${inq.name}`,
+          icon: '🤝',
+          color: '#1a73e8'
+        });
+      }
+    });
+
+    return {
+      items,
+      count: items.length
+    };
+  }, [inquiries, units, dismissedAlertIds]);
+
+
+  // Trace unit booking source, cp owner and salesperson
+  const getUnitBookingDetails = (unitId) => {
+    const assignInq = inquiries.find(inq => inq.source === `UNIT_ASSIGNMENT_${unitId}`);
+    const buyer = buyers.find(b => String(b.unit_id) === String(unitId));
+    
+    let originalInq = null;
+    if (assignInq) {
+      originalInq = inquiries.find(inq => 
+        !inq.source?.startsWith('UNIT_ASSIGNMENT_') && 
+        (inq.phone === assignInq.phone || (inq.name && assignInq.name && inq.name.toLowerCase().trim() === assignInq.name.toLowerCase().trim()))
+      );
+    } else if (buyer) {
+      originalInq = inquiries.find(inq => 
+        !inq.source?.startsWith('UNIT_ASSIGNMENT_') && 
+        inq.name && buyer.username && 
+        inq.name.toLowerCase().replace(/\s+/g, '') === buyer.username.toLowerCase().replace(/\s+/g, '')
+      );
+    }
+    
+    let source = 'Direct/Website';
+    let cpOwner = 'None';
+    
+    if (originalInq) {
+      const rawSource = originalInq.source || '';
+      if (rawSource.startsWith('CP_Referral|')) {
+        cpOwner = rawSource.split('|')[1];
+        source = `Channel Partner (${cpOwner})`;
+      } else {
+        source = rawSource || 'Direct/Website';
+      }
+    }
+    
+    let salesperson = 'Unassigned';
+    if (assignInq && assignInq.status?.includes('|')) {
+      salesperson = assignInq.status.split('|')[1];
+    } else if (originalInq && originalInq.status?.includes('|')) {
+      salesperson = originalInq.status.split('|')[1];
+    }
+    
+    return {
+      source,
+      cpOwner,
+      salesperson,
+      clientName: buyer ? buyer.username : (assignInq ? assignInq.name : (originalInq ? originalInq.name : 'N/A'))
+    };
+  };
+
+  // Group duplicate inquiries for Lead Clash audits
+  const duplicateInquiriesGrouped = useMemo(() => {
+    const duplicates = {};
+    inquiries.forEach(inq => {
+      if (!inq.phone || inq.source?.startsWith('UNIT_ASSIGNMENT_')) return;
+      const cleanPhone = inq.phone.trim();
+      if (!duplicates[cleanPhone]) {
+        duplicates[cleanPhone] = [];
+      }
+      duplicates[cleanPhone].push(inq);
+    });
+    
+    return Object.entries(duplicates)
+      .filter(([phone, list]) => list.length > 1)
+      .map(([phone, list]) => {
+        const sorted = [...list].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        return {
+          phone,
+          firstRegistration: sorted[0],
+          subsequentRegistrations: sorted.slice(1)
+        };
+      });
+  }, [inquiries]);
+
+  // Compute salesperson hierarchy stats
+  const salespersonStats = useMemo(() => {
+    const salesUsers = allUsers.filter(u => u.role === 'Sales');
+    const mockExecs = [
+      { username: 'SR-9999', full_name: 'Vikram Sethi' },
+      { username: 'SR-1111', full_name: 'Ananya Rao' },
+      { username: 'SR-2222', full_name: 'Rahul Verma' },
+      { username: 'SR-3333', full_name: 'Sneha Patil' },
+      { username: 'SR-4444', full_name: 'Aditya Sharma' }
+    ];
+    
+    const combined = [...salesUsers];
+    mockExecs.forEach(m => {
+      if (!combined.some(c => c.username === m.username)) {
+        combined.push({ username: m.username, role: 'Sales', full_name: m.full_name });
+      }
+    });
+
+    return combined.map(user => {
+      const assigned = inquiries.filter(inq => {
+        if (inq.source?.startsWith('UNIT_ASSIGNMENT_')) return false;
+        const statusStr = inq.status || '';
+        return statusStr.includes(`|${user.username}`) || statusStr === user.username;
+      });
+
+      const converted = assigned.filter(inq => inq.status?.startsWith('CONVERTED') || inq.status?.startsWith('DONE'));
+      const active = assigned.filter(inq => !inq.status?.startsWith('CONVERTED') && !inq.status?.startsWith('LOST') && !inq.status?.startsWith('DONE'));
+      
+      const calls = allCallLogs.filter(c => c.salesman_id === user.username);
+      const avgDuration = calls.length > 0 
+        ? Math.round(calls.reduce((sum, c) => sum + (c.duration || 0), 0) / calls.length) 
+        : 0;
+
+      return {
+        ...user,
+        assignedCount: assigned.length,
+        convertedCount: converted.length,
+        activeCount: active.length,
+        callCount: calls.length,
+        avgCallDuration: avgDuration
+      };
+    });
+  }, [allUsers, inquiries, allCallLogs]);
+
+  // Sourcing team targets states
+  const [sourcingMetricsList, setSourcingMetricsList] = useState([]);
+  const [selectedZone, setSelectedZone] = useState('East');
+  const [newSourcingCp, setNewSourcingCp] = useState('');
+  const [newSourcingTarget, setNewSourcingTarget] = useState(25);
+  const [newSourcingActual, setNewSourcingActual] = useState(0);
+
+  useEffect(() => {
+    if (activeTab === 'dashboard' || activeTab === 'leads') {
+      fetch('/api/calls')
+        .then(res => res.json())
+        .then(json => {
+          if (json.success) {
+            setAllCallLogs(json.data || []);
+          }
+        })
+        .catch(err => console.error('Failed to load call logs:', err));
+    }
+    
+    if (activeTab === 'sourcing-manager' || activeTab === 'dashboard') {
+      fetch('/api/sourcing')
+        .then(res => res.json())
+        .then(json => {
+          if (json.success) {
+            setSourcingMetricsList(json.data || []);
+          }
+        })
+        .catch(err => console.error('Failed to load sourcing metrics:', err));
+    }
+  }, [activeTab]);
+
+  const handleAddSourcingMetric = async (e) => {
+    e.preventDefault();
+    if (!newSourcingCp.trim()) return;
+    try {
+      const res = await fetch('/api/sourcing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cp_username: newSourcingCp,
+          zone: selectedZone,
+          walk_in_target: newSourcingTarget,
+          walk_in_actual: newSourcingActual
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setSourcingMetricsList(prev => [json.data, ...prev]);
+        setNewSourcingCp('');
+        alert('Sourcing metrics registered successfully!');
+      } else {
+        alert('Error: ' + json.error);
+      }
+    } catch(err) {
+      console.error(err);
+    }
+  };
+
+  const handleUpdateSourcingActual = async (id, currentActual) => {
+    const newVal = prompt('Enter new physical walk-in count:', currentActual);
+    if (newVal === null) return;
+    const actualInt = parseInt(newVal);
+    if (isNaN(actualInt)) {
+      alert('Invalid count');
+      return;
+    }
+    try {
+      const res = await fetch('/api/sourcing', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, walk_in_actual: actualInt })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setSourcingMetricsList(prev => prev.map(m => m.id === id ? { ...m, walk_in_actual: actualInt } : m));
+        alert('Walk-in count updated successfully!');
+      }
+    } catch(err) {
+      console.error(err);
+    }
+  };
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
@@ -41,6 +319,107 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
 
+  // Quick Add forms states
+  const [activeQuickAddForm, setActiveQuickAddForm] = useState(null); // 'lead', 'flat'
+  
+  // Add Lead Form state
+  const [quickLeadName, setQuickLeadName] = useState('');
+  const [quickLeadPhone, setQuickLeadPhone] = useState('');
+  const [quickLeadEmail, setQuickLeadEmail] = useState('');
+  const [quickLeadAadhaar, setQuickLeadAadhaar] = useState('');
+  const [quickLeadPincode, setQuickLeadPincode] = useState('');
+  const [quickLeadRep, setQuickLeadRep] = useState('unassigned');
+  const [quickLeadSubmitError, setQuickLeadSubmitError] = useState('');
+
+  // Add Flat Form state
+  const [quickFlatId, setQuickFlatId] = useState('');
+  const [quickFlatFloor, setQuickFlatFloor] = useState('');
+  const [quickFlatType, setQuickFlatType] = useState('3BHK');
+  const [quickFlatArea, setQuickFlatArea] = useState('2400');
+  const [quickFlatPrice, setQuickFlatPrice] = useState('₹ 2.50 Cr');
+  const [quickFlatStatus, setQuickFlatStatus] = useState('AVAILABLE');
+
+  // Submission handlers for Quick Add
+  const handleQuickLeadSubmit = async (e) => {
+    e.preventDefault();
+    setQuickLeadSubmitError('');
+    try {
+      const messageWithPincode = `[Pincode: ${quickLeadPincode}] Generated via Admin Quick Add.`;
+      
+      const payload = {
+        name: quickLeadName,
+        phone: quickLeadPhone,
+        email: quickLeadEmail,
+        aadhaar: quickLeadAadhaar || null,
+        message: messageWithPincode,
+        source: 'Admin Quick Add',
+        status: quickLeadRep === 'unassigned' ? 'NEW|unassigned' : `NEW|${quickLeadRep}`
+      };
+
+      const res = await fetch('/api/inquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to add lead');
+      }
+
+      alert('Lead added successfully!');
+      setActiveQuickAddForm(null);
+      setQuickLeadName('');
+      setQuickLeadPhone('');
+      setQuickLeadEmail('');
+      setQuickLeadAadhaar('');
+      setQuickLeadPincode('');
+      setQuickLeadRep('unassigned');
+      
+      router.refresh();
+      setTimeout(() => window.location.reload(), 300);
+    } catch (err) {
+      setQuickLeadSubmitError(err.message);
+    }
+  };
+
+
+
+  const handleQuickFlatSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        unit_id: quickFlatId,
+        floor: quickFlatFloor,
+        type: quickFlatType,
+        area: quickFlatArea,
+        price: quickFlatPrice,
+        status: quickFlatStatus
+      };
+
+      const res = await fetch('/api/inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to add flat');
+      }
+
+      alert('Flat added successfully!');
+      setActiveQuickAddForm(null);
+      setQuickFlatId('');
+      setQuickFlatFloor('');
+      
+      router.refresh();
+      setTimeout(() => window.location.reload(), 300);
+    } catch (err) {
+      alert('Error adding flat: ' + err.message);
+    }
+  };
+
   const weekRangeLabel = useMemo(() => {
     const now = new Date();
     const day = now.getDay(); // 0=Sun
@@ -60,7 +439,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
   }, []);
   
   // Leads tab sub-filter
-  const [leadSubTab, setLeadSubTab] = useState('all');
+  const [leadSubTab, setLeadSubTab] = useState('pipeline');
   // Reports tab left selection
   const [reportType, setReportType] = useState('sales');
   // Settings tab top selection
@@ -70,12 +449,18 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
   const [baseCurrency, setBaseCurrency] = useState('INR');
   const [allocationStrategy, setAllocationStrategy] = useState('active');
   const [themeMode, setThemeMode] = useState('classic');
-  const [brandAccent, setBrandAccent] = useState('#c2a661');
+  const [brandAccent, setBrandAccent] = useState('var(--vanya-gold)');
   const [projectTitle, setProjectTitle] = useState('Vanya Residences');
   const [minPasswordLength, setMinPasswordLength] = useState(6);
   const [sessionExpiry, setSessionExpiry] = useState('12h');
   const [mfaEnabled, setMfaEnabled] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Exotel Telephony Credentials
+  const [exotelSid, setExotelSid] = useState('');
+  const [exotelApiKey, setExotelApiKey] = useState('');
+  const [exotelToken, setExotelToken] = useState('');
+  const [exotelVirtualNumber, setExotelVirtualNumber] = useState('');
 
   useEffect(() => {
     const ls = (k, d) => localStorage.getItem(k) || d;
@@ -83,9 +468,16 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
     setBaseCurrency(ls('erp_base_currency', 'INR'));
     setAllocationStrategy(ls('erp_allocation_strategy', 'active'));
     setThemeMode(ls('erp_theme_mode', 'classic'));
-    setBrandAccent(ls('erp_brand_accent', '#c2a661'));
+    setBrandAccent(ls('erp_brand_accent', 'var(--vanya-gold)'));
     setProjectTitle(ls('erp_project_title', 'Vanya Residences'));
     setSessionExpiry(ls('erp_session_expiry', '12h'));
+    
+    // Load Exotel Credentials
+    setExotelSid(ls('exotel_sid', ''));
+    setExotelApiKey(ls('exotel_api_key', ''));
+    setExotelToken(ls('exotel_token', ''));
+    setExotelVirtualNumber(ls('exotel_virtual_number', ''));
+
     const savedPw = localStorage.getItem('erp_min_pw_len');
     if (savedPw) setMinPasswordLength(parseInt(savedPw, 10));
     setMfaEnabled(localStorage.getItem('erp_mfa_enabled') === 'true');
@@ -101,6 +493,12 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
     localStorage.setItem('erp_session_expiry', sessionExpiry);
     localStorage.setItem('erp_min_pw_len', minPasswordLength.toString());
     localStorage.setItem('erp_mfa_enabled', mfaEnabled.toString());
+    
+    // Save Exotel Credentials
+    localStorage.setItem('exotel_sid', exotelSid);
+    localStorage.setItem('exotel_api_key', exotelApiKey);
+    localStorage.setItem('exotel_token', exotelToken);
+    localStorage.setItem('exotel_virtual_number', exotelVirtualNumber);
     
     setSaveSuccess(true);
     setTimeout(() => {
@@ -633,16 +1031,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
     }
   };
 
-  // Mock list for projects page
-  const projectsList = [
-    { name: "Skyvue Tower A", location: "Baner, Pune", total: 120, sold: 92, available: 28, status: "Active" },
-    { name: "Skyvue Tower B", location: "Baner, Pune", total: 110, sold: 88, available: 22, status: "Active" },
-    { name: "Golden Heights", location: "Hinjewadi, Pune", total: 200, sold: 150, available: 50, status: "Active" },
-    { name: "Maple Residences", location: "Wakad, Pune", total: 150, sold: 125, available: 25, status: "Active" },
-    { name: "Sunshine Bay", location: "Kharadi, Pune", total: 300, sold: 210, available: 90, status: "Upcoming" },
-    { name: "Green Valley", location: "Bavdhan, Pune", total: 180, sold: 60, available: 120, status: "Upcoming" },
-    { name: "Dream City", location: "Tathawade, Pune", total: 220, sold: 0, available: 220, status: "Upcoming" }
-  ];
+  // Projects list is now managed dynamically as a state variable
 
   // Compute dynamic Leads Overview data based on leadsMonth
   const getLeadsOverviewData = () => {
@@ -692,28 +1081,284 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
     { text: "CP Payout approved for Apex Luxury Realty", time: "Yesterday" }
   ];
 
+  const getReportData = (type) => {
+    let title = '';
+    let headers = [];
+    let rows = [];
+    let summaryStats = {};
+
+    if (type === 'sales') {
+      title = 'Sales & Leads Report';
+      headers = ['Name', 'Email', 'Phone', 'Aadhaar', 'Source', 'Salesperson', 'Status', 'Registered Date'];
+      
+      const salesInquiries = inquiries.filter(inq => 
+        !(inq.source || '').startsWith('UNIT_ASSIGNMENT_') &&
+        !(inq.status || '').startsWith('SCHEDULED|') &&
+        !(inq.status || '').startsWith('DONE|')
+      );
+
+      rows = salesInquiries.map(inq => {
+        const parts = (inq.status || '').split('|');
+        const status = parts[0] || 'NEW';
+        const rep = parts[1] || 'unassigned';
+        return [
+          inq.name || 'N/A',
+          inq.email || 'N/A',
+          inq.phone || 'N/A',
+          inq.aadhaar || 'N/A',
+          inq.source || 'Direct/Website',
+          rep,
+          status,
+          inq.created_at ? new Date(inq.created_at).toLocaleDateString() : 'N/A'
+        ];
+      });
+
+      summaryStats = {
+        'Total Leads': salesInquiries.length,
+        'Assigned Leads': salesInquiries.filter(inq => (inq.status || '').includes('|') && !(inq.status || '').includes('|unassigned')).length,
+        'Unassigned Leads': salesInquiries.filter(inq => !(inq.status || '').includes('|') || (inq.status || '').includes('|unassigned')).length
+      };
+    } 
+    else if (type === 'bookings') {
+      title = 'Property Bookings Report';
+      headers = ['Buyer Portal Account', 'Unit ID', 'Amount Paid', 'Total Equity Value', 'Handover Projection', 'Progress'];
+      
+      rows = buyers.map(b => [
+        b.username || 'N/A',
+        `Flat ${b.unit_id}`,
+        b.amount_paid || 'N/A',
+        b.total_amount || 'N/A',
+        b.possession_date || 'DECEMBER 2027',
+        `${b.construction_progress || 0}%`
+      ]);
+
+      summaryStats = {
+        'Total Bookings': buyers.length,
+        'Project Name': 'Vanya Residences'
+      };
+    } 
+    else if (type === 'collections') {
+      title = 'Financial Collections Report';
+      headers = ['Buyer Account', 'Project', 'Demand Instalment', 'Amount Received', 'Payment Status'];
+      
+      rows = buyers.map(b => [
+        b.username || 'N/A',
+        'Vanya Residences',
+        `Progress demand (${b.construction_progress || 0}%)`,
+        b.amount_paid || 'N/A',
+        'RECEIVED & CLEAR'
+      ]);
+
+      summaryStats = {
+        'Total Collections Transacted': buyers.length,
+        'Instalment Clearing Rate': '100%'
+      };
+    } 
+    else if (type === 'inventory') {
+      title = 'Property Inventory Report';
+      headers = ['Unit ID', 'Floor', 'Type', 'Area (sqft)', 'Price', 'Status'];
+      
+      rows = units.map(u => [
+        u.unit_id || 'N/A',
+        u.floor || 'N/A',
+        u.type || 'N/A',
+        u.area || 'N/A',
+        u.price || 'N/A',
+        u.status || 'N/A'
+      ]);
+
+      summaryStats = {
+        'Total Units': units.length,
+        'Available Units': units.filter(u => u.status === 'AVAILABLE').length,
+        'Reserved/Sold Units': units.filter(u => u.status !== 'AVAILABLE').length
+      };
+    } 
+    else if (type === 'cp') {
+      title = 'CP Brokers & Commissions Report';
+      headers = ['Firm Name', 'RERA Registration Number', 'Commission Percentage'];
+      
+      rows = cpPartners.map(cp => [
+        cp.firm_name || 'N/A',
+        cp.rera_number || 'N/A',
+        `${cp.commission_rate || 0}%`
+      ]);
+
+      summaryStats = {
+        'Active CP Brokers': cpPartners.length,
+        'Pending Commissions': commissions.filter(c => c.status === 'PENDING').length
+      };
+    }
+
+    return { title, headers, rows, summaryStats };
+  };
+
+  const handleExportCSV = () => {
+    const { title, headers, rows } = getReportData(reportType);
+    const csvRows = [];
+    csvRows.push([`"${title}"`]);
+    csvRows.push([]);
+    csvRows.push(headers.map(h => `"${h}"`).join(','));
+    rows.forEach(row => {
+      csvRows.push(row.map(val => `"${val.toString().replace(/"/g, '""')}"`).join(','));
+    });
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${reportType}_report_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportExcel = () => {
+    const { title, headers, rows, summaryStats } = getReportData(reportType);
+    let html = '';
+    html += '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
+    html += '<head>';
+    html += '  <meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8">';
+    html += '  <style>';
+    html += '    body { font-family: Arial, sans-serif; }';
+    html += '    .title { font-size: 16px; font-weight: bold; color: #1e3a8a; }';
+    html += '    .header { background-color: #f3f4f6; font-weight: bold; border: 1px solid #d1d5db; }';
+    html += '    td { border: 1px solid #e5e7eb; padding: 6px; }';
+    html += '    .stat-label { font-weight: bold; }';
+    html += '  </style>';
+    html += '</head>';
+    html += '<body>';
+    html += '  <table>';
+    html += '    <tr><td class="title" colspan="' + headers.length + '">' + title + '</td></tr>';
+    html += '    <tr><td colspan="' + headers.length + '">Generated on: ' + new Date().toLocaleString() + '</td></tr>';
+    html += '    <tr></tr>';
+    
+    Object.entries(summaryStats).forEach(([key, val]) => {
+      html += '<tr><td class="stat-label">' + key + '</td><td>' + val + '</td></tr>';
+    });
+    
+    html += '    <tr></tr><tr>';
+    headers.forEach(h => {
+      html += '<td class="header">' + h + '</td>';
+    });
+    html += '</tr>';
+    
+    rows.forEach(row => {
+      html += '<tr>';
+      row.forEach(val => {
+        html += '<td>' + val + '</td>';
+      });
+      html += '</tr>';
+    });
+    html += '  </table>';
+    html += '</body>';
+    html += '</html>';
+    
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${reportType}_report_${Date.now()}.xls`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportPDF = () => {
+    const { title, headers, rows, summaryStats } = getReportData(reportType);
+    const printWindow = window.open('', '_blank');
+    
+    let html = '';
+    html += '<html>';
+    html += '<head>';
+    html += '  <title>' + title + '</title>';
+    html += '  <style>';
+    html += '    body { font-family: "Inter", sans-serif; color: #1f2937; padding: 2rem; }';
+    html += '    .header { border-bottom: 2px solid #b08e40; padding-bottom: 1rem; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: flex-end; }';
+    html += '    .title { font-size: 24px; font-weight: bold; color: #1e3a8a; margin: 0; }';
+    html += '    .meta { font-size: 12px; color: #6b7280; text-align: right; }';
+    html += '    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem; }';
+    html += '    .stat-card { background: #fdfcf9; border: 1px solid #e2dfd7; padding: 1rem; border-radius: 8px; }';
+    html += '    .stat-label { font-size: 11px; text-transform: uppercase; color: #6b7280; font-weight: bold; }';
+    html += '    .stat-value { font-size: 18px; font-weight: bold; color: #b08e40; margin-top: 4px; }';
+    html += '    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }';
+    html += '    th { background-color: #f9f6ef; border: 1px solid #e2dfd7; padding: 8px 12px; text-align: left; font-size: 12px; font-weight: bold; color: #1e3a8a; }';
+    html += '    td { border: 1px solid #e2dfd7; padding: 8px 12px; font-size: 11px; color: #374151; }';
+    html += '    tr:nth-child(even) { background-color: #fafafa; }';
+    html += '    @media print {';
+    html += '      body { padding: 0; }';
+    html += '      button { display: none; }';
+    html += '    }';
+    html += '  </style>';
+    html += '</head>';
+    html += '<body>';
+    html += '  <div class="header">';
+    html += '    <div>';
+    html += '      <h1 class="title">' + title + '</h1>';
+    html += '      <p style="margin: 4px 0 0 0; font-size: 12px; color: #4b5563;">Vanya Residences Enterprise ERP Report</p>';
+    html += '    </div>';
+    html += '    <div class="meta">';
+    html += '      <div>Date: ' + new Date().toLocaleDateString() + '</div>';
+    html += '      <div>Time: ' + new Date().toLocaleTimeString() + '</div>';
+    html += '    </div>';
+    html += '  </div>';
+    
+    html += '  <div class="stats-grid">';
+    Object.entries(summaryStats).forEach(([key, val]) => {
+      html += '  <div class="stat-card">';
+      html += '    <div class="stat-label">' + key + '</div>';
+      html += '    <div class="stat-value">' + val + '</div>';
+      html += '  </div>';
+    });
+    html += '  </div>';
+    
+    html += '  <table>';
+    html += '    <thead>';
+    html += '      <tr>';
+    headers.forEach(h => {
+      html += '      <th>' + h + '</th>';
+    });
+    html += '      </tr>';
+    html += '    </thead>';
+    html += '    <tbody>';
+    
+    rows.forEach(row => {
+      html += '    <tr>';
+      row.forEach(val => {
+        html += '    <td>' + val + '</td>';
+      });
+      html += '    </tr>';
+    });
+    
+    html += '    </tbody>';
+    html += '  </table>';
+    html += '  <div style="margin-top: 3rem; text-align: center; font-size: 10px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 1rem;">';
+    html += '    CONFIDENTIAL - FOR INTERNAL USE ONLY - GENERATED VIA VANYA CRM ERP REPORT MODULE';
+    html += '  </div>';
+    html += '  <script>';
+    html += '    window.onload = function() {';
+    html += '      window.print();';
+    html += '    }';
+    html += '  </script>';
+    html += '</body>';
+    html += '</html>';
+    
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   return (
-    <div className="admin-layout" style={{ background: '#f8f9fb' }}>
+    <div className="admin-layout" style={{ background: 'var(--admin-bg)' }}>
       
       {/* 1. SIDEBAR NAVIGATION */}
       <aside className="admin-sidebar" style={{ background: '#ffffff', borderRight: '1px solid #f1f3f5', display: 'flex', flexDirection: 'column', width: '260px', overflowY: 'auto' }}>
         <div className="admin-sidebar-logo" style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #f1f3f5' }}>
-          <h2 className="serif" style={{ color: '#113629', margin: 0, fontSize: '1.25rem', letterSpacing: '1px', fontWeight: 'bold' }}>DreamSpaces</h2>
-          <span className="text-muted" style={{ fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#c2a661' }}>Admin Panel</span>
-        </div>
-
-        {/* Project Selector embedded inside Sidebar */}
-        <div style={{ padding: '1rem 1.5rem 0.5rem 1.5rem' }}>
-          <label style={{ fontSize: '0.6rem', fontWeight: 'bold', color: '#c2a661', display: 'block', marginBottom: '0.4rem', letterSpacing: '1px' }}>PROJECT INSTANCE</label>
-          <AdminProjectSelector />
+          <h2 className="serif" style={{ color: 'var(--vanya-green)', margin: 0, fontSize: '1.25rem', letterSpacing: '1px', fontWeight: 'bold' }}>DreamSpaces</h2>
+          <span className="text-muted" style={{ fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--vanya-gold)' }}>Admin Panel</span>
         </div>
 
         <nav className="admin-nav" style={{ padding: '0.75rem 0.75rem', flex: 1, display: 'flex', flexDirection: 'column', gap: '3px' }}>
           <button className={activeTab === 'dashboard' ? 'active' : ''} onClick={() => changeTab('dashboard')}>
             <span className="nav-icon">📊</span> Dashboard
-          </button>
-          <button className={activeTab === 'projects' ? 'active' : ''} onClick={() => changeTab('projects')}>
-            <span className="nav-icon">🗺️</span> Projects
           </button>
           <button className={activeTab === 'leads' ? 'active' : ''} onClick={() => changeTab('leads')}>
             <span className="nav-icon">👥</span> Leads
@@ -742,6 +1387,11 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
           <button className={activeTab === 'roles' ? 'active' : ''} onClick={() => changeTab('roles')}>
             <span className="nav-icon">🔐</span> Roles & Permissions
           </button>
+
+
+          <button className={activeTab === 'sourcing-manager' ? 'active' : ''} onClick={() => changeTab('sourcing-manager')}>
+            <span className="nav-icon">🗺️</span> Sourcing Zone Manager
+          </button>
           <button className={activeTab === 'alerts' ? 'active' : ''} onClick={() => changeTab('alerts')}>
             <span className="nav-icon">⚠️</span> Alerts Log
           </button>
@@ -750,9 +1400,9 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
         {/* Sidebar Profile & Logout */}
         <div className="admin-bottom" style={{ padding: '1.25rem 1.5rem', borderTop: '1px solid #f1f3f5' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-            <div style={{ width: '36px', height: '36px', background: '#c2a661', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>A</div>
+            <div style={{ width: '36px', height: '36px', background: 'var(--vanya-gold)', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>A</div>
             <div>
-              <strong style={{ fontSize: '0.8rem', display: 'block', color: '#113629' }}>Admin User</strong>
+              <strong style={{ fontSize: '0.8rem', display: 'block', color: 'var(--vanya-green)' }}>Admin User</strong>
               <span style={{ fontSize: '0.62rem', color: '#9ca3af' }}>SYSTEM EXECUTIVE</span>
             </div>
           </div>
@@ -766,7 +1416,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
         {/* 2. TOP NAVBAR */}
         <header className="admin-header" style={{ padding: '1rem 2.5rem', background: '#ffffff', borderBottom: '1px solid #f1f3f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100 }}>
           <div>
-            <h1 className="serif" style={{ fontSize: '1.35rem', margin: 0, color: '#113629' }}>Welcome back, Admin! 👋</h1>
+            <h1 className="serif" style={{ fontSize: '1.35rem', margin: 0, color: 'var(--vanya-green)' }}>Welcome back, Admin! 👋</h1>
 
           </div>
 
@@ -781,15 +1431,35 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '4px', position: 'relative' }}
               >
                 🔔
-                <span style={{ position: 'absolute', top: '-2px', right: '-2px', background: '#c62828', color: 'white', fontSize: '0.55rem', padding: '2px 5px', borderRadius: '10px', fontWeight: 'bold' }}>3</span>
+                {notificationAlerts.count > 0 && (
+                  <span style={{ position: 'absolute', top: '-2px', right: '-2px', background: '#c62828', color: 'white', fontSize: '0.55rem', padding: '2px 5px', borderRadius: '10px', fontWeight: 'bold' }}>
+                    {notificationAlerts.count}
+                  </span>
+                )}
               </button>
               {showNotifications && (
                 <div style={{ position: 'absolute', top: '100%', right: 0, background: 'white', boxShadow: '0 10px 30px rgba(0,0,0,0.08)', border: '1px solid #e2e8f0', borderRadius: '8px', width: '280px', marginTop: '0.75rem', zIndex: 200, padding: '0.75rem' }}>
-                  <div style={{ fontWeight: 'bold', fontSize: '0.8rem', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.5rem', marginBottom: '0.5rem', color: '#113629' }}>Recent Notifications</div>
+                  <div style={{ fontWeight: 'bold', fontSize: '0.8rem', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.5rem', marginBottom: '0.5rem', color: 'var(--vanya-green)' }}>Recent Notifications</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.75rem' }}>
-                    <div style={{ padding: '6px', background: '#fcfbf8', borderLeft: '3px solid #c2a661', borderRadius: '4px' }}>New CP referral lead registered</div>
-                    <div style={{ padding: '6px', background: '#fcfbf8', borderLeft: '3px solid #c2a661', borderRadius: '4px' }}>Overdue instalment milestone triggered</div>
-                    <div style={{ padding: '6px', background: '#fff', borderRadius: '4px' }}>Site Visit complete: Penthouse 101</div>
+                    {notificationAlerts.items.map(item => (
+                      <div key={item.id} style={{ position: 'relative', padding: '6px 24px 6px 6px', background: '#fcfbf8', borderLeft: `3px solid ${item.color}`, borderRadius: '4px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <span>{item.icon}</span>
+                        <span style={{ flex: 1, paddingRight: '4px' }}>{item.text}</span>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDismissedAlertIds(prev => [...prev, item.id]);
+                          }}
+                          style={{ position: 'absolute', top: '50%', right: '6px', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#999', cursor: 'pointer', fontSize: '0.9rem', padding: 0, lineHeight: 1 }}
+                          title="Dismiss notification"
+                        >
+                          &times;
+                        </button>
+                      </div>
+                    ))}
+                    {notificationAlerts.count === 0 && (
+                      <div style={{ padding: '1rem', color: '#9ca3af', textAlign: 'center' }}>No new notifications.</div>
+                    )}
                   </div>
                 </div>
               )}
@@ -806,9 +1476,8 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
               </button>
               {showQuickAdd && (
                 <div style={{ position: 'absolute', top: '100%', right: 0, background: 'white', boxShadow: '0 10px 30px rgba(0,0,0,0.08)', border: '1px solid #e2e8f0', borderRadius: '8px', width: '180px', marginTop: '0.75rem', zIndex: 200, padding: '0.5rem' }}>
-                  <button onClick={() => { changeTab('leads'); setShowQuickAdd(false); }} style={{ display: 'block', width: '100%', padding: '8px 12px', fontSize: '0.75rem', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', color: '#333' }}>Add New Lead</button>
-                  <button onClick={() => { changeTab('projects'); setShowQuickAdd(false); }} style={{ display: 'block', width: '100%', padding: '8px 12px', fontSize: '0.75rem', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', color: '#333' }}>Add Project</button>
-                  <button onClick={() => { changeTab('inventory'); setShowQuickAdd(false); }} style={{ display: 'block', width: '100%', padding: '8px 12px', fontSize: '0.75rem', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', color: '#333' }}>Add Flat</button>
+                  <button onClick={() => { setActiveQuickAddForm('lead'); setShowQuickAdd(false); }} style={{ display: 'block', width: '100%', padding: '8px 12px', fontSize: '0.75rem', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', color: '#333' }}>Add New Lead</button>
+                  <button onClick={() => { setActiveQuickAddForm('flat'); setShowQuickAdd(false); }} style={{ display: 'block', width: '100%', padding: '8px 12px', fontSize: '0.75rem', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', color: '#333' }}>Add Flat</button>
                   <button onClick={() => { changeTab('users'); setShowQuickAdd(false); }} style={{ display: 'block', width: '100%', padding: '8px 12px', fontSize: '0.75rem', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', color: '#333' }}>Create User</button>
                 </div>
               )}
@@ -821,7 +1490,13 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
 
         {/* 3. ALERTS & OPERATIONAL WARNINGS OVERLAY */}
         <div style={{ padding: '1.25rem 2.5rem 0 2.5rem' }}>
-          <AdminAlertsCard inquiries={inquiries} units={units} project={project} />
+          <AdminAlertsCard 
+            inquiries={inquiries} 
+            units={units} 
+            project={project} 
+            dismissedAlertIds={dismissedAlertIds} 
+            onDismissAlert={(id) => setDismissedAlertIds(prev => [...prev, id])} 
+          />
         </div>
 
         {/* ========================================================================= */}
@@ -851,8 +1526,8 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
 
               {/* Centered Report Header */}
               <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                <h2 className="serif" style={{ fontSize: '2rem', color: '#113629', margin: '0 0 0.25rem 0', fontWeight: 'bold', letterSpacing: '-0.5px' }}>Analytical Performance Report</h2>
-                <div style={{ width: '50px', height: '2px', background: '#113629', margin: '0 auto 0.5rem auto' }}></div>
+                <h2 className="serif" style={{ fontSize: '2rem', color: 'var(--vanya-green)', margin: '0 0 0.25rem 0', fontWeight: 'bold', letterSpacing: '-0.5px' }}>Analytical Performance Report</h2>
+                <div style={{ width: '50px', height: '2px', background: 'var(--vanya-green)', margin: '0 auto 0.5rem auto' }}></div>
                 <p style={{ fontSize: '0.82rem', color: '#6b7280', margin: '0 0 1rem 0', fontWeight: '500' }}>
                   Aggregate sales intelligence & velocity tracking (Phase {analyticalPhase})
                 </p>
@@ -864,7 +1539,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                       width: analyticalPhase === 1 ? '10px' : '8px',
                       height: analyticalPhase === 1 ? '10px' : '8px',
                       borderRadius: '50%',
-                      background: analyticalPhase === 1 ? '#113629' : '#d1d5db',
+                      background: analyticalPhase === 1 ? 'var(--vanya-green)' : '#d1d5db',
                       border: 'none',
                       cursor: 'pointer',
                       transition: 'all 0.2s',
@@ -878,7 +1553,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                       width: analyticalPhase === 2 ? '10px' : '8px',
                       height: analyticalPhase === 2 ? '10px' : '8px',
                       borderRadius: '50%',
-                      background: analyticalPhase === 2 ? '#113629' : '#d1d5db',
+                      background: analyticalPhase === 2 ? 'var(--vanya-green)' : '#d1d5db',
                       border: 'none',
                       cursor: 'pointer',
                       transition: 'all 0.2s',
@@ -930,7 +1605,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                               style={{ transition: 'stroke-dasharray 0.8s ease' }} />
                           </svg>
                           <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                            <h2 className="serif" style={{ margin: 0, fontSize: '2.2rem', color: '#113629', fontWeight: 'bold', lineHeight: 1 }}>{totalUnits}</h2>
+                            <h2 className="serif" style={{ margin: 0, fontSize: '2.2rem', color: 'var(--vanya-green)', fontWeight: 'bold', lineHeight: 1 }}>{totalUnits}</h2>
                             <span style={{ fontSize: '0.58rem', color: '#9ca3af', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>TOTAL UNITS</span>
                           </div>
                         </div>
@@ -1098,7 +1773,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                 <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                               </svg>
                             </div>
-                            <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629', fontWeight: 'bold' }}>
+                            <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
                               {baseCurrency === "USD" ? "$" : "₹"} {avgPriceLakhs >= 100 ? `${(avgPriceLakhs / 100).toFixed(1)} Cr` : `${avgPriceLakhs.toFixed(0)} L`}
                             </h3>
                           </div>
@@ -1113,7 +1788,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                 <rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 7V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3" />
                               </svg>
                             </div>
-                            <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629', fontWeight: 'bold' }}>
+                            <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
                               {baseCurrency === "USD" ? "$" : "₹"} {totalPortfolioLakhs >= 100 ? `${(totalPortfolioLakhs / 100).toFixed(1)} Cr` : `${totalPortfolioLakhs.toFixed(0)} L`}
                             </h3>
                           </div>
@@ -1129,7 +1804,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
                               </svg>
                             </div>
-                            <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629', fontWeight: 'bold' }}>
+                            <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
                               {project === 'vanya-estate' ? '18.2' : project === 'vanya-meadows' ? '12.4' : conversionRateReal}%
                             </h3>
                           </div>
@@ -1150,7 +1825,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                               <text x="7" y="18" fill="#137333" stroke="none" fontSize="18" fontWeight="bold" fontFamily="serif">{baseCurrency === "USD" ? "$" : "₹"}</text>
                             </svg>
                           </div>
-                          <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>
+                          <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
                             {baseCurrency === "USD" ? "$" : "₹"} {totalRevenueLakhs >= 100 ? `${(totalRevenueLakhs / 100).toFixed(1)} Cr` : totalRevenueFormatted}
                           </h3>
                         </div>
@@ -1172,7 +1847,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                 <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
                               </svg>
                             </div>
-                            <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>
+                            <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
                               {soldUnitsCount} <span style={{ fontSize: '1.05rem', color: '#9ca3af', fontWeight: 'normal' }}>/ {totalUnits}</span>
                             </h3>
                           </div>
@@ -1206,7 +1881,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                               <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
                             </svg>
                           </div>
-                          <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: '#113629', fontWeight: 'bold' }}>
+                          <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
                             {project === 'vanya-estate' ? 32 : project === 'vanya-meadows' ? 45 : (realSalesCycle > 0 ? realSalesCycle : 24)} Days
                           </h3>
                         </div>
@@ -1290,19 +1965,19 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                               <svg width="120" height="120" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
                                 <circle cx="18" cy="18" r="15.915" fill="none" stroke="#f1f3f5" strokeWidth="4.2" />
                                 <circle cx="18" cy="18" r="15.915" fill="none" stroke="#137333" strokeWidth="4.5" strokeDasharray={`${confPct} ${100 - confPct}`} strokeDashoffset="0" />
-                                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#c2a661" strokeWidth="4.5" strokeDasharray={`${pendPct} ${100 - pendPct}`} strokeDashoffset={`-${confPct}`} />
+                                <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--vanya-gold)" strokeWidth="4.5" strokeDasharray={`${pendPct} ${100 - pendPct}`} strokeDashoffset={`-${confPct}`} />
                                 <circle cx="18" cy="18" r="15.915" fill="none" stroke="#c5221f" strokeWidth="4.5" strokeDasharray={`${cancPct} ${100 - cancPct}`} strokeDashoffset={`-${confPct + pendPct}`} />
                                 <circle cx="18" cy="18" r="15.915" fill="none" stroke="#1a73e8" strokeWidth="4.5" strokeDasharray={`${holdPct} ${100 - holdPct}`} strokeDashoffset={`-${confPct + pendPct + cancPct}`} />
                               </svg>
                               <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                                <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629', fontWeight: 'bold' }}>{totalBk}</h2>
+                                <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{totalBk}</h2>
                                 <span style={{ fontSize: '0.45rem', color: '#9ca3af', letterSpacing: '0.5px', textTransform: 'uppercase', fontWeight: 'bold' }}>Total</span>
                               </div>
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', minWidth: '130px' }}>
                               {[
                                 { label: 'Confirmed', count: confirmedBk, pct: confPct, color: '#137333' },
-                                { label: 'Pending', count: pendingBk, pct: pendPct, color: '#c2a661' },
+                                { label: 'Pending', count: pendingBk, pct: pendPct, color: 'var(--vanya-gold)' },
                                 { label: 'Cancelled', count: cancelledBk, pct: cancPct, color: '#c5221f' },
                                 { label: 'On Hold', count: onHoldBk, pct: holdPct, color: '#1a73e8' }
                               ].map((item, i) => (
@@ -1330,18 +2005,18 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                         <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase' }}>Revenue Overview</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '1rem' }}>
-                        <h2 className="serif" style={{ margin: 0, fontSize: '1.6rem', color: '#113629', fontWeight: 'bold' }}>{baseCurrency === "USD" ? "$" : "₹"} {totalRevenueFormatted}</h2>
+                        <h2 className="serif" style={{ margin: 0, fontSize: '1.6rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{baseCurrency === "USD" ? "$" : "₹"} {totalRevenueFormatted}</h2>
                         <span style={{ fontSize: '0.68rem', color: '#137333', fontWeight: 'bold' }}>↑ 15% from last month</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', height: '230px', alignItems: 'flex-end', gap: '1rem', position: 'relative', marginTop: '1.5rem' }}>
-                        <div style={{ position: 'absolute', bottom: '70%', left: 0, right: 0, borderTop: '2px dashed #c2a661', opacity: 0.45, zIndex: 1 }}></div>
+                        <div style={{ position: 'absolute', bottom: '70%', left: 0, right: 0, borderTop: '2px dashed var(--vanya-gold)', opacity: 0.45, zIndex: 1 }}></div>
                         {revMonths.map((m, idx) => {
                           const valFormatted = new Intl.NumberFormat('en-IN').format(Math.round(m.value * 100000));
                           const maxVal = Math.max(...revMonths.map(d => d.value));
                           const hPerc = Math.max(10, Math.round((m.value / maxVal) * 100));
                           return (
                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, height: '100%', justifyContent: 'flex-end', zIndex: 2 }}>
-                              <span style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#113629', marginBottom: '8px' }}>{valFormatted}</span>
+                              <span style={{ fontSize: '0.95rem', fontWeight: 'bold', color: 'var(--vanya-green)', marginBottom: '8px' }}>{valFormatted}</span>
                               <div style={{ height: `${hPerc}%`, width: '55%', background: 'linear-gradient(180deg, #2d7c5f, #b8d8c8)', borderRadius: '5px 5px 0 0', opacity: 0.85 }}></div>
                               <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#4b5563', marginTop: '10px', letterSpacing: '0.3px' }}>{m.label.toUpperCase()}</span>
                             </div>
@@ -1365,7 +2040,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                               <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#888', width: '15px' }}>{p.rank}</span>
                               <div>
-                                <strong style={{ fontSize: '0.8rem', color: '#113629' }}>{p.name}</strong>
+                                <strong style={{ fontSize: '0.8rem', color: 'var(--vanya-green)' }}>{p.name}</strong>
                                 <div style={{ fontSize: '0.6rem', color: '#9ca3af' }}>Contribution: {p.pct}</div>
                               </div>
                             </div>
@@ -1385,7 +2060,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                 <div style={{ display: 'flex', alignItems: 'center', marginBottom: '2rem', position: 'relative', width: '100%' }}>
                 {/* Executive Performance Portal Header */}
                 <div style={{ flex: 1, textAlign: 'center' }}>
-                  <h2 className="serif" style={{ fontSize: '1.75rem', color: '#113629', marginBottom: '0.25rem' }}>Executive Performance Portal</h2>
+                  <h2 className="serif" style={{ fontSize: '1.75rem', color: 'var(--vanya-green)', marginBottom: '0.25rem' }}>Executive Performance Portal</h2>
                   <p className="text-muted" style={{ margin: 0, textTransform: 'uppercase', letterSpacing: '1px', fontSize: '0.75rem' }}>SALES REPRESENTATIVE DIRECTORY & PIPELINE PERFORMANCE</p>
                 </div>
                 <div style={{ position: 'absolute', right: 0 }}>
@@ -1433,20 +2108,20 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
 
                     return combinedExecs.map((exec, idx) => (
                       <div key={exec.id || idx} style={{ background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', transition: 'box-shadow 0.2s' }}>
-                        <div style={{ width: '64px', height: '64px', borderRadius: '50%', border: '2px solid #113629', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.75rem' }}>
-                          <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#113629' }}>{exec.initials}</span>
+                        <div style={{ width: '64px', height: '64px', borderRadius: '50%', border: '2px solid var(--vanya-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.75rem' }}>
+                          <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--vanya-green)' }}>{exec.initials}</span>
                         </div>
-                        <strong style={{ fontSize: '0.78rem', color: '#113629', letterSpacing: '0.5px' }}>{exec.name}</strong>
+                        <strong style={{ fontSize: '0.78rem', color: 'var(--vanya-green)', letterSpacing: '0.5px' }}>{exec.name}</strong>
                         <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: '600', letterSpacing: '0.5px', marginTop: '2px', marginBottom: '1rem' }}>{exec.title}</span>
                         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', marginBottom: '1rem' }}>
                           <span style={{ fontSize: '0.65rem', color: '#6b7280', fontWeight: '600' }}>REVENUE</span>
-                          <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#113629' }}>{baseCurrency === 'USD' ? '$' : '₹'} {exec.revenue}</span>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--vanya-green)' }}>{baseCurrency === 'USD' ? '$' : '₹'} {exec.revenue}</span>
                         </div>
                         <button 
                           onClick={() => window.location.href = `/admin/salesman/${exec.id}`}
-                        style={{ width: '100%', padding: '0.5rem', fontSize: '0.72rem', fontWeight: 'bold', border: '1px solid #113629', background: '#fff', color: '#113629', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', transition: 'all 0.2s' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = '#113629'; e.currentTarget.style.color = '#fff'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = '#113629'; }}
+                        style={{ width: '100%', padding: '0.5rem', fontSize: '0.72rem', fontWeight: 'bold', border: '1px solid var(--vanya-green)', background: '#fff', color: 'var(--vanya-green)', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', transition: 'all 0.2s' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--vanya-green)'; e.currentTarget.style.color = '#fff'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = 'var(--vanya-green)'; }}
                       >
                         ↗ OPEN PORTAL
                       </button>
@@ -1464,118 +2139,125 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
           </div>
         )}
 
-        {/* ==================== 2. PROJECTS PAGE ==================== */}
-        {activeTab === 'projects' && (
-          <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem 2.5rem 2.5rem' }}>
-            <div className="widget-card">
-              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1.5rem', position: 'relative', width: '100%' }}>
-                <div style={{ flex: 1, textAlign: 'center' }}>
-                  <h3 className="serif" style={{ margin: '0 0 0.25rem 0', fontSize: '1.5rem', color: '#113629' }}>Projects List</h3>
-                  <p className="text-muted" style={{ margin: 0, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Global Portfolio Overview</p>
-                </div>
-                <div style={{ position: 'absolute', right: 0 }}>
-                  <button className="btn-dark" style={{ padding: '0.5rem 1rem', fontSize: '0.72rem' }}>+ Add Project</button>
-                </div>
-              </div>
-              <table className="table-standard">
-                <thead>
-                  <tr>
-                    <th>PROJECT NAME</th>
-                    <th>LOCATION</th>
-                    <th>TOTAL UNITS</th>
-                    <th>SOLD UNITS</th>
-                    <th>AVAILABLE UNITS</th>
-                    <th>STATUS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {projectsList.map((p, i) => (
-                    <tr key={i}>
-                      <td><strong>{p.name}</strong></td>
-                      <td>{p.location}</td>
-                      <td>{p.total}</td>
-                      <td style={{ color: '#c62828', fontWeight: 'bold' }}>{p.sold}</td>
-                      <td style={{ color: '#137333', fontWeight: 'bold' }}>{p.available}</td>
-                      <td>
-                        <span className={`badge ${p.status === 'Active' ? 'available' : 'negotiation'}`}>
-                          {p.status.toUpperCase()}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+
 
         {/* ==================== 3. LEADS PAGE ==================== */}
         {activeTab === 'leads' && (
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem 2.5rem 2.5rem' }}>
             
-
-            {/* Quick Leads assign row */}
-            <div className="widget-card mb-2">
-              <h3 className="serif" style={{ margin: '0 0 1rem 0', fontSize: '1rem' }}>Reassign / Distribute Leads</h3>
-              <table className="table-standard">
-                <thead>
-                  <tr>
-                    <th>LEAD NAME</th>
-                    <th>SOURCE</th>
-                    <th>CURRENT REPRESENTATIVE</th>
-                    <th>STATUS</th>
-                    <th>ASSIGNMENT ACTION</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {inquiries
-                    .filter(inq => !inq.source?.startsWith('UNIT_ASSIGNMENT_') && !inq.status?.startsWith('SCHEDULED|'))
-                    .map((inq, i) => {
-                      const repId = inq.status && inq.status.includes('|') ? inq.status.split('|')[1] : 'unassigned';
-                      
-                      const getRepName = (id) => {
-                        const map = {
-                          'SR-9999': 'Vikram Sethi',
-                          'SR-1111': 'Ananya Rao',
-                          'SR-2222': 'Rahul Verma',
-                          'SR-3333': 'Sneha Patil',
-                          'SR-4444': 'Aditya Sharma',
-                        };
-                        return map[id] || 'Awaiting Alloc';
-                      };
-
-                      return (
-                        <tr key={inq.id || i}>
-                          <td><strong>{inq.name}</strong><br/><span className="text-muted" style={{ fontSize: '0.7rem' }}>{inq.phone}</span></td>
-                          <td><span className="source-pill">{inq.source || 'PORTAL'}</span></td>
-                          <td><strong>{getRepName(repId)}</strong></td>
-                          <td><span className={`badge ${repId === 'unassigned' ? 'sold' : 'available'}`}>{repId === 'unassigned' ? 'UNASSIGNED' : 'ASSIGNED'}</span></td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                              <select 
-                                value={leadAssignState.leadId === inq.id ? leadAssignState.salesmanId : repId}
-                                onChange={(e) => setLeadAssignState({ leadId: inq.id, salesmanId: e.target.value })}
-                                style={{ padding: '4px 8px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid #ccc' }}
-                              >
-                                <option value="unassigned">Select Rep...</option>
-                                <option value="SR-9999">Vikram Sethi (SR-9999)</option>
-                                <option value="SR-1111">Ananya Rao (SR-1111)</option>
-                                <option value="SR-2222">Rahul Verma (SR-2222)</option>
-                                <option value="SR-3333">Sneha Patil (SR-3333)</option>
-                                <option value="SR-4444">Aditya Sharma (SR-4444)</option>
-                              </select>
-                              <button onClick={() => handleAssignLead(inq.id, leadAssignState.salesmanId)} className="btn-dark" style={{ padding: '4px 10px', fontSize: '0.65rem' }}>ALLOCATE</button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
+            {/* Leads Sub-Tab Navigation Bar */}
+            <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', borderBottom: '1px solid #e2dfd7', paddingBottom: '0.75rem' }}>
+              <button 
+                onClick={() => setLeadSubTab('pipeline')}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '0.8rem',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  border: '1px solid var(--vanya-gold)',
+                  color: leadSubTab === 'pipeline' ? '#fff' : 'var(--vanya-green)',
+                  background: leadSubTab === 'pipeline' ? 'var(--vanya-green)' : 'transparent',
+                  fontWeight: 'bold',
+                  transition: 'all 0.2s'
+                }}
+              >
+                📋 Master Inquiry Pipeline
+              </button>
+              <button 
+                onClick={() => setLeadSubTab('distribute')}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '0.8rem',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  border: '1px solid var(--vanya-gold)',
+                  color: leadSubTab === 'distribute' ? '#fff' : 'var(--vanya-green)',
+                  background: leadSubTab === 'distribute' ? 'var(--vanya-green)' : 'transparent',
+                  fontWeight: 'bold',
+                  transition: 'all 0.2s'
+                }}
+              >
+                🔄 Reassign / Distribute Leads
+              </button>
             </div>
 
+            {/* Quick Leads assign row */}
+            {leadSubTab === 'distribute' && (
+              <div className="widget-card mb-2">
+                <h3 className="serif" style={{ margin: '0 0 1rem 0', fontSize: '1rem' }}>Reassign / Distribute Leads</h3>
+                <table className="table-standard">
+                  <thead>
+                    <tr>
+                      <th>LEAD NAME</th>
+                      <th>SOURCE</th>
+                      <th>CURRENT REPRESENTATIVE</th>
+                      <th>STATUS</th>
+                      <th>ASSIGNMENT ACTION</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inquiries
+                      .filter(inq => !inq.source?.startsWith('UNIT_ASSIGNMENT_') && !inq.status?.startsWith('SCHEDULED|'))
+                      .map((inq, i) => {
+                        const repId = inq.status && inq.status.includes('|') ? inq.status.split('|')[1] : 'unassigned';
+                        
+                        const getRepName = (id) => {
+                          const map = {
+                            'SR-9999': 'Vikram Sethi',
+                            'SR-1111': 'Ananya Rao',
+                            'SR-2222': 'Rahul Verma',
+                            'SR-3333': 'Sneha Patil',
+                            'SR-4444': 'Aditya Sharma',
+                          };
+                          return map[id] || 'Awaiting Alloc';
+                        };
+
+                        return (
+                          <tr key={inq.id || i}>
+                            <td><strong>{inq.name}</strong><br/><span className="text-muted" style={{ fontSize: '0.7rem' }}>{inq.phone}</span></td>
+                            <td><span className="source-pill">{inq.source || 'PORTAL'}</span></td>
+                            <td><strong>{getRepName(repId)}</strong></td>
+                            <td><span className={`badge ${repId === 'unassigned' ? 'sold' : 'available'}`}>{repId === 'unassigned' ? 'UNASSIGNED' : 'ASSIGNED'}</span></td>
+                            <td>
+                              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <select 
+                                  value={leadAssignState.leadId === inq.id ? leadAssignState.salesmanId : repId}
+                                  onChange={(e) => setLeadAssignState({ leadId: inq.id, salesmanId: e.target.value })}
+                                  style={{ padding: '4px 8px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                                >
+                                  <option value="unassigned">Select Rep...</option>
+                                  <option value="SR-9999">Vikram Sethi (SR-9999)</option>
+                                  <option value="SR-1111">Ananya Rao (SR-1111)</option>
+                                  <option value="SR-2222">Rahul Verma (SR-2222)</option>
+                                  <option value="SR-3333">Sneha Patil (SR-3333)</option>
+                                  <option value="SR-4444">Aditya Sharma (SR-4444)</option>
+                                </select>
+                                <button onClick={() => handleAssignLead(inq.id, leadAssignState.salesmanId)} className="btn-dark" style={{ padding: '4px 10px', fontSize: '0.65rem' }}>ALLOCATE</button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
             {/* Reusable InquiryPipelineClient */}
-            <InquiryPipelineClient inquiries={inquiries} />
+            {leadSubTab === 'pipeline' && (
+              <InquiryPipelineClient 
+                inquiries={inquiries} 
+                allCallLogs={allCallLogs}
+                opportunities={opportunities}
+                allUsers={allUsers}
+                buyers={buyers}
+                onAddCallLog={(newLog) => setAllCallLogs(prev => [newLog, ...prev])}
+                exotelSid={exotelSid}
+                exotelApiKey={exotelApiKey}
+                exotelToken={exotelToken}
+                exotelVirtualNumber={exotelVirtualNumber}
+              />
+            )}
           </div>
         )}
 
@@ -1618,7 +2300,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem 2.5rem 2.5rem' }}>
             
             <div style={{ background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px', padding: '1rem' }}>
-              <GridClient units={units} inquiries={inquiries} buyers={buyers} project={project} />
+              <GridClient units={units} inquiries={inquiries} buyers={buyers} users={allUsers} project={project} />
             </div>
           </div>
         )}
@@ -1637,7 +2319,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
               </div>
               <div className="widget-card">
                 <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'bold' }}>PENDING INSTALMENTS</span>
-                <h3 className="serif" style={{ margin: '0.2rem 0', color: '#c2a661', fontSize: '1.6rem' }}>₹ {pendingInstallmentsFormatted}</h3>
+                <h3 className="serif" style={{ margin: '0.2rem 0', color: 'var(--vanya-gold)', fontSize: '1.6rem' }}>₹ {pendingInstallmentsFormatted}</h3>
               </div>
               <div className="widget-card">
                 <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'bold' }}>OVERDUE AMOUNT</span>
@@ -1734,7 +2416,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                   const cashPercent = totalModes > 0 ? Math.max(0, 100 - digitalPercent - bankPercent) : 0;
                   return (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around', flexGrow: 1, padding: '0.5rem 0' }}>
-                      <div className="donut-chart-mock" style={{ margin: '0', background: `conic-gradient(#137333 0% ${digitalPercent}%, #c2a661 ${digitalPercent}% ${digitalPercent + bankPercent}%, #1a73e8 ${digitalPercent + bankPercent}% 100%)` }}>
+                      <div className="donut-chart-mock" style={{ margin: '0', background: `conic-gradient(#137333 0% ${digitalPercent}%, var(--vanya-gold) ${digitalPercent}% ${digitalPercent + bankPercent}%, #1a73e8 ${digitalPercent + bankPercent}% 100%)` }}>
                         <div className="donut-inner">
                           <h2 className="serif" style={{ fontSize: '1.3rem', color: '#137333' }}>{digitalPercent}%</h2>
                           <span style={{ fontSize: '0.5rem' }}>DIGITAL</span>
@@ -1749,7 +2431,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                           </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem' }}>
-                          <span className="dot" style={{ background: '#c2a661', width: '10px', height: '10px', borderRadius: '50%', marginRight: '0' }} />
+                          <span className="dot" style={{ background: 'var(--vanya-gold)', width: '10px', height: '10px', borderRadius: '50%', marginRight: '0' }} />
                           <div>
                             <div style={{ fontWeight: 'bold', color: '#111' }}>{bankPercent}%</div>
                             <div style={{ fontSize: '0.62rem', color: '#666' }}>NEFT / RTGS</div>
@@ -1777,21 +2459,38 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                   <tr>
                     <th>BUYER ACCOUNT</th>
                     <th>PROJECT</th>
-                    <th>DEMAND INSTALMENT</th>
+                    <th>UNIT / DEMAND INSTALMENT</th>
                     <th>AMOUNT RECEIVED</th>
                     <th>PAYMENT STATUS</th>
                   </tr>
                 </thead>
                 <tbody>
                   {buyers.map((b, i) => (
-                    <tr key={i}>
+                    <tr key={`bd-${i}`}>
                       <td><strong>{b.username}</strong></td>
                       <td>Vanya Residences</td>
-                      <td>Progress demand ({b.construction_progress}%)</td>
+                      <td>Unit {b.unit_id} — Progress demand ({b.construction_progress}%)</td>
                       <td style={{ color: '#137333', fontWeight: 'bold' }}>{b.amount_paid}</td>
-                      <td><span className="badge available">RECEIVED & CLEAR</span></td>
+                      <td><span className="badge available">RECEIVED &amp; CLEAR</span></td>
                     </tr>
                   ))}
+                  {units
+                    .filter(u =>
+                      u.status === 'SOLD OUT' &&
+                      u.tag_color &&
+                      !['green', 'red', 'blue', ''].includes((u.tag_color || '').toLowerCase()) &&
+                      !buyers.some(b => b.username?.toLowerCase().trim() === u.tag_color?.toLowerCase().trim())
+                    )
+                    .map((u, i) => (
+                      <tr key={`leg-${i}`}>
+                        <td><strong>{u.tag_color}</strong></td>
+                        <td>Vanya Residences</td>
+                        <td>Unit {u.unit_id} — {u.type}</td>
+                        <td style={{ color: '#6b7280', fontWeight: 'bold' }}>—</td>
+                        <td><span className="badge reserved">LEGACY ENTRY</span></td>
+                      </tr>
+                    ))
+                  }
                 </tbody>
               </table>
             </div>
@@ -1816,7 +2515,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                   {cpPartners.map((cp, idx) => (
                     <div key={cp.id || idx} style={{ border: '1px solid #f1f3f5', padding: '0.8rem 1rem', borderRadius: '8px', background: '#fafafa' }}>
-                      <strong style={{ color: '#113629', fontSize: '0.82rem' }}>{cp.firm_name}</strong>
+                      <strong style={{ color: 'var(--vanya-green)', fontSize: '0.82rem' }}>{cp.firm_name}</strong>
                       <div style={{ fontSize: '0.7rem', color: '#666', marginTop: '0.2rem' }}>RERA Registration: {cp.rera_number}</div>
                       <span className="badge available" style={{ fontSize: '0.55rem', marginTop: '0.4rem' }}>Broker Comm: {cp.commission_rate}%</span>
                     </div>
@@ -1833,7 +2532,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
             <div className="widget-card">
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2rem', gap: '1rem', width: '100%' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <h3 className="serif" style={{ margin: '0 0 0.25rem 0', fontSize: '1.5rem', color: '#113629' }}>Users Account Registry</h3>
+                  <h3 className="serif" style={{ margin: '0 0 0.25rem 0', fontSize: '1.5rem', color: 'var(--vanya-green)' }}>Users Account Registry</h3>
                   <p className="text-muted" style={{ margin: 0, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Authorized CRM portals access registry</p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -1878,7 +2577,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                   {cpPartners.map((cp, idx) => (
                     <tr key={`cp-${idx}`}>
                       <td><strong>{cp.username}</strong></td>
-                      <td><span className="source-pill" style={{ color: '#c2a661', background: '#fdf5e6' }}>Channel Partner</span></td>
+                      <td><span className="source-pill" style={{ color: 'var(--vanya-gold)', background: '#fdf5e6' }}>Channel Partner</span></td>
                       <td style={{ fontStyle: 'italic', fontSize: '0.75rem', color: '#9ca3af' }}>Firm: {cp.firm_name}</td>
                       <td><span className="badge available">Active Portal</span></td>
                       <td>
@@ -1926,7 +2625,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
               
               {/* Left Panel report selector */}
               <div className="widget-card" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', height: 'fit-content' }}>
-                <h4 className="serif" style={{ margin: '0 0 0.75rem 0', color: '#113629' }}>ERP Modules</h4>
+                <h4 className="serif" style={{ margin: '0 0 0.75rem 0', color: 'var(--vanya-green)' }}>ERP Modules</h4>
                 {['sales', 'bookings', 'collections', 'inventory', 'cp'].map(r => (
                   <button 
                     key={r}
@@ -1948,9 +2647,9 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                 <h3 className="serif" style={{ margin: '0 0 1rem 0' }}>ERP Report Export</h3>
                 <p className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '2rem' }}>Export the generated {reportType} telemetry details into local files.</p>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-                  <button className="btn-dark">DOWNLOAD PDF</button>
-                  <button className="btn-outline">DOWNLOAD EXCEL</button>
-                  <button className="btn-dark" style={{ background: '#c2a661' }}>EXPORT CSV</button>
+                  <button onClick={handleExportPDF} className="btn-dark">DOWNLOAD PDF</button>
+                  <button onClick={handleExportExcel} className="btn-outline">DOWNLOAD EXCEL</button>
+                  <button onClick={handleExportCSV} className="btn-dark" style={{ background: 'var(--vanya-gold)' }}>EXPORT CSV</button>
                 </div>
               </div>
             </div>
@@ -1967,6 +2666,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                 <button className={`btn-outline ${settingsSubTab === 'general' ? 'active' : ''}`} onClick={() => setSettingsSubTab('general')} style={{ border: 'none', textAlign: 'left' }}>General Settings</button>
                 <button className={`btn-outline ${settingsSubTab === 'branding' ? 'active' : ''}`} onClick={() => setSettingsSubTab('branding')} style={{ border: 'none', textAlign: 'left' }}>Branding & Styling</button>
                 <button className={`btn-outline ${settingsSubTab === 'security' ? 'active' : ''}`} onClick={() => setSettingsSubTab('security')} style={{ border: 'none', textAlign: 'left' }}>Access Security</button>
+                <button className={`btn-outline ${settingsSubTab === 'telephony' ? 'active' : ''}`} onClick={() => setSettingsSubTab('telephony')} style={{ border: 'none', textAlign: 'left' }}>Telephony & Call Settings</button>
               </div>
 
               {/* Settings Form */}
@@ -2039,6 +2739,57 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                   </div>
                 )}
 
+                {settingsSubTab === 'telephony' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--vanya-green)', fontSize: '0.9rem', fontWeight: 'bold' }}>EXOTEL TELEPHONY CONNECTOR</h4>
+                    <p className="text-muted" style={{ fontSize: '0.72rem', margin: '0 0 0.5rem 0' }}>Configure live Exotel Account Credentials. Leave empty to automatically fall back to sandbox test mode.</p>
+                    
+                    <div className="form-group">
+                      <label>Exotel Account SID</label>
+                      <input 
+                        type="text" 
+                        value={exotelSid} 
+                        onChange={e => setExotelSid(e.target.value)} 
+                        placeholder="e.g. your_account_sid" 
+                        style={{ width: '96%' }} 
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label>Exotel API Key</label>
+                      <input 
+                        type="text" 
+                        value={exotelApiKey} 
+                        onChange={e => setExotelApiKey(e.target.value)} 
+                        placeholder="e.g. your_api_key" 
+                        style={{ width: '96%' }} 
+                      />
+                    </div>
+                    
+                    <div className="form-group">
+                      <label>Exotel API Token</label>
+                      <input 
+                        type="password" 
+                        value={exotelToken} 
+                        onChange={e => setExotelToken(e.target.value)} 
+                        placeholder="e.g. your_api_token" 
+                        style={{ width: '96%' }} 
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label>Exotel Virtual Number (Caller ID)</label>
+                      <input 
+                        type="text" 
+                        value={exotelVirtualNumber} 
+                        onChange={e => setExotelVirtualNumber(e.target.value)} 
+                        placeholder="e.g. 080XXXXXXX" 
+                        style={{ width: '96%' }} 
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1.5rem' }}>
                   <button className="btn-dark" onClick={handleSaveSettings} style={{ background: brandAccent, border: 'none', color: '#fff' }}>SAVE SETTINGS</button>
                   {saveSuccess && <span style={{ color: '#10b981', fontSize: '0.85rem', fontWeight: 'bold' }}>✓ Settings applied successfully</span>}
@@ -2094,22 +2845,169 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
             <div className="widget-card">
               <h3 className="serif" style={{ margin: '0 0 1rem 0' }}>Administrative Alerts Log</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
-                <div style={{ display: 'flex', gap: '1rem', padding: '1rem', background: '#fff5f5', border: '1px solid #feb2b2', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '1.5rem' }}>🚨</span>
-                  <div>
-                    <h4 style={{ margin: '0 0 0.25rem 0', color: '#c53030' }}>Low Available Stock: Tower A</h4>
-                    <p style={{ margin: 0, fontSize: '0.8rem', color: '#742a2a' }}>Units in Tower A are currently under 30% available capacity. Please schedule subsequent phase launch.</p>
+                {notificationAlerts.items.filter(item => item.id !== 'cp-ref' && !item.id.startsWith('cp-ref-')).map(item => (
+                  <div key={item.id} style={{ position: 'relative', display: 'flex', gap: '1rem', padding: '1rem', background: item.color === '#c53030' ? '#fff5f5' : '#fffdf9', border: `1px solid ${item.color === '#c53030' ? '#feb2b2' : 'var(--vanya-gold)'}`, borderRadius: '8px' }}>
+                    <span style={{ fontSize: '1.5rem' }}>{item.icon}</span>
+                    <div style={{ paddingRight: '1.5rem' }}>
+                      <h4 style={{ margin: '0 0 0.25rem 0', color: item.color === '#c53030' ? '#c53030' : '#b08e40', textTransform: 'uppercase', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                        {item.id === 'unassigned-leads' ? 'Action Required: Unassigned Leads' : item.id === 'pending-visits' ? 'Operational Warning: Pending Site Visits' : 'System Notice: Low Inventory'}
+                      </h4>
+                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#333' }}>{item.text}</p>
+                    </div>
+                    <button 
+                      onClick={() => setDismissedAlertIds(prev => [...prev, item.id])} 
+                      style={{ position: 'absolute', top: '10px', right: '12px', background: 'none', border: 'none', fontSize: '1.25rem', color: '#888', cursor: 'pointer', padding: 0, lineHeight: 1 }}
+                      title="Dismiss alert"
+                    >
+                      &times;
+                    </button>
                   </div>
-                </div>
+                ))}
+                {notificationAlerts.items.filter(item => item.id !== 'cp-ref' && !item.id.startsWith('cp-ref-')).length === 0 && (
+                  <div style={{ display: 'flex', gap: '1rem', padding: '1.5rem', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '1.8rem' }}>✅</span>
+                    <div>
+                      <h4 style={{ margin: '0 0 0.25rem 0', color: '#166534', fontSize: '0.9rem', fontWeight: 'bold' }}>All Systems Nominal</h4>
+                      <p style={{ margin: 0, fontSize: '0.8rem', color: '#15803d' }}>No critical operational warnings or unassigned leads detected. System is running cleanly.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
-                <div style={{ display: 'flex', gap: '1rem', padding: '1rem', background: '#fffdf9', border: '1px solid #c2a661', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+
+        {/* Sourcing Zone Manager Tab */}
+        {activeTab === 'sourcing-manager' && (
+          <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem 2.5rem 2.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1.5rem' }}>
+              
+              {/* Left Column: Sourcing Form */}
+              <div className="widget-card" style={{ height: 'fit-content' }}>
+                <h3 className="serif" style={{ margin: '0 0 1.25rem 0' }}>Assign Sourcing Target</h3>
+                <form onSubmit={handleAddSourcingMetric} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div>
-                    <h4 style={{ margin: '0 0 0.25rem 0', color: '#b08e40' }}>15 Pending Lead Followups Awaiting Rep Action</h4>
-                    <p style={{ margin: 0, fontSize: '0.8rem', color: '#555' }}>Rep logs show delayed callbacks to qualified leads. Immediate distribution advised.</p>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>SELECT CHANNEL PARTNER *</label>
+                    <select 
+                      required 
+                      value={newSourcingCp} 
+                      onChange={e => setNewSourcingCp(e.target.value)} 
+                      style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }}
+                    >
+                      <option value="">-- Select Partner --</option>
+                      {cpPartners.map(cp => (
+                        <option key={cp.id} value={cp.username}>{cp.firm_name} ({cp.username})</option>
+                      ))}
+                    </select>
                   </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>ZONE DATABASE *</label>
+                    <select 
+                      value={selectedZone} 
+                      onChange={e => setSelectedZone(e.target.value)} 
+                      style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }}
+                    >
+                      <option value="East">East Zone Database</option>
+                      <option value="West">West Zone Database</option>
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>WALK-IN TARGET *</label>
+                      <input 
+                        type="number" 
+                        required 
+                        value={newSourcingTarget} 
+                        onChange={e => setNewSourcingTarget(e.target.value)} 
+                        style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }} 
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>ACTUAL WALK-INS</label>
+                      <input 
+                        type="number" 
+                        value={newSourcingActual} 
+                        onChange={e => setNewSourcingActual(e.target.value)} 
+                        style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }} 
+                      />
+                    </div>
+                  </div>
+
+                  <button type="submit" className="btn-dark" style={{ width: '100%', padding: '0.8rem', fontWeight: 'bold', marginTop: '0.5rem' }}>
+                    REGISTER WEEKLY TARGETS
+                  </button>
+                </form>
+              </div>
+
+              {/* Right Column: Zone registries */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <div className="widget-card">
+                  <div className="flex-between mb-2" style={{ borderBottom: '1px solid #f1f3f5', paddingBottom: '0.75rem' }}>
+                    <h3 className="serif" style={{ margin: 0 }}>Zone Databases Target Board</h3>
+                    
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      {['East', 'West'].map(z => {
+                        const zoneCount = sourcingMetricsList.filter(m => m.zone === z).length;
+                        return (
+                          <button
+                            key={z}
+                            onClick={() => setSelectedZone(z)}
+                            className={`btn-outline ${selectedZone === z ? 'active' : ''}`}
+                            style={{ padding: '4px 12px', fontSize: '0.7rem', borderRadius: '4px', textTransform: 'uppercase' }}
+                          >
+                            {z} Zone ({zoneCount})
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <table className="table-standard">
+                    <thead>
+                      <tr>
+                        <th>CP FIRM</th>
+                        <th>ZONE</th>
+                        <th>TARGET GOAL</th>
+                        <th>ACTUAL PHYSICAL WALK-INS</th>
+                        <th>% RING</th>
+                        <th>ACTIONS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sourcingMetricsList.filter(m => m.zone === selectedZone).map((m, idx) => {
+                        const partner = cpPartners.find(cp => cp.username === m.cp_username) || { firm_name: m.cp_username };
+                        const rate = m.walk_in_target > 0 ? Math.round((m.walk_in_actual / m.walk_in_target) * 100) : 0;
+                        return (
+                          <tr key={m.id || idx}>
+                            <td>
+                              <strong>{partner.firm_name}</strong><br/>
+                              <span className="text-muted" style={{ fontSize: '0.72rem' }}>CP: {m.cp_username}</span>
+                            </td>
+                            <td><span className="badge available">{m.zone.toUpperCase()}</span></td>
+                            <td><strong>{m.walk_in_target} walk-ins</strong></td>
+                            <td style={{ color: m.walk_in_actual >= m.walk_in_target ? '#137333' : '#d97706', fontWeight: 'bold' }}>
+                              {m.walk_in_actual} walk-ins
+                            </td>
+                            <td><strong>{rate}%</strong></td>
+                            <td>
+                              <button onClick={() => handleUpdateSourcingActual(m.id, m.walk_in_actual)} className="btn-outline" style={{ padding: '3px 8px', fontSize: '0.68rem', margin: 0 }}>
+                                🔄 UPDATE ACTUAL
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {sourcingMetricsList.filter(m => m.zone === selectedZone).length === 0 && (
+                        <tr><td colSpan="6" className="text-muted" style={{ textAlign: 'center', padding: '2rem' }}>No targets assigned for this zone. Use form on the left.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
+
             </div>
           </div>
         )}
@@ -2117,6 +3015,181 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
         {/* Removed duplicate bottom sections */}
 
       </main>
+
+      {/* QUICK ADD FORM MODAL */}
+      {activeQuickAddForm && (
+        <div onClick={() => setActiveQuickAddForm(null)} style={{
+          position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+          background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center',
+          alignItems: 'center', zIndex: 10000, backdropFilter: 'blur(4px)', cursor: 'pointer'
+        }}>
+          <div onClick={e => e.stopPropagation()} className="widget-card" style={{ width: '450px', position: 'relative', background: '#fff', border: '1px solid var(--vanya-gold)', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', cursor: 'default' }}>
+            <button 
+              onClick={() => setActiveQuickAddForm(null)}
+              style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#999', padding: 0, lineHeight: 1 }}
+            >
+              &times;
+            </button>
+            
+            {activeQuickAddForm === 'lead' && (
+              <form onSubmit={handleQuickLeadSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <h3 className="serif" style={{ color: 'var(--vanya-green)', margin: '0 0 0.5rem 0' }}>Add New Lead</h3>
+                
+                {quickLeadSubmitError && (
+                  <div style={{ background: '#fff5f5', border: '1px solid #feb2b2', padding: '0.5rem 0.75rem', borderRadius: '6px', fontSize: '0.78rem', color: '#c53030', fontWeight: 'bold' }}>
+                    ⚠️ {quickLeadSubmitError}
+                  </div>
+                )}
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>CLIENT NAME *</label>
+                  <input 
+                    type="text" required 
+                    pattern="[A-Za-z\s]+" title="Name must contain only letters and spaces"
+                    value={quickLeadName} onChange={e => setQuickLeadName(e.target.value)} 
+                    style={{ width: '95%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '6px' }} 
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>MOBILE PHONE *</label>
+                    <input 
+                      type="text" required 
+                      minLength="10" maxLength="10" pattern="[0-9]{10}" title="Mobile number must be exactly 10 digits"
+                      value={quickLeadPhone} onChange={e => setQuickLeadPhone(e.target.value)} 
+                      style={{ width: '90%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '6px' }} 
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>EMAIL ID *</label>
+                    <input 
+                      type="email" required 
+                      value={quickLeadEmail} onChange={e => setQuickLeadEmail(e.target.value)} 
+                      style={{ width: '90%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '6px' }} 
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>AADHAAR CARD NUMBER</label>
+                    <input 
+                      type="text" 
+                      minLength="12" maxLength="12" pattern="[0-9]{12}" title="Aadhaar number must be exactly 12 digits"
+                      value={quickLeadAadhaar} onChange={e => setQuickLeadAadhaar(e.target.value)} 
+                      placeholder="Optional"
+                      style={{ width: '90%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '6px' }} 
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>PINCODE LOCATION *</label>
+                    <input 
+                      type="text" required 
+                      minLength="6" maxLength="6" pattern="[0-9]{6}" title="Pincode must be exactly 6 digits"
+                      value={quickLeadPincode} onChange={e => setQuickLeadPincode(e.target.value)} 
+                      style={{ width: '85%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '6px' }} 
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>ALLOCATE REPRESENTATIVE</label>
+                  <select 
+                    value={quickLeadRep} onChange={e => setQuickLeadRep(e.target.value)}
+                    style={{ width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '6px' }}
+                  >
+                    <option value="unassigned">Awaiting Allocation (Unassigned)</option>
+                    <option value="SR-9999">Vikram Sethi (SR-9999)</option>
+                    <option value="SR-1111">Ananya Rao (SR-1111)</option>
+                    <option value="SR-2222">Rahul Verma (SR-2222)</option>
+                    <option value="SR-3333">Sneha Patil (SR-3333)</option>
+                    <option value="SR-4444">Aditya Sharma (SR-4444)</option>
+                  </select>
+                </div>
+
+                <button type="submit" className="btn-dark" style={{ width: '100%', padding: '0.75rem', fontWeight: 'bold', marginTop: '0.5rem' }}>
+                  SUBMIT NEW LEAD
+                </button>
+              </form>
+            )}
+
+
+            {activeQuickAddForm === 'flat' && (
+              <form onSubmit={handleQuickFlatSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <h3 className="serif" style={{ color: 'var(--vanya-green)', margin: '0 0 0.5rem 0' }}>Add New Flat (Unit)</h3>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>UNIT ID (NUMBER) *</label>
+                    <input 
+                      type="text" required placeholder="e.g. 105"
+                      value={quickFlatId} onChange={e => setQuickFlatId(e.target.value)} 
+                      style={{ width: '90%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '6px' }} 
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>FLOOR NUMBER *</label>
+                    <input 
+                      type="text" required placeholder="e.g. 1"
+                      value={quickFlatFloor} onChange={e => setQuickFlatFloor(e.target.value)} 
+                      style={{ width: '90%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '6px' }} 
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>UNIT TYPE *</label>
+                    <select 
+                      value={quickFlatType} onChange={e => setQuickFlatType(e.target.value)}
+                      style={{ width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '6px' }}
+                    >
+                      <option value="3BHK">3BHK APARTMENT</option>
+                      <option value="4BHK">4BHK APARTMENT</option>
+                      <option value="4BHK PENTHOUSE">4BHK PENTHOUSE</option>
+                      <option value="STUDIO">STUDIO</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>AREA (SQFT) *</label>
+                    <input 
+                      type="text" required 
+                      value={quickFlatArea} onChange={e => setQuickFlatArea(e.target.value)} 
+                      style={{ width: '85%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '6px' }} 
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>PRICE TAG *</label>
+                    <input 
+                      type="text" required placeholder="e.g. ₹ 3.50 Cr"
+                      value={quickFlatPrice} onChange={e => setQuickFlatPrice(e.target.value)} 
+                      style={{ width: '90%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '6px' }} 
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>INITIAL STATUS</label>
+                    <select 
+                      value={quickFlatStatus} onChange={e => setQuickFlatStatus(e.target.value)}
+                      style={{ width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '6px' }}
+                    >
+                      <option value="AVAILABLE">AVAILABLE</option>
+                      <option value="RESERVED">RESERVED</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button type="submit" className="btn-dark" style={{ width: '100%', padding: '0.75rem', fontWeight: 'bold', marginTop: '0.5rem' }}>
+                  ADD UNIT TO INVENTORY
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

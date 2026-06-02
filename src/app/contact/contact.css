@@ -41,14 +41,14 @@
 
 .contact-section {
   display: flex;
-  background: #fdfcfa;
+  background: var(--admin-bg);
   min-height: 80vh;
 }
 
 .contact-left {
   flex: 1;
   padding: 8rem 5% 8rem 10%;
-  background: #fdfcfa;
+  background: var(--admin-bg);
 }
 
 .contact-right {
@@ -69,7 +69,7 @@
 
 .contact-left h2 {
   font-size: 3rem;
-  color: #113629;
+  color: var(--vanya-green);
   margin-bottom: 2rem;
   line-height: 1.2;
 }
@@ -87,7 +87,7 @@
 
 .contact-info-block h3 {
   font-size: 1.2rem;
-  color: #113629;
+  color: var(--vanya-green);
   margin-bottom: 0.5rem;
 }
 
@@ -113,7 +113,7 @@
   align-items: center;
   justify-content: center;
   font-size: 1.2rem;
-  color: #113629;
+  color: var(--vanya-green);
 }
 
 .contact-form {
@@ -151,11 +151,11 @@
 
 .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
   outline: none;
-  border-bottom-color: #113629;
+  border-bottom-color: var(--vanya-green);
 }
 
 .btn-submit {
-  background: #113629;
+  background: var(--vanya-green);
   color: white;
   border: none;
   padding: 1.2rem 2rem;
@@ -174,13 +174,13 @@
 .direct-consultation {
   margin-top: 4rem;
   padding: 2rem;
-  background: #faf9f6;
+  background: var(--admin-bg);
   border: 1px solid #eee;
 }
 
 .direct-consultation h3 {
   font-style: italic;
-  color: #113629;
+  color: var(--vanya-green);
   font-size: 1.5rem;
   margin-bottom: 1rem;
 }
@@ -207,14 +207,14 @@
 }
 
 .btn-private-tour {
-  background: #113629;
+  background: var(--vanya-green);
   color: white;
 }
 
 .btn-whatsapp {
   background: transparent;
-  border: 1px solid #113629 !important;
-  color: #113629;
+  border: 1px solid var(--vanya-green) !important;
+  color: var(--vanya-green);
 }
 
 .site-location {
@@ -236,7 +236,7 @@
 
 .location-box h3 {
   font-size: 2rem;
-  color: #113629;
+  color: var(--vanya-green);
   margin-bottom: 1rem;
 }
 
@@ -249,10 +249,10 @@
 .location-box a {
   font-size: 0.8rem;
   letter-spacing: 1px;
-  color: #113629;
+  color: var(--vanya-green);
   text-transform: uppercase;
   text-decoration: none;
-  border-bottom: 1px solid #113629;
+  border-bottom: 1px solid var(--vanya-green);
   padding-bottom: 5px;
 }
 

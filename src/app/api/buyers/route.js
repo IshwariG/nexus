@@ -4,28 +4,57 @@ import { supabase } from '@/lib/supabase';
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { username, password, role, phone, unit_id, total_amount, amount_paid, construction_progress, possession_date } = body;
+    const { username, password, role, phone, email, unit_id, total_amount, amount_paid, construction_progress, possession_date } = body;
     // Strip '%' sign and ensure construction_progress is stored as integer
     const progressInt = construction_progress !== undefined && construction_progress !== null
       ? parseInt(String(construction_progress).replace('%', ''), 10) || 0
       : 0;
+
+    // 1. Check duplicate checks in Users table
+    const { data: existingUsers, error: dupCheckError } = await supabase
+      .from('Users')
+      .select('username, phone, email');
+
+    if (dupCheckError) {
+      return NextResponse.json({ success: false, error: 'Database error: ' + dupCheckError.message }, { status: 400 });
+    }
+
+    if (existingUsers.some(u => u.username === username)) {
+      return NextResponse.json({ success: false, error: `Username "${username}" is already taken.` }, { status: 400 });
+    }
+
+    if (phone) {
+      const trimmedPhone = phone.trim();
+      const dup = existingUsers.find(u => u.phone === trimmedPhone);
+      if (dup) {
+        return NextResponse.json({ success: false, error: `Phone number "${trimmedPhone}" is already registered.` }, { status: 400 });
+      }
+    }
+
+    if (email) {
+      const trimmedEmail = email.trim().toLowerCase();
+      const dup = existingUsers.find(u => u.email && u.email.toLowerCase() === trimmedEmail);
+      if (dup) {
+        return NextResponse.json({ success: false, error: `Email address "${email}" is already registered.` }, { status: 400 });
+      }
+    }
 
     // Check if unit is already taken
     const { data: existingUnit } = await supabase
       .from('BuyerDetails')
       .select('unit_id')
       .eq('unit_id', unit_id)
-      .single();
+      .maybeSingle();
 
     if (existingUnit) {
       return NextResponse.json({ success: false, error: `Unit ${unit_id} is already assigned to another buyer.` }, { status: 400 });
     }
 
-    // 1. Create User entry for login
+    // 2. Create User entry for login
     const { error: userError } = await supabase
       .from('Users')
       .insert([
-        { username, password, role, phone: phone ? phone.trim() : null }
+        { username, password, role, phone: phone ? phone.trim() : null, email: email ? email.trim() : null }
       ]);
 
     if (userError) {

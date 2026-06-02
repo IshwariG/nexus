@@ -26,6 +26,8 @@ export default function UnitDetailsPage({ params }) {
     client_name: '',
     username: '',
     password: '',
+    phone: '',
+    email: '',
     total_amount: '',
     amount_paid: '',
     progress: '72',
@@ -73,6 +75,8 @@ export default function UnitDetailsPage({ params }) {
           client_name: uData.status === 'SOLD OUT' ? (bData?.username || uData.tag_color || '') : (uData.tag_color || ''),
           username: bData?.username || '',
           password: usrData?.password || 'password123',
+          phone: usrData?.phone || '',
+          email: usrData?.email || '',
           total_amount: bData?.total_amount || uData.price || '₹ 14,25,00,000',
           amount_paid: bData?.amount_paid || '₹ 0.00',
           progress: bData?.construction_progress ? String(bData.construction_progress).replace('%', '') : '72',
@@ -131,6 +135,34 @@ export default function UnitDetailsPage({ params }) {
         const progress = parseInt(String(editForm.progress || '72').replace('%', ''), 10) || 72;
         const possessionDate = editForm.possession_date || '2027-12-31';
 
+        const phone = editForm.phone;
+        const email = editForm.email;
+
+        // Check duplicate phone and email
+        if (phone || email) {
+          const { data: existingUsers, error: dupError } = await supabase
+            .from('Users')
+            .select('username, phone, email')
+            .neq('username', username);
+
+          if (dupError) throw dupError;
+
+          if (phone) {
+            const trimmedPhone = phone.trim();
+            const dupPhone = existingUsers.find(u => u.phone === trimmedPhone);
+            if (dupPhone) {
+              throw new Error(`Phone number "${trimmedPhone}" is already registered to user "${dupPhone.username}".`);
+            }
+          }
+          if (email) {
+            const trimmedEmail = email.trim();
+            const dupEmail = existingUsers.find(u => u.email && u.email.toLowerCase() === trimmedEmail.toLowerCase());
+            if (dupEmail) {
+              throw new Error(`Email address "${trimmedEmail}" is already registered to user "${dupEmail.username}".`);
+            }
+          }
+        }
+
         // Check if there was an old buyer with a different username
         if (oldStatus === 'SOLD OUT' && oldUsername && oldUsername !== username) {
           // Delete old user & buyer
@@ -148,12 +180,12 @@ export default function UnitDetailsPage({ params }) {
         if (existingUser) {
           await supabase
             .from('Users')
-            .update({ password })
+            .update({ password, phone: phone ? phone.trim() : null, email: email ? email.trim() : null })
             .eq('username', username);
         } else {
           await supabase
             .from('Users')
-            .insert([{ username, password, role: 'Buyer' }]);
+            .insert([{ username, password, role: 'Buyer', phone: phone ? phone.trim() : null, email: email ? email.trim() : null }]);
         }
 
         // Insert or update in BuyerDetails table
@@ -208,7 +240,7 @@ export default function UnitDetailsPage({ params }) {
   };
 
   if (loading) {
-    return <div style={{padding: '50px', textAlign: 'center', color: '#113629'}}>Loading unit details and registers...</div>;
+    return <div style={{padding: '50px', textAlign: 'center', color: 'var(--vanya-green)'}}>Loading unit details and registers...</div>;
   }
 
   const displayUnit = unit || {
@@ -227,7 +259,7 @@ export default function UnitDetailsPage({ params }) {
       {/* Sidebar */}
       <aside className="ud-sidebar">
         <div className="admin-sidebar-logo" style={{padding: '2rem 1.5rem', borderBottom: '1px solid #e0dfd5'}}>
-          <h2 className="serif" style={{fontSize: '1.2rem', margin: 0, color: '#113629'}}>VANYA</h2>
+          <h2 className="serif" style={{fontSize: '1.2rem', margin: 0, color: 'var(--vanya-green)'}}>VANYA</h2>
           <p style={{fontSize: '0.6rem', color: '#888', margin: 0, letterSpacing: '1px'}}>HERITAGE COLLECTION</p>
         </div>
         <nav className="admin-nav" style={{flex: 1, paddingTop: '2rem'}}>
@@ -282,7 +314,7 @@ export default function UnitDetailsPage({ params }) {
                  <div className="ud-btn-group" style={{width: '100%', position: 'relative'}}>
                     <button 
                        className="ud-btn-outline" 
-                       style={{flex: 1, backgroundColor: '#c2a661'}}
+                       style={{flex: 1, backgroundColor: 'var(--vanya-gold)'}}
                        onClick={() => setShowEditModal(true)}
                     >
                        ✏️ EDIT UNIT &<br/>REGISTRATION
@@ -376,7 +408,7 @@ export default function UnitDetailsPage({ params }) {
 
               {/* Scheduled Site Visits Log */}
               <div style={{ marginTop: '3rem', borderTop: '1px solid #eaeaea', paddingTop: '2rem' }}>
-                <h3 className="serif" style={{ fontSize: '1.5rem', color: '#113629', marginBottom: '1rem' }}>Scheduled Site Visits Log</h3>
+                <h3 className="serif" style={{ fontSize: '1.5rem', color: 'var(--vanya-green)', marginBottom: '1rem' }}>Scheduled Site Visits Log</h3>
                 {unitVisits.length === 0 ? (
                   <p style={{ color: '#888', fontSize: '0.85rem', fontStyle: 'italic' }}>No visits scheduled for this unit yet.</p>
                 ) : (
@@ -418,7 +450,7 @@ export default function UnitDetailsPage({ params }) {
            <div className="ud-content-right">
               <div className="ud-context-card">
                  <div className="ud-context-header" style={{marginBottom: '1rem'}}>
-                    <h3 className="serif" style={{color: '#113629'}}>Schedule Unit Visit</h3>
+                    <h3 className="serif" style={{color: 'var(--vanya-green)'}}>Schedule Unit Visit</h3>
                     <span style={{background:'#e8f5e9', color:'#2e7d32', padding:'4px 8px', fontSize:'0.6rem', fontWeight:600, letterSpacing:'1px'}}>ACTION REQUIRED</span>
                  </div>
                  <p style={{color: '#666', fontSize: '0.8rem', marginBottom: '1.5rem'}}>Schedule a guided on-site visit or virtual walkthrough for this specific unit.</p>
@@ -434,29 +466,43 @@ export default function UnitDetailsPage({ params }) {
                       .find(row => row.startsWith('user_id='))
                       ?.split('=')[1] || 'Unknown';
 
-                    await fetch('/api/inquiries', {
+                    const res = await fetch('/api/inquiries', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
                         name: data.client_name,
                         email: data.client_email || '',
                         phone: data.client_phone,
-                        message: `Scheduled Visit for Unit ${displayUnit.unit_id} on ${data.visit_date} at ${data.visit_time}. Notes: ${data.notes}`,
+                        aadhaar: data.client_aadhaar,
+                        message: `[Pincode: ${data.client_pincode}] Scheduled Visit for Unit ${displayUnit.unit_id} on ${data.visit_date} at ${data.visit_time}. Notes: ${data.notes}`,
                         source: 'UNIT_VISIT_SCHEDULED',
                         status: `SCHEDULED|${salesmanId}`,
                         salesman_id: salesmanId
                       })
                     });
-                    alert('Visit scheduled successfully! The lead has been added to the pipeline.');
-                    e.target.reset();
+                    const resData = await res.json();
+                    if (!res.ok) {
+                      alert(resData.warning || resData.error || 'Failed to schedule visit');
+                    } else {
+                      alert('Visit scheduled successfully! The lead has been added to the pipeline.');
+                      e.target.reset();
+                    }
                   }} style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
                    <div>
                       <label style={{display:'block', fontSize:'0.7rem', fontWeight:'bold', color:'#888', marginBottom:'0.3rem'}}>CLIENT NAME *</label>
-                      <input type="text" name="client_name" required style={{width: '100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px'}} />
+                      <input type="text" name="client_name" required pattern="[A-Za-z\s]+" title="Please enter letters only" style={{width: '100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px'}} />
                    </div>
                    <div>
                       <label style={{display:'block', fontSize:'0.7rem', fontWeight:'bold', color:'#888', marginBottom:'0.3rem'}}>PHONE NUMBER *</label>
-                      <input type="tel" name="client_phone" required style={{width: '100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px'}} />
+                      <input type="tel" name="client_phone" required minLength="10" maxLength="10" pattern="[0-9]{10}" onInput={(e) => e.target.value = e.target.value.replace(/[^0-9]/g, '')} placeholder="10-digit Phone" style={{width: '100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px'}} />
+                   </div>
+                   <div>
+                      <label style={{display:'block', fontSize:'0.7rem', fontWeight:'bold', color:'#888', marginBottom:'0.3rem'}}>AADHAAR CARD NUMBER *</label>
+                      <input type="tel" name="client_aadhaar" required minLength="12" maxLength="12" pattern="[0-9]{12}" onInput={(e) => e.target.value = e.target.value.replace(/[^0-9]/g, '')} placeholder="12-digit Aadhaar Card Number" style={{width: '100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px'}} />
+                   </div>
+                   <div>
+                      <label style={{display:'block', fontSize:'0.7rem', fontWeight:'bold', color:'#888', marginBottom:'0.3rem'}}>PINCODE *</label>
+                      <input type="tel" name="client_pincode" required minLength="6" maxLength="6" pattern="[0-9]{6}" onInput={(e) => e.target.value = e.target.value.replace(/[^0-9]/g, '')} placeholder="6-digit Pincode" style={{width: '100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px'}} />
                    </div>
                    <div style={{display: 'flex', gap: '1rem'}}>
                      <div style={{flex: 1}}>
@@ -472,7 +518,7 @@ export default function UnitDetailsPage({ params }) {
                       <label style={{display:'block', fontSize:'0.7rem', fontWeight:'bold', color:'#888', marginBottom:'0.3rem'}}>ADDITIONAL NOTES</label>
                       <textarea name="notes" rows="3" style={{width: '100%', padding: '0.8rem', border: '1px solid #ddd', borderRadius: '4px', resize: 'none'}}></textarea>
                    </div>
-                   <button type="submit" className="ud-action-btn" style={{marginTop: '0.5rem', cursor: 'pointer', background: '#113629', color: 'white', border: 'none', padding: '1rem', width: '100%', borderRadius: '4px', fontWeight: 'bold', letterSpacing: '1px'}}>
+                   <button type="submit" className="ud-action-btn" style={{marginTop: '0.5rem', cursor: 'pointer', background: 'var(--vanya-green)', color: 'white', border: 'none', padding: '1rem', width: '100%', borderRadius: '4px', fontWeight: 'bold', letterSpacing: '1px'}}>
                       CONFIRM SCHEDULE
                    </button>
                  </form>
@@ -481,7 +527,7 @@ export default function UnitDetailsPage({ params }) {
         </section>
         
         <div style={{textAlign: 'center', padding: '4rem', borderTop: '1px solid #eee', color: '#888', fontSize: '0.65rem'}}>
-          <h2 className="serif" style={{color: '#113629', fontSize: '1rem', letterSpacing: '2px', marginBottom: '1rem'}}>VANYA RESIDENCES</h2>
+          <h2 className="serif" style={{color: 'var(--vanya-green)', fontSize: '1rem', letterSpacing: '2px', marginBottom: '1rem'}}>VANYA RESIDENCES</h2>
           <div style={{display: 'flex', justifyContent: 'center', gap: '2rem', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '1px'}}>
             <span>PRIVACY POLICY</span>
             <span>RERA DISCLOSURE</span>
@@ -494,7 +540,7 @@ export default function UnitDetailsPage({ params }) {
           <div style={{position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}}>
             <div style={{background: 'white', padding: '2.5rem', width: '100%', maxWidth: '500px', borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', border: '1px solid #eee', position: 'relative', maxHeight: '90vh', overflowY: 'auto'}}>
               <button onClick={() => setShowEditModal(false)} style={{position: 'absolute', top: '1rem', right: '1.5rem', background: 'transparent', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#888'}}>&times;</button>
-              <h2 className="serif" style={{color: '#113629', marginBottom: '0.5rem', fontSize: '1.6rem'}}>Edit Unit & Owner Details</h2>
+              <h2 className="serif" style={{color: 'var(--vanya-green)', marginBottom: '0.5rem', fontSize: '1.6rem'}}>Edit Unit & Owner Details</h2>
               <p style={{color: '#888', fontSize: '0.78rem', marginBottom: '1.5rem'}}>Modify unit specifications and update ownership credentials.</p>
               
               <form onSubmit={handleSaveDetails} style={{display: 'flex', flexDirection: 'column', gap: '0.8rem'}}>
@@ -558,7 +604,7 @@ export default function UnitDetailsPage({ params }) {
 
                 {editForm.status === 'SOLD OUT' && (
                   <div style={{marginTop: '1rem', borderTop: '1px dashed #ddd', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem'}}>
-                    <h3 style={{fontSize: '0.85rem', color: '#113629', margin: '0 0 0.5rem 0'}}>Buyer Login & Details</h3>
+                    <h3 style={{fontSize: '0.85rem', color: 'var(--vanya-green)', margin: '0 0 0.5rem 0'}}>Buyer Login & Details</h3>
                     
                     <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
                       <div>
@@ -578,6 +624,33 @@ export default function UnitDetailsPage({ params }) {
                           required 
                           value={editForm.password} 
                           onChange={e => setEditForm({ ...editForm, password: e.target.value })} 
+                          style={{width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem'}} 
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem'}}>
+                      <div>
+                        <label style={{display: 'block', fontSize: '0.65rem', fontWeight: 'bold', color: '#888', marginBottom: '0.3rem'}}>PORTAL PHONE (10-DIGIT) *</label>
+                        <input 
+                          type="tel" 
+                          required 
+                          minLength={10}
+                          maxLength={10}
+                          pattern="[0-9]{10}"
+                          onInput={(e) => e.target.value = e.target.value.replace(/[^0-9]/g, '')}
+                          value={editForm.phone} 
+                          onChange={e => setEditForm({ ...editForm, phone: e.target.value })} 
+                          style={{width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem'}} 
+                        />
+                      </div>
+                      <div>
+                        <label style={{display: 'block', fontSize: '0.65rem', fontWeight: 'bold', color: '#888', marginBottom: '0.3rem'}}>PORTAL EMAIL *</label>
+                        <input 
+                          type="email" 
+                          required 
+                          value={editForm.email} 
+                          onChange={e => setEditForm({ ...editForm, email: e.target.value })} 
                           style={{width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '0.9rem'}} 
                         />
                       </div>
@@ -631,7 +704,7 @@ export default function UnitDetailsPage({ params }) {
                   </div>
                 )}
 
-                <button type="submit" style={{background: '#113629', color: 'white', border: 'none', padding: '0.8rem', fontSize: '0.8rem', letterSpacing: '2px', cursor: 'pointer', marginTop: '0.5rem', fontWeight: 'bold', borderRadius: '4px'}}>
+                <button type="submit" style={{background: 'var(--vanya-green)', color: 'white', border: 'none', padding: '0.8rem', fontSize: '0.8rem', letterSpacing: '2px', cursor: 'pointer', marginTop: '0.5rem', fontWeight: 'bold', borderRadius: '4px'}}>
                   SAVE CHANGES
                 </button>
               </form>

@@ -39,18 +39,24 @@ function InquiryForm() {
               data.source = `Inquiry Page (${source})`; // Track QR codes
               const originalMessage = data.message || '';
               data.message = `[Interest: ${data.interest_level}] [Pincode: ${data.pincode}] ${originalMessage}`;
-              await fetch('/api/inquiries', {
+              const res = await fetch('/api/inquiries', {
                 method: 'POST',
                 body: JSON.stringify(data),
                 headers: { 'Content-Type': 'application/json' }
               });
-              alert('Registration Submitted successfully!');
-              e.target.reset();
-              setInterestLevel('GENERAL INQUIRY');
+              const resData = await res.json();
+              if (!res.ok) {
+                alert(resData.warning || resData.error || 'Failed to submit registration');
+              } else {
+                alert('Registration Submitted successfully!');
+                e.target.reset();
+                setInterestLevel('GENERAL INQUIRY');
+              }
             }}>
               <input type="text" name="name" placeholder="Full Name" required pattern="[A-Za-z\s]+" title="Please enter letters only" className="inquiry-input" />
               <input type="email" name="email" placeholder="Email Address" required pattern="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" title="Please enter a valid email address" className="inquiry-input" />
               <input type="tel" name="phone" placeholder="Phone Number (10 Digits)" required minLength="10" maxLength="10" pattern="[0-9]{10}" onInput={(e) => e.target.value = e.target.value.replace(/[^0-9]/g, '')} title="Please enter a valid 10-digit phone number" className="inquiry-input" />
+              <input type="tel" name="aadhaar" placeholder="Aadhaar Card Number (12 Digits)" required minLength="12" maxLength="12" pattern="[0-9]{12}" onInput={(e) => e.target.value = e.target.value.replace(/[^0-9]/g, '')} title="Please enter a valid 12-digit Aadhaar number" className="inquiry-input" />
               <input type="text" name="pincode" placeholder="Pincode (6 Digits)" required minLength="6" maxLength="6" pattern="[0-9]{6}" onInput={(e) => e.target.value = e.target.value.replace(/[^0-9]/g, '')} title="Please enter a valid 6-digit pincode" className="inquiry-input" />
               <div className="interest-level">
                 <p className="field-label">INTEREST LEVEL</p>

@@ -75,7 +75,7 @@ export default function AdminGlobalSearchClient({ inquiries, units }) {
         }}>
           {results.inquiries.length > 0 && (
             <div>
-              <div style={{ fontSize: '0.6rem', color: '#c2a661', fontWeight: 'bold', padding: '4px 8px', textTransform: 'uppercase', letterSpacing: '1px' }}>LEADS & CLIENTS</div>
+              <div style={{ fontSize: '0.6rem', color: 'var(--vanya-gold)', fontWeight: 'bold', padding: '4px 8px', textTransform: 'uppercase', letterSpacing: '1px' }}>LEADS & CLIENTS</div>
               {results.inquiries.map(inq => (
                 <div 
                   key={inq.id} 
@@ -84,7 +84,7 @@ export default function AdminGlobalSearchClient({ inquiries, units }) {
                   onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'}
                   onMouseLeave={e => e.currentTarget.style.background = 'none'}
                 >
-                  <strong style={{ color: '#113629' }}>{inq.name}</strong>
+                  <strong style={{ color: 'var(--vanya-green)' }}>{inq.name}</strong>
                   <span style={{ fontSize: '0.65rem', color: '#666' }}>📞 {inq.phone}</span>
                 </div>
               ))}
@@ -93,7 +93,7 @@ export default function AdminGlobalSearchClient({ inquiries, units }) {
 
           {results.units.length > 0 && (
             <div style={{ marginTop: '0.5rem', borderTop: results.inquiries.length > 0 ? '1px solid #f0f0f0' : 'none', paddingTop: results.inquiries.length > 0 ? '0.5rem' : 0 }}>
-              <div style={{ fontSize: '0.6rem', color: '#c2a661', fontWeight: 'bold', padding: '4px 8px', textTransform: 'uppercase', letterSpacing: '1px' }}>INVENTORY FLATS</div>
+              <div style={{ fontSize: '0.6rem', color: 'var(--vanya-gold)', fontWeight: 'bold', padding: '4px 8px', textTransform: 'uppercase', letterSpacing: '1px' }}>INVENTORY FLATS</div>
               {results.units.map(u => (
                 <div 
                   key={u.id} 
@@ -116,16 +116,16 @@ export default function AdminGlobalSearchClient({ inquiries, units }) {
 
       {/* Detailed Lead Modal Pop-up */}
       {selectedLead && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(11,21,18,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-          <div style={{ background: 'white', padding: '2.5rem', width: '100%', maxWidth: '450px', borderRadius: '14px', boxShadow: '0 20px 50px rgba(0,0,0,0.15)', position: 'relative' }}>
+        <div onClick={() => setSelectedLead(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(11,21,18,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, cursor: 'pointer' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'white', padding: '2.5rem', width: '100%', maxWidth: '450px', borderRadius: '14px', boxShadow: '0 20px 50px rgba(0,0,0,0.15)', position: 'relative', cursor: 'default' }}>
             <button onClick={() => setSelectedLead(null)} style={{ position: 'absolute', top: '1rem', right: '1.5rem', background: 'transparent', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#888' }}>&times;</button>
-            <h2 className="serif" style={{ color: '#113629', marginBottom: '0.2rem', fontSize: '1.6rem' }}>Client Record</h2>
+            <h2 className="serif" style={{ color: 'var(--vanya-green)', marginBottom: '0.2rem', fontSize: '1.6rem' }}>Client Record</h2>
             <p className="text-muted" style={{ fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '2rem' }}>Live CRM lead lookup</p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', fontSize: '0.9rem' }}>
               <div>
                 <label style={{ fontSize: '0.65rem', color: '#999', display: 'block', fontWeight: 'bold' }}>FULL NAME</label>
-                <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#113629', marginTop: '0.2rem' }}>{selectedLead.name}</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--vanya-green)', marginTop: '0.2rem' }}>{selectedLead.name}</div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
@@ -145,7 +145,7 @@ export default function AdminGlobalSearchClient({ inquiries, units }) {
                   </span>
                 </div>
               </div>
-              <div style={{ background: '#faf9f6', padding: '1rem', borderRadius: '8px', border: '1px solid #f0edf4' }}>
+              <div style={{ background: 'var(--admin-bg)', padding: '1rem', borderRadius: '8px', border: '1px solid #f0edf4' }}>
                 <label style={{ fontSize: '0.65rem', color: '#999', display: 'block', fontWeight: 'bold', marginBottom: '0.4rem' }}>LEAD CORRESPONDENCE</label>
                 <div style={{ fontSize: '0.82rem', color: '#444', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{selectedLead.message || 'No messages.'}</div>
               </div>

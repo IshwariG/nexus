@@ -8,9 +8,103 @@ import VisitManagerClient from './VisitManagerClient';
 export default function SalespersonCRMClient({ inquiries = [], units = [], buyers = [], userId = 'SR-9999', isImpersonating = false }) {
   const router = useRouter();
 
+  // Masking helpers for CP Protection
+  // Salesman CANNOT see phone/email of CP leads until the deal is CLOSED
+  const shouldMaskContact = (inq) => {
+    if (!inq || !inq.source || !inq.source.startsWith('CP_Referral|')) return false;
+    const stage = (inq.status || '').split('|')[0].toUpperCase();
+    return !['DONE', 'BOOKED', 'CONVERTED'].includes(stage);
+  };
+
+  const getDisplayPhone = (inq) => {
+    if (!inq || !inq.phone) return '';
+    if (shouldMaskContact(inq)) {
+      const raw = String(inq.phone).trim();
+      if (raw.length <= 4) return '••••••';
+      return raw.slice(0, 2) + '••••' + raw.slice(-2);
+    }
+    return inq.phone;
+  };
+
+  const getDisplayEmail = (inq) => {
+    if (!inq || !inq.email) return '';
+    if (shouldMaskContact(inq)) {
+      const parts = inq.email.split('@');
+      if (parts.length < 2) return '•••@•••';
+      return parts[0].charAt(0) + '•••@' + parts[1];
+    }
+    return inq.email;
+  };
+
+
   // Active Tab State
   const [activeTab, setActiveTabState] = useState('dashboard');
   const [selectedLeadId, setSelectedLeadIdState] = useState(null);
+
+  // Profile states
+  const [profileData, setProfileData] = useState({
+    full_name: '',
+    phone: '',
+    email: '',
+    employee_id: ''
+  });
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const [profileSuccess, setProfileSuccess] = useState('');
+  const [profileLoading, setProfileLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadProfile() {
+      try {
+        const res = await fetch('/api/users/profile');
+        const data = await res.json();
+        if (data.success && data.user) {
+          setProfileData({
+            full_name: data.user.full_name || '',
+            phone: data.user.phone || '',
+            email: data.user.email || '',
+            employee_id: data.user.employee_id || ''
+          });
+        }
+      } catch (e) {
+        console.error('Failed to load profile data', e);
+      } finally {
+        setProfileLoading(false);
+      }
+    }
+    loadProfile();
+  }, []);
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    setProfileError('');
+    setProfileSuccess('');
+    
+    try {
+      const res = await fetch('/api/users/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          full_name: profileData.full_name,
+          phone: profileData.phone,
+          email: profileData.email,
+          employee_id: profileData.employee_id
+        })
+      });
+      
+      const result = await res.json();
+      if (result.success) {
+        setProfileSuccess(result.message || 'Profile updated successfully!');
+        setIsEditingProfile(false);
+        // Reload to let updates propagate
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        setProfileError(result.error || 'Failed to update profile.');
+      }
+    } catch (err) {
+      setProfileError('Network error while updating profile.');
+    }
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -52,7 +146,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
   
   // Custom local state for simulation (Tasks, Calendar events)
   const [tasks, setTasks] = useState([
-    { id: 1, text: 'Call Rahul Mehta to schedule site visit', priority: 'HIGH', done: false, date: 'Today' },
+    { id: 1, text: 'Call Rahul Sharma to schedule site visit', priority: 'HIGH', done: false, date: 'Today' },
     { id: 2, text: 'Send updated 3BHK pricing sheet to Dr. Iyer', priority: 'MEDIUM', done: false, date: 'Today' },
     { id: 3, text: 'Confirm booking deposit transaction id with accounts', priority: 'HIGH', done: true, date: 'Yesterday' },
     { id: 4, text: 'Prepare weekly presentation report', priority: 'LOW', done: false, date: 'Tomorrow' },
@@ -66,12 +160,12 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
   });
   const [currentNoteText, setCurrentNoteText] = useState('');
 
-  // Add Lead Modal state
   const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
   const [addLeadForm, setAddLeadForm] = useState({
     name: '',
     email: '',
     phone: '',
+    aadhaar: '',
     source: 'Direct Sales',
     pincode: '',
     notes: ''
@@ -91,6 +185,29 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
   // Close Deal / Buyer Registration Modal
   const [isCloseDealModalOpen, setIsCloseDealModalOpen] = useState(false);
   const [closeDealLeadId, setCloseDealLeadId] = useState(null);
+
+  // Dialer Simulator States
+  const [isCallActive, setIsCallActive] = useState(false);
+  const [dialerLead, setDialerLead] = useState(null);
+  const [callDuration, setCallDuration] = useState(0);
+  const [callNotes, setCallNotes] = useState('');
+  const [callLogs, setCallLogs] = useState([]);
+
+  useEffect(() => {
+    if (selectedLeadId) {
+      fetch(`/api/calls?inquiry_id=${selectedLeadId}`)
+        .then(res => res.json())
+        .then(json => {
+          if (json.success) {
+            setCallLogs(json.data || []);
+          }
+        })
+        .catch(err => console.error('Failed to fetch call logs:', err));
+    } else {
+      setCallLogs([]);
+    }
+  }, [selectedLeadId]);
+
   const [closeDealForm, setCloseDealForm] = useState({
     unitId: '',
     username: '',
@@ -144,21 +261,33 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
   const salesmanNames = {
     'SR-9999': 'Vikram Sethi',
     'SR-1111': 'Ananya Rao',
-    'SR-2222': 'Karan Malhotra',
-    'SR-3333': 'Priya Sharma',
-    'SR-4444': 'Rohan Verma'
+    'SR-2222': 'Rahul Verma',
+    'SR-3333': 'Sneha Patil',
+    'SR-4444': 'Aditya Sharma'
   };
-  const currentSalesmanName = salesmanNames[userId] || 'Executive Advisor';
+  const currentSalesmanName = profileData.full_name || salesmanNames[userId] || 'Executive Advisor';
 
   // Salesperson avatar meta
   const salesmanMeta = {
     'SR-9999': { initials: 'VS', color: '#1a73e8' },
     'SR-1111': { initials: 'AR', color: '#34a853' },
-    'SR-2222': { initials: 'KM', color: '#ea4335' },
-    'SR-3333': { initials: 'PS', color: '#fbbc05' },
-    'SR-4444': { initials: 'RV', color: '#ab47bc' }
+    'SR-2222': { initials: 'RV', color: '#ea4335' },
+    'SR-3333': { initials: 'SP', color: '#fbbc05' },
+    'SR-4444': { initials: 'AS', color: '#ab47bc' }
   };
-  const meta = salesmanMeta[userId] || { initials: 'EX', color: '#113629' };
+
+  const getInitials = (name) => {
+    if (!name) return 'EX';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  const initials = profileData.full_name ? getInitials(profileData.full_name) : (salesmanMeta[userId]?.initials || 'EX');
+  const meta = {
+    initials: initials,
+    color: salesmanMeta[userId]?.color || 'var(--vanya-green)'
+  };
 
   // --- FILTER & CALCULATIONS ---
   // Inquiries filter rule for salesman: status splits into [STATUS, salesmanId]
@@ -407,6 +536,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
           name: addLeadForm.name,
           email: addLeadForm.email,
           phone: addLeadForm.phone,
+          aadhaar: addLeadForm.aadhaar,
           source: addLeadForm.source,
           status: finalStatus,
           message: cleanMessage,
@@ -416,10 +546,10 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
       const data = await res.json();
       if (res.status === 201) {
         setIsAddLeadOpen(false);
-        setAddLeadForm({ name: '', email: '', phone: '', source: 'Direct Sales', pincode: '', notes: '' });
+        setAddLeadForm({ name: '', email: '', phone: '', aadhaar: '', source: 'Direct Sales', pincode: '', notes: '' });
         router.refresh();
       } else {
-        alert('Failed to insert lead: ' + (data.error || 'Unknown error'));
+        alert('Failed to insert lead: ' + (data.warning || data.error || 'Unknown error'));
       }
     } catch (err) {
       alert('Network error adding lead.');
@@ -451,6 +581,30 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
     } catch(err) {}
     
     setCurrentNoteText('');
+  };
+
+  const handleWalkInComplete = async (leadId) => {
+    if (!window.confirm('Are you sure you want to mark this client\'s physical site walk-in as complete? This will promote them to Opportunity and trigger CP 30-day tagging.')) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/inquiries?id=${leadId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: `DONE|${userId}`
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        alert('Walk-in registered! Lead promoted to Opportunity successfully. 30-day CP tagging logic is now active in database!');
+        window.location.reload();
+      } else {
+        alert('Failed to update status: ' + json.error);
+      }
+    } catch(err) {
+      alert('Error updating status: ' + err.message);
+    }
   };
 
   // Task events
@@ -517,7 +671,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
   };
 
   return (
-    <div className="admin-layout" style={{ display: 'flex', minHeight: '100vh', background: '#f8f9fb' }}>
+    <div className="admin-layout" style={{ display: 'flex', minHeight: '100vh', background: 'var(--admin-bg)' }}>
       
       {/* --- SIDEBAR --- */}
       <aside className="admin-sidebar" style={{
@@ -543,12 +697,12 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
         }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#D9A036" strokeWidth="2.5">
             <rect x="3" y="10" width="4" height="11" rx="1" fill="#D9A036" />
-            <rect x="10" y="4" width="4" height="17" rx="1" fill="#113629" stroke="#113629" />
+            <rect x="10" y="4" width="4" height="17" rx="1" fill="var(--vanya-green)" stroke="var(--vanya-green)" />
             <rect x="17" y="7" width="4" height="14" rx="1" fill="#D9A036" />
           </svg>
           <div>
-            <h2 className="serif" style={{ fontSize: '1.1rem', margin: 0, fontWeight: 700, letterSpacing: '0.5px', color: '#113629' }}>DreamSpaces</h2>
-            <span style={{ fontSize: '0.55rem', color: '#c2a661', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>Sales CRM</span>
+            <h2 className="serif" style={{ fontSize: '1.1rem', margin: 0, fontWeight: 700, letterSpacing: '0.5px', color: 'var(--vanya-green)' }}>DreamSpaces</h2>
+            <span style={{ fontSize: '0.55rem', color: 'var(--vanya-gold)', letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 600 }}>Sales CRM</span>
           </div>
         </div>
 
@@ -586,7 +740,6 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
             { id: 'dashboard', label: 'Dashboard', icon: '📊' },
             { id: 'inventory', label: 'Tower Inventory', icon: '🏢' },
             { id: 'leads', label: 'Leads Pipeline', icon: '🤝', count: activeLeadsCount },
-            { id: 'pipeline', label: 'Kanban Board', icon: '📋' },
             { id: 'followups', label: 'Follow Ups', icon: '📞' },
             { id: 'bookings', label: 'Bookings', icon: '🔑' },
             { id: 'visits', label: 'Site Visits', icon: '🚶‍♂️' },
@@ -609,7 +762,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                 padding: '0.75rem 1rem',
                 border: 'none',
                 background: activeTab === tab.id ? 'rgba(194,166,97,0.1)' : 'transparent',
-                color: activeTab === tab.id ? '#113629' : '#4b5563',
+                color: activeTab === tab.id ? 'var(--vanya-green)' : '#4b5563',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 textAlign: 'left',
@@ -648,7 +801,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                 width: '100%',
                 padding: '0.6rem',
                 fontSize: '0.72rem',
-                background: '#c2a661',
+                background: 'var(--vanya-gold)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '6px',
@@ -690,7 +843,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
         {/* Header Greeting */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
           <div>
-            <h1 className="serif" style={{ fontSize: '2.2rem', margin: 0, fontWeight: 'normal', color: '#113629' }}>
+            <h1 className="serif" style={{ fontSize: '2.2rem', margin: 0, fontWeight: 'normal', color: 'var(--vanya-green)' }}>
               Namaste, {currentSalesmanName.split(' ')[0]}
             </h1>
             <p className="text-muted" style={{ margin: '0.2rem 0 0 0', fontSize: '0.85rem' }}>
@@ -699,7 +852,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
           </div>
           <div>
             <button onClick={() => setIsAddLeadOpen(true)} className="btn-primary" style={{
-              background: '#113629',
+              background: 'var(--vanya-green)',
               color: 'white',
               border: 'none',
               padding: '0.8rem 1.5rem',
@@ -741,7 +894,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                 }}>
                   <div>
                     <span className="text-muted" style={{ fontSize: '0.72rem', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.5px' }}>{card.label}</span>
-                    <h2 className="serif" style={{ fontSize: '2rem', margin: '0.4rem 0', color: '#113629' }}>{card.val}</h2>
+                    <h2 className="serif" style={{ fontSize: '2rem', margin: '0.4rem 0', color: 'var(--vanya-green)' }}>{card.val}</h2>
                     <span style={{ fontSize: '0.7rem', color: '#6b7280' }}>{card.desc}</span>
                   </div>
                   <div style={{
@@ -761,13 +914,13 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
               
               {/* Funnel Widget */}
               <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
-                <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: '#113629' }}>Lead Pipeline Funnel Velocity</h3>
+                <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Lead Pipeline Funnel Velocity</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   {[
-                    { stage: 'Total Leads', count: totalLeads, pct: 100, color: '#113629' },
+                    { stage: 'Total Leads', count: totalLeads, pct: 100, color: 'var(--vanya-green)' },
                     { stage: 'Contacted', count: contactedLeads + qualifiedLeads + proposalLeads + ClosedWonCount(myInquiries), pct: Math.round(((contactedLeads + qualifiedLeads + proposalLeads + ClosedWonCount(myInquiries)) / (totalLeads || 1)) * 100), color: '#1a5c45' },
                     { stage: 'Qualified', count: qualifiedLeads + proposalLeads + ClosedWonCount(myInquiries), pct: Math.round(((qualifiedLeads + proposalLeads + ClosedWonCount(myInquiries)) / (totalLeads || 1)) * 100), color: '#2d7c5f' },
-                    { stage: 'Proposals / Visits', count: proposalLeads + ClosedWonCount(myInquiries), pct: Math.round(((proposalLeads + ClosedWonCount(myInquiries)) / (totalLeads || 1)) * 100), color: '#c2a661' },
+                    { stage: 'Proposals / Visits', count: proposalLeads + ClosedWonCount(myInquiries), pct: Math.round(((proposalLeads + ClosedWonCount(myInquiries)) / (totalLeads || 1)) * 100), color: 'var(--vanya-gold)' },
                     { stage: 'Closed Won', count: ClosedWonCount(myInquiries), pct: Math.round((ClosedWonCount(myInquiries) / (totalLeads || 1)) * 100), color: '#d9a036' }
                   ].map((f, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -794,7 +947,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f1f3f5', marginTop: '1.5rem', paddingTop: '1.5rem' }}>
                   <div>
                     <span className="text-muted" style={{ fontSize: '0.7rem', display: 'block' }}>ESTIMATED DEAL VALUE</span>
-                    <strong style={{ fontSize: '1.1rem', color: '#113629' }}>{expectedRevenue === 0 ? '₹ 0.00' : formatPriceCr(expectedRevenue)} expected</strong>
+                    <strong style={{ fontSize: '1.1rem', color: 'var(--vanya-green)' }}>{expectedRevenue === 0 ? '₹ 0.00' : formatPriceCr(expectedRevenue)} expected</strong>
                   </div>
                   <div>
                     <span className="text-muted" style={{ fontSize: '0.7rem', display: 'block' }}>CONVERTED REVENUE</span>
@@ -806,8 +959,8 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
               {/* Tasks due today */}
               <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-                  <h3 className="serif" style={{ margin: 0, fontSize: '1.25rem', color: '#113629' }}>Tasks Due Today</h3>
-                  <button onClick={() => setActiveTab('tasks')} style={{ background: 'none', border: 'none', color: '#c2a661', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer', textDecoration: 'underline' }}>View All</button>
+                  <h3 className="serif" style={{ margin: 0, fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Tasks Due Today</h3>
+                  <button onClick={() => setActiveTab('tasks')} style={{ background: 'none', border: 'none', color: 'var(--vanya-gold)', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer', textDecoration: 'underline' }}>View All</button>
                 </div>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '220px', overflowY: 'auto' }}>
@@ -823,7 +976,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                       opacity: t.done ? 0.6 : 1,
                       borderLeft: `4px solid ${t.priority === 'HIGH' ? '#dc2626' : t.priority === 'MEDIUM' ? '#d97706' : '#2563eb'}`
                     }}>
-                      <input type="checkbox" checked={t.done} onChange={() => handleToggleTask(t.id)} style={{ marginTop: '0.15rem', accentColor: '#113629' }} />
+                      <input type="checkbox" checked={t.done} onChange={() => handleToggleTask(t.id)} style={{ marginTop: '0.15rem', accentColor: 'var(--vanya-green)' }} />
                       <div style={{ flex: 1 }}>
                         <span style={{ fontSize: '0.78rem', color: '#374151', textDecoration: t.done ? 'line-through' : 'none', display: 'block' }}>{t.text}</span>
                       </div>
@@ -837,7 +990,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
             <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                 <div>
-                  <h3 className="serif" style={{ margin: 0, fontSize: '1.25rem', color: '#113629' }}>My Scheduled Site Visits</h3>
+                  <h3 className="serif" style={{ margin: 0, fontSize: '1.25rem', color: 'var(--vanya-green)' }}>My Scheduled Site Visits</h3>
                   <p className="text-muted" style={{ margin: 0, fontSize: '0.75rem' }}>Upcoming properties viewings with clients</p>
                 </div>
                 <button onClick={() => setActiveTab('visits')} className="btn-outline" style={{ padding: '0.4rem 1rem', fontSize: '0.7rem' }}>VISIT MANAGER</button>
@@ -865,7 +1018,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                       <td>
                         <strong>{inq.name}</strong>
                         <br />
-                        <span className="text-muted" style={{ fontSize: '0.72rem' }}>📞 {inq.phone}</span>
+                        <span className="text-muted" style={{ fontSize: '0.72rem' }}>📞 {getDisplayPhone(inq)}</span>
                       </td>
                       <td className="text-muted" style={{ fontSize: '0.78rem' }}>{inq.message}</td>
                       <td>
@@ -890,12 +1043,12 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
             {/* Collection Targets */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
               <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
-                <h3 className="serif" style={{ margin: '0 0 1.25rem 0', fontSize: '1.25rem', color: '#113629' }}>Quarterly Target Collections</h3>
+                <h3 className="serif" style={{ margin: '0 0 1.25rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Quarterly Target Collections</h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
                   <svg width="100" height="100" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
                     <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#eee" strokeWidth="3" />
                     <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#D9A036" strokeDasharray="64, 100" strokeWidth="3" />
-                    <text x="18" y="20.5" fill="#113629" fontSize="6.5" textAnchor="middle" fontWeight="bold" style={{ transform: 'rotate(90deg)', transformOrigin: '18px 18px' }}>64%</text>
+                    <text x="18" y="20.5" fill="var(--vanya-green)" fontSize="6.5" textAnchor="middle" fontWeight="bold" style={{ transform: 'rotate(90deg)', transformOrigin: '18px 18px' }}>64%</text>
                   </svg>
                   <div>
                     <span style={{ fontSize: '0.8rem', color: '#4b5563', display: 'block' }}>Total Collections Target: <strong>₹ 5.00 Cr</strong></span>
@@ -906,7 +1059,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
               </div>
 
               <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <h3 className="serif" style={{ margin: '0 0 0.8rem 0', fontSize: '1.25rem', color: '#113629' }}>Direct WhatsApp Outreach</h3>
+                <h3 className="serif" style={{ margin: '0 0 0.8rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Direct WhatsApp Outreach</h3>
                 <p className="text-muted" style={{ margin: '0 0 1.25rem 0', fontSize: '0.78rem' }}>Directly connect with your assigned clients via pre-built templates.</p>
                 <button onClick={() => setActiveTab('leads')} className="btn-primary" style={{ background: '#25d366', color: 'white', border: 'none', borderRadius: '8px', padding: '0.8rem 1rem', cursor: 'pointer', fontWeight: 'bold' }}>
                   💬 OPEN CLIENT WHATSAPP LIST
@@ -964,8 +1117,8 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                       fontWeight: 'bold',
                       border: '1px solid',
                       cursor: 'pointer',
-                      borderColor: leadFilter === f.id ? '#113629' : '#e5e7eb',
-                      background: leadFilter === f.id ? '#113629' : 'white',
+                      borderColor: leadFilter === f.id ? 'var(--vanya-green)' : '#e5e7eb',
+                      background: leadFilter === f.id ? 'var(--vanya-green)' : 'white',
                       color: leadFilter === f.id ? 'white' : '#4b5563',
                       transition: 'all 0.2s'
                     }}
@@ -1019,8 +1172,8 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                             <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '0.1rem' }}>{city}</div>
                           </td>
                           <td style={{ fontSize: '0.8rem', color: '#4b5563' }}>
-                            <div>📞 {inq.phone}</div>
-                            <div>✉️ {inq.email}</div>
+                            <div>📞 {getDisplayPhone(inq)}</div>
+                            <div>✉️ {getDisplayEmail(inq)}</div>
                           </td>
                           <td>
                             <span className="source-pill" style={{ textTransform: 'uppercase', fontSize: '0.62rem' }}>
@@ -1033,7 +1186,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                           <td>{getStatusBadge(inq.status)}</td>
                           <td onClick={e => e.stopPropagation()}>
                             <div style={{ display: 'flex', gap: '0.5rem' }}>
-                              <button onClick={() => { setSelectedLeadId(inq.id); setActiveTab('details'); }} className="btn-dark" style={{ padding: '6px 12px', fontSize: '0.65rem', background: '#113629', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                              <button onClick={() => { setSelectedLeadId(inq.id); setActiveTab('details'); }} className="btn-dark" style={{ padding: '6px 12px', fontSize: '0.65rem', background: 'var(--vanya-green)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                                 View Details
                               </button>
                               <button onClick={() => {
@@ -1086,7 +1239,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                 fontSize: '0.78rem'
               }}>&larr; Back to Leads List</button>
               
-              <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629' }}>Client Workspace: {selectedLead.name}</h2>
+              <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)' }}>Client Workspace: {selectedLead.name}</h2>
               {getStatusBadge(selectedLead.status)}
             </div>
 
@@ -1102,11 +1255,27 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', fontSize: '0.82rem' }}>
                     <div>
                       <span className="text-muted" style={{ display: 'block', fontSize: '0.68rem' }}>MOBILE PHONE</span>
-                      <strong>{selectedLead.phone}</strong>
+                      <strong>{getDisplayPhone(selectedLead)}</strong>
+                      {shouldMaskContact(selectedLead) && (
+                        <span style={{
+                          background: '#fef3c7',
+                          color: '#b45309',
+                          fontSize: '0.6rem',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontWeight: 'bold',
+                          marginLeft: '8px',
+                          border: '1px solid #fde68a',
+                          display: 'inline-block',
+                          verticalAlign: 'middle'
+                        }}>
+                          🔒 CP PROTECTED
+                        </span>
+                      )}
                     </div>
                     <div>
                       <span className="text-muted" style={{ display: 'block', fontSize: '0.68rem' }}>EMAIL ADDRESS</span>
-                      <strong>{selectedLead.email}</strong>
+                      <strong>{getDisplayEmail(selectedLead)}</strong>
                     </div>
                     <div>
                       <span className="text-muted" style={{ display: 'block', fontSize: '0.68rem' }}>CITY / PINCODE</span>
@@ -1131,16 +1300,31 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                 <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '1.75rem', border: '1px solid #f1f3f5' }}>
                   <h3 className="serif" style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem' }}>CRM Actions</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <button onClick={() => {
+                      setDialerLead(selectedLead);
+                      setIsCallActive(true);
+                      setCallNotes('');
+                      setCallDuration(0);
+                      const timer = setInterval(() => {
+                        setCallDuration(d => d + 1);
+                      }, 1000);
+                      window.callTimerRef = timer;
+                    }} className="btn-outline-dark" style={{ width: '100%', padding: '0.8rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold', border: '2px solid var(--vanya-green)', color: 'var(--vanya-green)' }}>
+                      📞 Start Telephony Outbound Call
+                    </button>
+                    <button onClick={() => handleWalkInComplete(selectedLead.id)} className="btn-outline-dark" style={{ width: '100%', padding: '0.8rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold', border: '2px solid var(--vanya-gold)', color: 'var(--vanya-gold)' }}>
+                      🚶‍♂️ Mark Site Walk-in Complete (Promote to Opportunity)
+                    </button>
                     <button onClick={() => { setCallbackLeadId(selectedLead.id); setIsCallbackModalOpen(true); }} className="btn-outline-dark" style={{ width: '100%', padding: '0.8rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
                       📞 Schedule Follow Up
                     </button>
                     <button onClick={() => { setVisitLeadId(selectedLead.id); setIsVisitModalOpen(true); }} className="btn-outline-dark" style={{ width: '100%', padding: '0.8rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
                       🚶‍♂️ Book Site Visit
                     </button>
-                    <button onClick={() => handleUpdateStatus(selectedLead.id, 'PROPOSAL')} style={{ width: '100%', padding: '0.8rem', textAlign: 'left', background: 'none', border: '1px solid #113629', color: '#113629', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
+                    <button onClick={() => handleUpdateStatus(selectedLead.id, 'PROPOSAL')} style={{ width: '100%', padding: '0.8rem', textAlign: 'left', background: 'none', border: '1px solid var(--vanya-green)', color: 'var(--vanya-green)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
                       📄 Send Proposal / Brochure
                     </button>
-                    <button onClick={() => handleUpdateStatus(selectedLead.id, 'NEGOTIATION')} style={{ width: '100%', padding: '0.8rem', textAlign: 'left', background: 'none', border: '1px solid #c2a661', color: '#c2a661', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
+                    <button onClick={() => handleUpdateStatus(selectedLead.id, 'NEGOTIATION')} style={{ width: '100%', padding: '0.8rem', textAlign: 'left', background: 'none', border: '1px solid var(--vanya-gold)', color: 'var(--vanya-gold)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
                       🤝 Move to Negotiation
                     </button>
                     <button onClick={() => handleUpdateStatus(selectedLead.id, 'CONVERTED')} style={{ width: '100%', padding: '0.8rem', textAlign: 'left', background: '#d9a036', border: 'none', color: 'white', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
@@ -1159,18 +1343,42 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                 
                 {/* Notes Input & List */}
                 <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
-                  <h3 className="serif" style={{ margin: '0 0 1.25rem 0', fontSize: '1.25rem', color: '#113629' }}>Client Interactions & Call Logs</h3>
+                  <h3 className="serif" style={{ margin: '0 0 1.25rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Client Interactions & Call Logs</h3>
                   
-                  {/* Notes List */}
+                  {/* Notes & Call Logs List */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem', maxHeight: '250px', overflowY: 'auto' }}>
+                    {/* Render Call Logs */}
+                    {(callLogs || []).map((log, idx) => (
+                      <div key={`call-${log.id || idx}`} style={{ background: '#f0f4f8', border: '1px solid #d0e0f0', padding: '1rem', borderRadius: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 'bold', fontSize: '0.82rem', color: '#1a5678' }}>📞 Outbound Call Completed</span>
+                          <span style={{ fontSize: '0.72rem', background: '#e0ecf4', padding: '2px 8px', borderRadius: '12px', fontWeight: 'bold' }}>Duration: {log.duration}s</span>
+                        </div>
+                        <p style={{ margin: '0.4rem 0 0.2rem 0', fontSize: '0.8rem', color: '#374151' }}><strong>Notes:</strong> {log.notes || 'No call disposition logged.'}</p>
+                        
+                        {/* Audio simulator element */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.6rem', background: '#fff', padding: '6px 12px', borderRadius: '6px', border: '1px solid #e0e0e0' }}>
+                          <button onClick={() => alert('Simulating audio playback of call recording...')} style={{ background: 'var(--vanya-green)', border: 'none', color: 'white', borderRadius: '50%', width: '22px', height: '22px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem' }}>▶</button>
+                          <div style={{ flex: 1, background: '#eee', height: '4px', borderRadius: '2px' }}>
+                            <div style={{ width: '40%', background: 'var(--vanya-gold)', height: '100%', borderRadius: '2px' }}></div>
+                          </div>
+                          <span style={{ fontSize: '0.62rem', color: '#888' }}>Recording Active</span>
+                        </div>
+                        
+                        <span style={{ fontSize: '0.62rem', color: '#9ca3af', display: 'block', marginTop: '0.4rem' }}>Recorded on {new Date(log.created_at).toLocaleString()}</span>
+                      </div>
+                    ))}
+
+                    {/* Render standard notes */}
                     {(leadNotes[selectedLead.id] || []).map((note, i) => (
-                      <div key={i} style={{ background: '#fdfdfd', border: '1px solid #f3f4f6', padding: '1rem', borderRadius: '8px' }}>
+                      <div key={`note-${i}`} style={{ background: '#fdfdfd', border: '1px solid #f3f4f6', padding: '1rem', borderRadius: '8px' }}>
                         <p style={{ margin: 0, fontSize: '0.82rem', color: '#374151' }}>{note.text}</p>
                         <span style={{ fontSize: '0.65rem', color: '#9ca3af', display: 'block', marginTop: '0.4rem' }}>Logged on {note.time}</span>
                       </div>
                     ))}
-                    {(!leadNotes[selectedLead.id] || leadNotes[selectedLead.id].length === 0) && (
-                      <p style={{ textAlign: 'center', color: '#9ca3af', padding: '1.5rem', fontSize: '0.8rem' }}>No client notes logged yet.</p>
+                    
+                    {(!callLogs || callLogs.length === 0) && (!leadNotes[selectedLead.id] || leadNotes[selectedLead.id].length === 0) && (
+                      <p style={{ textAlign: 'center', color: '#9ca3af', padding: '1.5rem', fontSize: '0.8rem' }}>No client notes or call logs recorded yet.</p>
                     )}
                   </div>
 
@@ -1189,7 +1397,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                         fontSize: '0.82rem'
                       }}
                     />
-                    <button onClick={() => handleAddNote(selectedLead.id)} className="btn-primary" style={{ background: '#113629', color: 'white', border: 'none', borderRadius: '6px', padding: '0 1.5rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem' }}>
+                    <button onClick={() => handleAddNote(selectedLead.id)} className="btn-primary" style={{ background: 'var(--vanya-green)', color: 'white', border: 'none', borderRadius: '6px', padding: '0 1.5rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem' }}>
                       Add Note
                     </button>
                   </div>
@@ -1197,7 +1405,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
 
                 {/* Status Timeline logs */}
                 <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
-                  <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: '#113629' }}>Lifecycle Status Timeline</h3>
+                  <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Lifecycle Status Timeline</h3>
                   <div style={{ position: 'relative', paddingLeft: '1.5rem', borderLeft: '2px solid #e5e7eb', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                     
                     {(() => {
@@ -1209,14 +1417,14 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                       return (
                         <>
                           <div style={{ position: 'relative' }}>
-                            <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: '#113629' }}></span>
+                            <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: 'var(--vanya-green)' }}></span>
                             <strong style={{ fontSize: '0.82rem', display: 'block' }}>Lead Received</strong>
                             <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Assigned to {currentSalesmanName}</span>
                           </div>
                           
                           {hasReached('CONTACTED') && (
                             <div style={{ position: 'relative' }}>
-                              <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: '#c2a661' }}></span>
+                              <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: 'var(--vanya-gold)' }}></span>
                               <strong style={{ fontSize: '0.82rem', display: 'block' }}>First Contact Initiated</strong>
                               <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Marked attended & follow up scheduled</span>
                             </div>
@@ -1224,7 +1432,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                           
                           {hasReached('PROPOSAL') && (
                             <div style={{ position: 'relative' }}>
-                              <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: '#113629' }}></span>
+                              <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: 'var(--vanya-green)' }}></span>
                               <strong style={{ fontSize: '0.82rem', display: 'block' }}>Proposal Sent</strong>
                               <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Shared brochure & proposal docs</span>
                             </div>
@@ -1275,104 +1483,13 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
           </div>
         )}
 
-        {/* ============================================================== */}
-        {/* TAB 4: KANBAN BOARD */}
-        {/* ============================================================== */}
-        {activeTab === 'pipeline' && (
-          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629' }}>Leads Pipeline Kanban</h2>
-            
-            {/* Kanban Columns Grid */}
-            <div style={{ width: '100%', overflowX: 'auto', paddingBottom: '1rem' }}>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(7, minmax(220px, 1fr))',
-                gap: '1rem',
-                alignItems: 'start',
-                minHeight: '500px'
-              }}>
-                {[
-                  { id: 'NEW', title: 'New Leads', color: '#dc2626' },
-                  { id: 'CONTACTED', title: 'Contacted', color: '#d97706' },
-                  { id: 'SCHEDULED', title: 'Site Visit', color: '#2563eb' },
-                  { id: 'PROPOSAL', title: 'Proposal', color: '#7c3aed' },
-                  { id: 'NEGOTIATION', title: 'Negotiation', color: '#db2777' },
-                  { id: 'CONVERTED', title: 'Closed Won', color: '#16a34a' },
-                  { id: 'LOST', title: 'Deal Lost', color: '#4b5563' }
-                ].map(col => {
-                const colLeads = myInquiries.filter(inq => {
-                  const s = inq.status.split('|')[0];
-                  return s === col.id || (col.id === 'CONVERTED' && s === 'BOOKED');
-                });
-                
-                return (
-                  <div key={col.id} style={{
-                    background: '#f1f5f9',
-                    borderRadius: '8px',
-                    padding: '0.75rem',
-                    minHeight: '400px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.75rem',
-                    borderTop: `4px solid ${col.color}`
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
-                      <strong style={{ fontSize: '0.75rem', color: '#1f2937', textTransform: 'uppercase' }}>{col.title}</strong>
-                      <span style={{ background: '#e2e8f0', fontSize: '0.68rem', padding: '1px 6px', borderRadius: '10px', fontWeight: 'bold' }}>{colLeads.length}</span>
-                    </div>
-
-                    {colLeads.map(lead => (
-                      <div key={lead.id} style={{
-                        background: 'white',
-                        padding: '0.8rem',
-                        borderRadius: '6px',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                        border: '1px solid #e2e8f0',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.5rem'
-                      }}>
-                        <strong style={{ fontSize: '0.8rem', display: 'block', color: '#113629' }}>{lead.name}</strong>
-                        <span style={{ fontSize: '0.68rem', color: '#6b7280' }}>📞 {lead.phone}</span>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.2rem' }}>
-                          <span style={{ fontSize: '0.58rem', background: '#f3f4f6', padding: '1px 4px', borderRadius: '3px' }}>{lead.source?.split('|')[0] || 'Direct'}</span>
-                          <select
-                            value={col.id}
-                            onChange={e => handleUpdateStatus(lead.id, e.target.value)}
-                            style={{
-                              fontSize: '0.62rem',
-                              padding: '2px',
-                              borderRadius: '4px',
-                              border: '1px solid #ccc',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <option value="NEW">New</option>
-                            <option value="CONTACTED">Contacted</option>
-                            <option value="SCHEDULED">Site Visit</option>
-                            <option value="PROPOSAL">Proposal</option>
-                            <option value="NEGOTIATION">Negotiation</option>
-                            <option value="CONVERTED">Closed Won</option>
-                            <option value="LOST">Lost</option>
-                          </select>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-            </div>
-
-          </div>
-        )}
 
         {/* ============================================================== */}
         {/* TAB 5: FOLLOW UPS */}
         {/* ============================================================== */}
         {activeTab === 'followups' && (
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629' }}>Callbacks & Follow Ups Dashboard</h2>
+            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)' }}>Callbacks & Follow Ups Dashboard</h2>
             
             <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
@@ -1395,12 +1512,12 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                   {myInquiries.filter(inq => inq.status.includes('CONTACTED')).map((inq, i) => (
                     <tr key={inq.id || i}>
                       <td><strong>{inq.name}</strong></td>
-                      <td>📞 {inq.phone}</td>
-                      <td>✉️ {inq.email}</td>
+                      <td>📞 {getDisplayPhone(inq)}</td>
+                      <td>✉️ {getDisplayEmail(inq)}</td>
                       <td style={{ fontWeight: 'bold', color: '#d9a036' }}>Upcoming Callback</td>
                       <td>{getStatusBadge(inq.status)}</td>
                       <td>
-                        <button onClick={() => { setSelectedLeadId(inq.id); setActiveTab('details'); }} className="btn-dark" style={{ padding: '6px 12px', fontSize: '0.68rem', borderRadius: '4px', background: '#113629', color: 'white', border: 'none', cursor: 'pointer' }}>
+                        <button onClick={() => { setSelectedLeadId(inq.id); setActiveTab('details'); }} className="btn-dark" style={{ padding: '6px 12px', fontSize: '0.68rem', borderRadius: '4px', background: 'var(--vanya-green)', color: 'white', border: 'none', cursor: 'pointer' }}>
                           Log Outcome
                         </button>
                       </td>
@@ -1423,12 +1540,12 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
         {/* ============================================================== */}
         {activeTab === 'bookings' && (
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629' }}>Verified Customer Bookings</h2>
+            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)' }}>Verified Customer Bookings</h2>
             
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginBottom: '1.5rem' }}>
               <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '1.5rem', border: '1px solid #f1f3f5' }}>
                 <span className="text-muted" style={{ fontSize: '0.72rem', textTransform: 'uppercase' }}>Bookings Achieved</span>
-                <h2 className="serif" style={{ fontSize: '2rem', margin: '0.4rem 0', color: '#113629' }}>{ClosedWonCount(myInquiries)}</h2>
+                <h2 className="serif" style={{ fontSize: '2rem', margin: '0.4rem 0', color: 'var(--vanya-green)' }}>{ClosedWonCount(myInquiries)}</h2>
                 <span style={{ fontSize: '0.7rem', color: '#6b7280' }}>Out of 12 target properties</span>
               </div>
               <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '1.5rem', border: '1px solid #f1f3f5' }}>
@@ -1438,13 +1555,13 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
               </div>
               <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '1.5rem', border: '1px solid #f1f3f5' }}>
                 <span className="text-muted" style={{ fontSize: '0.72rem', textTransform: 'uppercase' }}>RERA Status</span>
-                <h2 className="serif" style={{ fontSize: '2rem', margin: '0.4rem 0', color: '#c2a661' }}>100%</h2>
+                <h2 className="serif" style={{ fontSize: '2rem', margin: '0.4rem 0', color: 'var(--vanya-gold)' }}>100%</h2>
                 <span style={{ fontSize: '0.7rem', color: '#6b7280' }}>All closed units RERA compliant</span>
               </div>
             </div>
 
             <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
-              <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: '#113629' }}>Active Bookings Registry</h3>
+              <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Active Bookings Registry</h3>
               
               <table className="table-standard">
                 <thead>
@@ -1468,8 +1585,8 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                     return myInquiries.filter(inq => inq.status.includes('CONVERTED') || inq.status.includes('BOOKED')).map((inq, i) => (
                       <tr key={inq.id || i}>
                         <td><strong>{inq.name}</strong></td>
-                        <td>{inq.email}</td>
-                        <td>{inq.phone}</td>
+                        <td>{getDisplayEmail(inq)}</td>
+                        <td>{getDisplayPhone(inq)}</td>
                         <td><span style={{ background: '#f3f4f6', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>{getUnitFromMessage(inq.message)}</span></td>
                         <td style={{ color: '#2e7d32', fontWeight: 'bold' }}>✓ REGISTERED & APPROVED</td>
                         <td><span className="badge available">CLOSED WON</span></td>
@@ -1493,11 +1610,11 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
         {/* ============================================================== */}
         {activeTab === 'visits' && (
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629' }}>Client Site Visits Registry</h2>
+            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)' }}>Client Site Visits Registry</h2>
             
             <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <h3 className="serif" style={{ margin: 0, fontSize: '1.25rem', color: '#113629' }}>Scheduled Property Showings</h3>
+                <h3 className="serif" style={{ margin: 0, fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Scheduled Property Showings</h3>
                 <span className="badge reserved">Visits Logs</span>
               </div>
 
@@ -1523,7 +1640,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                     .map((inq, i) => (
                     <tr key={inq.id || i}>
                       <td><strong>{inq.name}</strong></td>
-                      <td>{inq.phone}</td>
+                      <td>{getDisplayPhone(inq)}</td>
                       <td><span style={{ background: '#f3f4f6', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>3BHK Supreme</span></td>
                       <td>{inq.message?.includes('visit on') ? inq.message.split('visit on')[1] : 'Upcoming scheduled time'}</td>
                       <td>
@@ -1553,13 +1670,13 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
         {/* ============================================================== */}
         {activeTab === 'tasks' && (
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629' }}>My Task Board</h2>
+            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)' }}>My Task Board</h2>
             
             <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '2rem' }}>
               
               {/* Tasks List */}
               <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
-                <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: '#113629' }}>Assigned Checklist</h3>
+                <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Assigned Checklist</h3>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   {tasks.map(t => (
@@ -1573,7 +1690,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                       borderLeft: `4px solid ${t.priority === 'HIGH' ? '#dc2626' : t.priority === 'MEDIUM' ? '#d97706' : '#2563eb'}`
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
-                        <input type="checkbox" checked={t.done} onChange={() => handleToggleTask(t.id)} style={{ accentColor: '#113629', cursor: 'pointer' }} />
+                        <input type="checkbox" checked={t.done} onChange={() => handleToggleTask(t.id)} style={{ accentColor: 'var(--vanya-green)', cursor: 'pointer' }} />
                         <span style={{ fontSize: '0.85rem', color: '#374151', textDecoration: t.done ? 'line-through' : 'none' }}>{t.text}</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0 }}>
@@ -1613,7 +1730,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
 
               {/* Add Task Form */}
               <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5', height: 'fit-content' }}>
-                <h3 className="serif" style={{ margin: '0 0 1.25rem 0', fontSize: '1.25rem', color: '#113629' }}>Create Custom Task</h3>
+                <h3 className="serif" style={{ margin: '0 0 1.25rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Create Custom Task</h3>
                 <form onSubmit={handleAddTask} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>TASK DETAILS</label>
@@ -1634,7 +1751,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                       <option value="LOW">Low Priority</option>
                     </select>
                   </div>
-                  <button type="submit" className="btn-primary" style={{ background: '#113629', color: 'white', border: 'none', borderRadius: '6px', padding: '0.8rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem', marginTop: '0.5rem' }}>
+                  <button type="submit" className="btn-primary" style={{ background: 'var(--vanya-green)', color: 'white', border: 'none', borderRadius: '6px', padding: '0.8rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem', marginTop: '0.5rem' }}>
                     ADD TASK TO LIST
                   </button>
                 </form>
@@ -1674,31 +1791,31 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
             return d.getDate() === t.getDate() && d.getMonth() === t.getMonth() && d.getFullYear() === t.getFullYear();
           };
 
-          const typeColor = { call: '#1a73e8', visit: '#113629', proposal: '#ab47bc', negotiation: '#d9a036', other: '#6b7280' };
+          const typeColor = { call: '#1a73e8', visit: 'var(--vanya-green)', proposal: '#ab47bc', negotiation: '#d9a036', other: '#6b7280' };
 
 
           return (
             <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               {/* Header row */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629' }}>My Weekly Schedule</h2>
+                <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)' }}>My Weekly Schedule</h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   <button
                     onClick={() => setCalendarWeekOffset(w => w - 1)}
                     style={{ padding: '0.5rem 1.1rem', borderRadius: '8px', border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}
                   >‹</button>
-                  <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#113629', minWidth: '160px', textAlign: 'center' }}>{monthName}</span>
+                  <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--vanya-green)', minWidth: '160px', textAlign: 'center' }}>{monthName}</span>
                   <button
                     onClick={() => setCalendarWeekOffset(w => w + 1)}
                     style={{ padding: '0.5rem 1.1rem', borderRadius: '8px', border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem' }}
                   >›</button>
                   <button
                     onClick={() => setCalendarWeekOffset(0)}
-                    style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid #113629', background: '#113629', color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.75rem' }}
+                    style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid var(--vanya-green)', background: 'var(--vanya-green)', color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.75rem' }}
                   >Today</button>
                   <button
                     onClick={() => setShowAddEventForm(v => !v)}
-                    style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid #c2a661', background: '#c2a661', color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.75rem' }}
+                    style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid var(--vanya-gold)', background: 'var(--vanya-gold)', color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.75rem' }}
                   >+ Add Event</button>
                 </div>
               </div>
@@ -1706,7 +1823,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
               {/* Add Event Form */}
               {showAddEventForm && (
                 <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '1.5rem', border: '1px solid #f1f3f5' }}>
-                  <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: '#113629' }}>Add New Calendar Event</h4>
+                  <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--vanya-green)' }}>Add New Calendar Event</h4>
                   <form
                     onSubmit={e => {
                       e.preventDefault();
@@ -1735,7 +1852,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                         <option value="other">📌 Other</option>
                       </select>
                     </div>
-                    <button type="submit" style={{ padding: '0.65rem 1.5rem', background: '#113629', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem' }}>Save Event</button>
+                    <button type="submit" style={{ padding: '0.65rem 1.5rem', background: 'var(--vanya-green)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem' }}>Save Event</button>
                     <button type="button" onClick={() => setShowAddEventForm(false)} style={{ padding: '0.65rem 1rem', background: 'white', color: '#6b7280', border: '1px solid #ddd', borderRadius: '6px', cursor: 'pointer', fontSize: '0.82rem' }}>Cancel</button>
                   </form>
                 </div>
@@ -1752,12 +1869,12 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                         textAlign: 'center',
                         padding: '0.6rem 0.5rem',
                         borderRadius: '8px',
-                        background: isToday(d) ? '#113629' : idx >= 5 ? '#fef9ec' : '#f8f9fb',
+                        background: isToday(d) ? 'var(--vanya-green)' : idx >= 5 ? '#fef9ec' : 'var(--admin-bg)',
                         color: isToday(d) ? 'white' : idx >= 5 ? '#d9a036' : '#4b5563',
                         fontWeight: 'bold',
                         fontSize: '0.78rem',
                         cursor: 'pointer',
-                        border: isToday(d) ? '2px solid #113629' : '1px solid #e5e7eb'
+                        border: isToday(d) ? '2px solid var(--vanya-green)' : '1px solid #e5e7eb'
                       }}
                       onClick={() => {
                         const key = d.toISOString().split('T')[0];
@@ -1778,7 +1895,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                     return (
                       <div
                         key={colIdx}
-                        style={{ background: '#f8f9fb', borderRadius: '8px', padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', minHeight: '200px' }}
+                        style={{ background: 'var(--admin-bg)', borderRadius: '8px', padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', minHeight: '200px' }}
                       >
                         {evts.length === 0 && (
                           <button
@@ -1839,7 +1956,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
         {/* ============================================================== */}
         {activeTab === 'inventory' && (
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629' }}>Tower Inventory Board</h2>
+            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)' }}>Tower Inventory Board</h2>
             
             <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '1.5rem', border: '1px solid #f1f3f5', display: 'flex', gap: '1rem', alignItems: 'center' }}>
               <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#4b5563' }}>Filter by Tower:</span>
@@ -1857,8 +1974,8 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                         fontWeight: 'bold',
                         border: '1px solid',
                         cursor: 'pointer',
-                        borderColor: inventoryTower === filterVal ? '#113629' : '#e5e7eb',
-                        background: inventoryTower === filterVal ? '#113629' : 'white',
+                        borderColor: inventoryTower === filterVal ? 'var(--vanya-green)' : '#e5e7eb',
+                        background: inventoryTower === filterVal ? 'var(--vanya-green)' : 'white',
                         color: inventoryTower === filterVal ? 'white' : '#4b5563'
                       }}
                     >
@@ -1871,7 +1988,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
 
             {/* Render Portfolio units */}
             <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
-              <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: '#113629' }}>Assigned Units Portfolio</h3>
+              <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Assigned Units Portfolio</h3>
               <PortfolioTable assignedUnits={myUnits} />
             </div>
 
@@ -1883,33 +2000,33 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
         {/* ============================================================== */}
         {activeTab === 'reports' && (
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629' }}>CRM Performance Reports</h2>
+            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)' }}>CRM Performance Reports</h2>
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
               
               {/* Chart 1: Donut Source Chart */}
               <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5', textAlign: 'center' }}>
-                <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: '#113629', textAlign: 'left' }}>Leads Source Acquisition</h3>
+                <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)', textAlign: 'left' }}>Leads Source Acquisition</h3>
                 
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '2.5rem', height: '220px' }}>
                   <svg width="150" height="150" viewBox="0 0 42 42">
                     <circle cx="21" cy="21" r="15.9155" fill="none" stroke="#ddd" strokeWidth="5" />
                     {/* Circle slices: Website Referral (50%), Direct Outreach (30%), Channel Partners (20%) */}
-                    <circle cx="21" cy="21" r="15.9155" fill="none" stroke="#113629" strokeWidth="5" strokeDasharray="50 100" strokeDashoffset="25" />
-                    <circle cx="21" cy="21" r="15.9155" fill="none" stroke="#c2a661" strokeWidth="5" strokeDasharray="30 100" strokeDashoffset="75" />
+                    <circle cx="21" cy="21" r="15.9155" fill="none" stroke="var(--vanya-green)" strokeWidth="5" strokeDasharray="50 100" strokeDashoffset="25" />
+                    <circle cx="21" cy="21" r="15.9155" fill="none" stroke="var(--vanya-gold)" strokeWidth="5" strokeDasharray="30 100" strokeDashoffset="75" />
                     <circle cx="21" cy="21" r="15.9155" fill="none" stroke="#ab47bc" strokeWidth="5" strokeDasharray="20 100" strokeDashoffset="5" />
-                    <g fill="#113629" fontSize="3" fontWeight="bold">
+                    <g fill="var(--vanya-green)" fontSize="3" fontWeight="bold">
                       <text x="21" y="21" textAnchor="middle" alignmentBaseline="middle">Sources</text>
                     </g>
                   </svg>
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', textAlign: 'left', fontSize: '0.8rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#113629', borderRadius: '3px' }}></span>
+                      <span style={{ display: 'inline-block', width: '12px', height: '12px', background: 'var(--vanya-green)', borderRadius: '3px' }}></span>
                       <span>Website Referral (50%)</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#c2a661', borderRadius: '3px' }}></span>
+                      <span style={{ display: 'inline-block', width: '12px', height: '12px', background: 'var(--vanya-gold)', borderRadius: '3px' }}></span>
                       <span>Direct Outreach (30%)</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -1922,18 +2039,18 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
 
               {/* Chart 2: Trend Line Chart */}
               <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
-                <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: '#113629' }}>Leads Volume Trend (Last 6 Months)</h3>
+                <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Leads Volume Trend (Last 6 Months)</h3>
                 
                 <div style={{ position: 'relative', height: '220px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
                   {/* SVG Chart Line */}
                   <svg viewBox="0 0 100 40" style={{ width: '100%', height: '160px' }}>
                     <path d="M 0 35 Q 20 20 40 28 T 80 15 T 100 8" fill="none" stroke="#D9A036" strokeWidth="2" />
-                    <circle cx="0" cy="35" r="1.5" fill="#113629" />
-                    <circle cx="20" cy="22" r="1.5" fill="#113629" />
-                    <circle cx="40" cy="28" r="1.5" fill="#113629" />
-                    <circle cx="60" cy="22" r="1.5" fill="#113629" />
-                    <circle cx="80" cy="15" r="1.5" fill="#113629" />
-                    <circle cx="100" cy="8" r="1.5" fill="#113629" />
+                    <circle cx="0" cy="35" r="1.5" fill="var(--vanya-green)" />
+                    <circle cx="20" cy="22" r="1.5" fill="var(--vanya-green)" />
+                    <circle cx="40" cy="28" r="1.5" fill="var(--vanya-green)" />
+                    <circle cx="60" cy="22" r="1.5" fill="var(--vanya-green)" />
+                    <circle cx="80" cy="15" r="1.5" fill="var(--vanya-green)" />
+                    <circle cx="100" cy="8" r="1.5" fill="var(--vanya-green)" />
                   </svg>
                   
                   {/* Labels */}
@@ -1958,38 +2075,126 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
         {/* ============================================================== */}
         {activeTab === 'profile' && (
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629' }}>Representative Account Profile</h2>
-            
-            <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem', borderBottom: '1px solid #f1f3f5', paddingBottom: '1.5rem' }}>
-                <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: meta.color, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.5rem' }}>
-                  {meta.initials}
-                </div>
-                <div>
-                  <h3 className="serif" style={{ margin: 0, fontSize: '1.4rem' }}>{currentSalesmanName}</h3>
-                  <span className="text-muted" style={{ fontSize: '0.8rem' }}>Senior Real Estate Consultant &bull; ID: {userId}</span>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', fontSize: '0.85rem' }}>
-                <div>
-                  <span className="text-muted" style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold' }}>FIRM PARTNER</span>
-                  <strong>DreamSpaces Heritage Estates</strong>
-                </div>
-                <div>
-                  <span className="text-muted" style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold' }}>RERA REGISTRATION</span>
-                  <strong>RERA-MUM-98765-Sales</strong>
-                </div>
-                <div>
-                  <span className="text-muted" style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold' }}>OFFICE TELEPHONE</span>
-                  <strong>+91 98765 43210</strong>
-                </div>
-                <div>
-                  <span className="text-muted" style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold' }}>EMAIL ADDRESS</span>
-                  <strong>{currentSalesmanName.toLowerCase().replace(' ', '.')}@dreamspaces.com</strong>
-                </div>
-              </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)' }}>Representative Account Profile</h2>
+              {!isEditingProfile && !profileLoading && (
+                <button 
+                  onClick={() => setIsEditingProfile(true)}
+                  className="btn-dark"
+                  style={{ background: 'var(--vanya-gold)', color: 'white', border: 'none', padding: '0.6rem 1.2rem', borderRadius: '7px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  📝 Edit Profile
+                </button>
+              )}
             </div>
+            
+            {profileSuccess && (
+              <div style={{ background: '#e6f4ea', color: '#137333', padding: '1rem', borderRadius: '8px', fontSize: '0.82rem', textAlign: 'center' }}>
+                🎉 {profileSuccess}
+              </div>
+            )}
+
+            {profileError && (
+              <div style={{ background: '#fff5f5', color: '#c53030', border: '1px solid #feb2b2', padding: '1rem', borderRadius: '8px', fontSize: '0.82rem', textAlign: 'center' }}>
+                ⚠️ {profileError}
+              </div>
+            )}
+
+            {profileLoading ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--vanya-green)' }}>Loading profile data...</div>
+            ) : isEditingProfile ? (
+              <form onSubmit={handleSaveProfile} className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                  <div className="form-group">
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>FULL NAME</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={profileData.full_name} 
+                      onChange={e => setProfileData({ ...profileData, full_name: e.target.value })} 
+                      style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }} 
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>EMPLOYEE ID</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={profileData.employee_id} 
+                      onChange={e => setProfileData({ ...profileData, employee_id: e.target.value })} 
+                      style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }} 
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                  <div className="form-group">
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>REGISTERED TELEPHONE (10-DIGIT)</label>
+                    <input 
+                      type="tel" 
+                      required 
+                      minLength={10}
+                      maxLength={10}
+                      pattern="[0-9]{10}"
+                      onInput={(e) => e.target.value = e.target.value.replace(/[^0-9]/g, '')}
+                      value={profileData.phone} 
+                      onChange={e => setProfileData({ ...profileData, phone: e.target.value })} 
+                      style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }} 
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>EMAIL ADDRESS</label>
+                    <input 
+                      type="email" 
+                      required 
+                      value={profileData.email} 
+                      onChange={e => setProfileData({ ...profileData, email: e.target.value })} 
+                      style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }} 
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                  <button type="submit" className="btn-primary" style={{ background: 'var(--vanya-green)', color: 'white', border: 'none', borderRadius: '6px', padding: '0.8rem 1.8rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem' }}>
+                    SAVE CHANGES
+                  </button>
+                  <button type="button" onClick={() => setIsEditingProfile(false)} className="btn-outline" style={{ border: '1px solid #ccc', borderRadius: '6px', padding: '0.8rem 1.8rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem', background: 'transparent' }}>
+                    CANCEL
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem', borderBottom: '1px solid #f1f3f5', paddingBottom: '1.5rem' }}>
+                  <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: meta.color, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.5rem' }}>
+                    {meta.initials}
+                  </div>
+                  <div>
+                    <h3 className="serif" style={{ margin: 0, fontSize: '1.4rem' }}>{currentSalesmanName}</h3>
+                    <span className="text-muted" style={{ fontSize: '0.8rem' }}>Senior Real Estate Consultant &bull; ID: {profileData.employee_id || userId}</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', fontSize: '0.85rem' }}>
+                  <div>
+                    <span className="text-muted" style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold' }}>FIRM PARTNER</span>
+                    <strong>DreamSpaces Heritage Estates</strong>
+                  </div>
+                  <div>
+                    <span className="text-muted" style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold' }}>RERA REGISTRATION</span>
+                    <strong>RERA-MUM-98765-Sales</strong>
+                  </div>
+                  <div>
+                    <span className="text-muted" style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold' }}>OFFICE TELEPHONE</span>
+                    <strong>{profileData.phone ? `+91 ${profileData.phone.replace(/(\d{5})(\d{5})/, '$1 $2')}` : '+91 98765 43210'}</strong>
+                  </div>
+                  <div>
+                    <span className="text-muted" style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold' }}>EMAIL ADDRESS</span>
+                    <strong>{profileData.email || `${currentSalesmanName.toLowerCase().replace(' ', '.')}@dreamspaces.com`}</strong>
+                  </div>
+                </div>
+              </div>
+            )}
 
           </div>
         )}
@@ -1999,10 +2204,10 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
         {/* ============================================================== */}
         {activeTab === 'settings' && (
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: '#113629' }}>Security Settings</h2>
+            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)' }}>Security Settings</h2>
             
             <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5', maxWidth: '500px' }}>
-              <h3 className="serif" style={{ margin: '0 0 1.25rem 0', fontSize: '1.25rem', color: '#113629' }}>Update Account Credentials</h3>
+              <h3 className="serif" style={{ margin: '0 0 1.25rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Update Account Credentials</h3>
               <form onSubmit={e => { e.preventDefault(); alert('Password updated successfully!'); }} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>CURRENT PASSWORD</label>
@@ -2012,7 +2217,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                   <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>NEW PASSWORD</label>
                   <input type="password" required placeholder="••••••••" style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px' }} />
                 </div>
-                <button type="submit" className="btn-primary" style={{ background: '#113629', color: 'white', border: 'none', borderRadius: '6px', padding: '0.8rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem', marginTop: '0.5rem' }}>
+                <button type="submit" className="btn-primary" style={{ background: 'var(--vanya-green)', color: 'white', border: 'none', borderRadius: '6px', padding: '0.8rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem', marginTop: '0.5rem' }}>
                   CHANGE PASSWORD
                 </button>
               </form>
@@ -2048,14 +2253,14 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
             overflowY: 'auto'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #eee', paddingBottom: '0.75rem' }}>
-              <h3 className="serif" style={{ margin: 0, fontSize: '1.4rem', color: '#113629' }}>Add Direct Lead</h3>
+              <h3 className="serif" style={{ margin: 0, fontSize: '1.4rem', color: 'var(--vanya-green)' }}>Add Direct Lead</h3>
               <button onClick={() => setIsAddLeadOpen(false)} style={{ background: 'none', border: 'none', fontSize: '1.8rem', cursor: 'pointer', color: '#aaa' }}>&times;</button>
             </div>
             
             <form onSubmit={handleAddLeadSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>CLIENT NAME *</label>
-                <input type="text" required placeholder="Full Name" value={addLeadForm.name} onChange={e => setAddLeadForm({ ...addLeadForm, name: e.target.value })} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px' }} />
+                <input type="text" required placeholder="Full Name" pattern="[A-Za-z\s]+" title="Please enter letters only" value={addLeadForm.name} onChange={e => setAddLeadForm({ ...addLeadForm, name: e.target.value })} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px' }} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>EMAIL ADDRESS *</label>
@@ -2063,11 +2268,15 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>MOBILE PHONE *</label>
-                <input type="tel" required placeholder="10-digit Phone" value={addLeadForm.phone} onChange={e => setAddLeadForm({ ...addLeadForm, phone: e.target.value })} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px' }} />
+                <input type="tel" required placeholder="10-digit Phone" minLength={10} maxLength={10} pattern="[0-9]{10}" value={addLeadForm.phone} onChange={e => setAddLeadForm({ ...addLeadForm, phone: e.target.value.replace(/[^0-9]/g, '') })} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>AADHAAR CARD NUMBER *</label>
+                <input type="tel" required placeholder="12-digit Aadhaar Card Number" minLength={12} maxLength={12} pattern="[0-9]{12}" value={addLeadForm.aadhaar} onChange={e => setAddLeadForm({ ...addLeadForm, aadhaar: e.target.value.replace(/[^0-9]/g, '') })} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px' }} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>PINCODE *</label>
-                <input type="text" required placeholder="6-digit Area Pincode" value={addLeadForm.pincode} onChange={e => setAddLeadForm({ ...addLeadForm, pincode: e.target.value })} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px' }} />
+                <input type="tel" required placeholder="6-digit Area Pincode" minLength={6} maxLength={6} pattern="[0-9]{6}" value={addLeadForm.pincode} onChange={e => setAddLeadForm({ ...addLeadForm, pincode: e.target.value.replace(/[^0-9]/g, '') })} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px' }} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>SOURCE CHANNEL</label>
@@ -2078,7 +2287,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                 <textarea rows="3" placeholder="Interested in 3BHK high floors..." value={addLeadForm.notes} onChange={e => setAddLeadForm({ ...addLeadForm, notes: e.target.value })} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontFamily: 'inherit', resize: 'vertical' }}></textarea>
               </div>
 
-              <button type="submit" className="btn-primary" style={{ background: '#113629', color: 'white', border: 'none', borderRadius: '6px', padding: '0.9rem', cursor: 'pointer', fontWeight: 'bold', letterSpacing: '0.5px' }}>
+              <button type="submit" className="btn-primary" style={{ background: 'var(--vanya-green)', color: 'white', border: 'none', borderRadius: '6px', padding: '0.9rem', cursor: 'pointer', fontWeight: 'bold', letterSpacing: '0.5px' }}>
                 SUBMIT NEW LEAD
               </button>
             </form>
@@ -2090,13 +2299,13 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
       {/* SCHEDULE CALLBACK DIALOG */}
       {/* ============================================================== */}
       {isCallbackModalOpen && (
-        <div style={{
+        <div onClick={() => setIsCallbackModalOpen(false)} style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, cursor: 'pointer'
         }}>
-          <div style={{ background: 'white', width: '100%', maxWidth: '400px', borderRadius: '12px', padding: '2rem', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'white', width: '100%', maxWidth: '400px', borderRadius: '12px', padding: '2rem', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', cursor: 'default' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-              <h3 className="serif" style={{ margin: 0, fontSize: '1.25rem', color: '#113629' }}>Schedule Client Callback</h3>
+              <h3 className="serif" style={{ margin: 0, fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Schedule Client Callback</h3>
               <button onClick={() => setIsCallbackModalOpen(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
             </div>
             <form onSubmit={handleScheduleCallback} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -2104,7 +2313,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                 <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>CALLBACK DATE & TIME</label>
                 <input type="datetime-local" required value={callbackDateTime} onChange={e => setCallbackDateTime(e.target.value)} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px' }} />
               </div>
-              <button type="submit" className="btn-primary" style={{ background: '#113629', color: 'white', border: 'none', borderRadius: '6px', padding: '0.8rem', cursor: 'pointer', fontWeight: 'bold' }}>
+              <button type="submit" className="btn-primary" style={{ background: 'var(--vanya-green)', color: 'white', border: 'none', borderRadius: '6px', padding: '0.8rem', cursor: 'pointer', fontWeight: 'bold' }}>
                 CONFIRM CALLBACK
               </button>
             </form>
@@ -2116,13 +2325,13 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
       {/* BOOK SITE VISIT DIALOG */}
       {/* ============================================================== */}
       {isVisitModalOpen && (
-        <div style={{
+        <div onClick={() => setIsVisitModalOpen(false)} style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, cursor: 'pointer'
         }}>
-          <div style={{ background: 'white', width: '100%', maxWidth: '400px', borderRadius: '12px', padding: '2rem', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'white', width: '100%', maxWidth: '400px', borderRadius: '12px', padding: '2rem', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', cursor: 'default' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-              <h3 className="serif" style={{ margin: 0, fontSize: '1.25rem', color: '#113629' }}>Book Site Visit Viewing</h3>
+              <h3 className="serif" style={{ margin: 0, fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Book Site Visit Viewing</h3>
               <button onClick={() => setIsVisitModalOpen(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
             </div>
             <form onSubmit={handleBookVisit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -2134,7 +2343,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                 <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>TOWER / AMENITIES TO VISIT</label>
                 <input type="text" placeholder="e.g. Unit 202 & Ayurvedic Sanctuary" value={visitMessage} onChange={e => setVisitMessage(e.target.value)} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px' }} />
               </div>
-              <button type="submit" className="btn-primary" style={{ background: '#113629', color: 'white', border: 'none', borderRadius: '6px', padding: '0.8rem', cursor: 'pointer', fontWeight: 'bold' }}>
+              <button type="submit" className="btn-primary" style={{ background: 'var(--vanya-green)', color: 'white', border: 'none', borderRadius: '6px', padding: '0.8rem', cursor: 'pointer', fontWeight: 'bold' }}>
                 SCHEDULE APPOINTMENT
               </button>
             </form>
@@ -2143,16 +2352,132 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
       )}
 
       {/* ============================================================== */}
+      {/* DIALER SIMULATOR MODAL */}
+      {/* ============================================================== */}
+      {isCallActive && dialerLead && (
+        <div style={{
+          position: 'fixed',
+          bottom: '2rem',
+          right: '2rem',
+          width: '320px',
+          background: 'var(--vanya-green)',
+          color: 'white',
+          borderRadius: '12px',
+          padding: '1.5rem',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+          zIndex: 99999,
+          border: '2px solid var(--vanya-gold)',
+          fontFamily: 'sans-serif'
+        }}>
+          <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+            <span style={{ fontSize: '0.68rem', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--vanya-gold)', display: 'block', fontWeight: 'bold' }}>SYSTEM DIALER ACTIVE</span>
+            <strong style={{ fontSize: '1.25rem', display: 'block', margin: '0.25rem 0' }}>{dialerLead.name}</strong>
+            <span style={{ fontSize: '0.82rem', opacity: 0.8 }}>Calling: {getDisplayPhone(dialerLead)}</span>
+          </div>
+
+          {/* Animated Waveform Visualizer */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '4px', height: '40px', alignItems: 'center', margin: '1.5rem 0' }}>
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((val) => (
+              <div key={val} style={{
+                width: '4px',
+                height: '100%',
+                background: 'var(--vanya-gold)',
+                borderRadius: '2px',
+                animation: 'bounceWave 1.2s ease-in-out infinite alternate',
+                animationDelay: `${val * 0.1}s`
+              }}></div>
+            ))}
+          </div>
+
+          <style dangerouslySetInnerHTML={{__html: `
+            @keyframes bounceWave {
+              0% { transform: scaleY(0.2); }
+              100% { transform: scaleY(1.0); }
+            }
+          `}} />
+
+          <div style={{ textAlign: 'center', margin: '1rem 0' }}>
+            <span style={{ fontSize: '1.5rem', fontFamily: 'monospace', fontWeight: 'bold' }}>
+              {Math.floor(callDuration / 60).toString().padStart(2, '0')}:{(callDuration % 60).toString().padStart(2, '0')}
+            </span>
+          </div>
+
+          {/* Outcome entry during live call */}
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 'bold', color: 'var(--vanya-gold)', marginBottom: '0.3rem' }}>CALL DISPOSITION NOTES</label>
+            <textarea 
+              value={callNotes}
+              onChange={e => setCallNotes(e.target.value)}
+              placeholder="Type notes while talking..."
+              style={{
+                width: '92%',
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: '6px',
+                color: 'white',
+                padding: '8px',
+                fontSize: '0.8rem',
+                minHeight: '50px',
+                resize: 'none'
+              }}
+            />
+          </div>
+
+          <button 
+            onClick={async () => {
+              clearInterval(window.callTimerRef);
+              setIsCallActive(false);
+              const durationSecs = callDuration;
+              setCallDuration(0);
+              
+              try {
+                const res = await fetch('/api/calls', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    inquiry_id: dialerLead.id,
+                    salesman_id: userId,
+                    duration: durationSecs,
+                    notes: callNotes || 'Simulated call completed.'
+                  })
+                });
+                const json = await res.json();
+                if (json.success) {
+                  setCallLogs(prev => [json.data, ...prev]);
+                  alert('Call log recorded successfully in Supabase!');
+                }
+              } catch(e) {
+                console.error(e);
+              }
+              setCallNotes('');
+            }}
+            style={{
+              width: '100%',
+              background: '#dc2626',
+              color: 'white',
+              border: 'none',
+              padding: '10px',
+              borderRadius: '8px',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
+            🛑 HANG UP & LOG CALL
+          </button>
+        </div>
+      )}
+
+      {/* ============================================================== */}
       {/* CLOSE DEAL / BUYER REGISTRATION DIALOG */}
       {/* ============================================================== */}
       {isCloseDealModalOpen && (
-        <div style={{
+        <div onClick={() => setIsCloseDealModalOpen(false)} style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, cursor: 'pointer'
         }}>
-          <div style={{ background: 'white', width: '100%', maxWidth: '450px', borderRadius: '12px', padding: '2rem', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'white', width: '100%', maxWidth: '450px', borderRadius: '12px', padding: '2rem', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto', cursor: 'default' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.5rem' }}>
-              <h3 className="serif" style={{ margin: 0, fontSize: '1.25rem', color: '#113629' }}>🎉 Finalize Booking & Close Deal</h3>
+              <h3 className="serif" style={{ margin: 0, fontSize: '1.25rem', color: 'var(--vanya-green)' }}>🎉 Finalize Booking & Close Deal</h3>
               <button onClick={() => setIsCloseDealModalOpen(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
             </div>
             <form onSubmit={handleCloseDealSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -2241,7 +2566,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                 </div>
               </div>
 
-              <button type="submit" className="btn-primary" style={{ background: '#113629', color: 'white', border: 'none', borderRadius: '6px', padding: '0.9rem', cursor: 'pointer', fontWeight: 'bold', marginTop: '0.5rem' }}>
+              <button type="submit" className="btn-primary" style={{ background: 'var(--vanya-green)', color: 'white', border: 'none', borderRadius: '6px', padding: '0.9rem', cursor: 'pointer', fontWeight: 'bold', marginTop: '0.5rem' }}>
                 CONFIRM & REGISTER BUYER
               </button>
             </form>
