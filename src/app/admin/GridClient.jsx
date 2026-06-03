@@ -582,7 +582,7 @@ export default function GridClient({ units, inquiries, buyers = [], users = [], 
                           <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                         </svg>
                       </div>
-                      <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>₹ {formatCr(pAvgPriceLakhs)}</h3>
+                      <h3 className="num-mono" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>₹ {formatCr(pAvgPriceLakhs)}</h3>
                     </div>
                   </div>
                   <div className="widget-card" style={{ padding: '1.25rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px' }}>
@@ -593,7 +593,7 @@ export default function GridClient({ units, inquiries, buyers = [], users = [], 
                           <rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 7V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3" />
                         </svg>
                       </div>
-                      <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>₹ {formatCr(pTotalPortfolioLakhs)}</h3>
+                      <h3 className="num-mono" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>₹ {formatCr(pTotalPortfolioLakhs)}</h3>
                     </div>
                     <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700', marginTop: '0.3rem', marginLeft: '0.1rem' }}>↑ +{project === 'vanya-estate' ? '18.4' : project === 'vanya-meadows' ? '21.0' : portfolioIncreasePerc.toFixed(1)}% INCREASE</span>
                   </div>
@@ -605,7 +605,7 @@ export default function GridClient({ units, inquiries, buyers = [], users = [], 
                           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
                         </svg>
                       </div>
-                      <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{pConversionRate}%</h3>
+                      <h3 className="num-mono" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{pConversionRate}%</h3>
                     </div>
                     <span style={{ fontSize: '0.65rem', color: '#6b7280', fontWeight: '600', marginTop: '0.3rem', marginLeft: '0.1rem' }}>LEAD TO DEPOSIT</span>
                   </div>
@@ -622,7 +622,7 @@ export default function GridClient({ units, inquiries, buyers = [], users = [], 
                         <text x="7" y="18" fill="#137333" stroke="none" fontSize="18" fontWeight="bold" fontFamily="serif">₹</text>
                       </svg>
                     </div>
-                    <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>₹ {formatCr(pTotalRevenueLakhs)}</h3>
+                    <h3 className="num-mono" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>₹ {formatCr(pTotalRevenueLakhs)}</h3>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' }}>
                     <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700' }}>↑ +{project === 'vanya-estate' ? '8.5' : project === 'vanya-meadows' ? '5.2' : revenueIncreasePerc.toFixed(1)}% VS LAST QUARTER</span>
@@ -640,7 +640,7 @@ export default function GridClient({ units, inquiries, buyers = [], users = [], 
                         <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
                       </svg>
                     </div>
-                    <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{projectSoldUnitsCount} <span style={{ fontSize: '1.05rem', color: '#9ca3af', fontWeight: 'normal' }}>/ {projectUnitsCount}</span></h3>
+                    <h3 className="num-mono" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{projectSoldUnitsCount} <span style={{ fontSize: '1.05rem', color: '#9ca3af', fontWeight: 'normal' }}>/ {projectUnitsCount}</span></h3>
                   </div>
                   <div style={{ marginTop: '1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
@@ -661,7 +661,7 @@ export default function GridClient({ units, inquiries, buyers = [], users = [], 
                         <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
                       </svg>
                     </div>
-                    <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{pAvgSalesCycle} Days</h3>
+                    <h3 className="num-mono" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{pAvgSalesCycle} Days</h3>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' }}>
                     <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700' }}>

@@ -13,6 +13,8 @@ export default async function SalesmanPortalPage(props) {
   let inquiries = [];
   let units = [];
   let buyers = [];
+  let cpPartners = [];
+  let allUsers = [];
 
   try {
     const { data: iData } = await supabase.from('Inquiries').select('*').order('created_at', { ascending: false });
@@ -23,6 +25,12 @@ export default async function SalesmanPortalPage(props) {
 
     const { data: bData } = await supabase.from('BuyerDetails').select('*');
     if (bData) buyers = bData;
+
+    const { data: cpData } = await supabase.from('CP_Partners').select('*');
+    if (cpData) cpPartners = cpData;
+
+    const { data: usersData } = await supabase.from('Users').select('username, role, phone, email, full_name, employee_id, is_active');
+    if (usersData) allUsers = usersData;
   } catch (e) {}
 
   return (
@@ -32,6 +40,8 @@ export default async function SalesmanPortalPage(props) {
       buyers={buyers}
       userId={salesmanId}
       isImpersonating={true}
+      cpPartners={cpPartners}
+      allUsers={allUsers}
     />
   );
 }

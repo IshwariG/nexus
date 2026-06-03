@@ -161,6 +161,24 @@ export default function ChannelPartnerClient({ username }) {
 
   useEffect(() => {
     fetchData();
+
+    // Set up auto-refresh interval to keep KPIs and lists dynamically in sync (every 5 seconds)
+    const intervalId = setInterval(() => {
+      const fetchSilent = async () => {
+        try {
+          const res = await fetch(`/api/cp?username=${username}`);
+          const json = await res.json();
+          if (json.success) {
+            setData(json);
+          }
+        } catch (err) {
+          console.warn('Background auto-refresh failed:', err);
+        }
+      };
+      fetchSilent();
+    }, 5000);
+
+    return () => clearInterval(intervalId);
   }, [username]);
 
   const handleSubmitReferral = async (e) => {
@@ -253,10 +271,24 @@ export default function ChannelPartnerClient({ username }) {
     setSchedulingLeadId(leadId);
     setVisitMsg(null);
     try {
+      const currentLead = data?.leads?.find(l => l.id === leadId);
+      const statusParts = (currentLead?.status || '').split('|');
+      
+      let salesperson = 'SR-9999';
+      for (const part of statusParts) {
+        if (part && part !== 'VISIT_SCHEDULED' && part !== 'NEW' && part !== 'CONTACTED' && part !== 'PROPOSAL' && part !== 'SCHEDULED' && part !== 'DONE' && part !== 'NEGOTIATION' && part !== 'BOOKED' && part !== 'CONVERTED' && part !== 'LOST' && part !== 'READY_TO_BOOK' && part !== 'UNASSIGNED' && part !== username) {
+          const isSales = (data?.allUsers || []).some(u => (u.username === part || u.employee_id === part) && u.role === 'Sales');
+          if (isSales) {
+            salesperson = part;
+            break;
+          }
+        }
+      }
+
       const res = await fetch(`/api/inquiries?id=${leadId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: `VISIT_SCHEDULED|${username}|${visitDateTime}` })
+        body: JSON.stringify({ status: `VISIT_SCHEDULED|${salesperson}|${visitDateTime}` })
       });
       const json = await res.json();
       if (json.success) {
@@ -273,16 +305,336 @@ export default function ChannelPartnerClient({ username }) {
     }
   };
 
+  const handleUpdateStatus = async (leadId, newStatusType) => {
+    try {
+      const currentLead = data?.leads?.find(l => l.id === leadId);
+      const statusParts = (currentLead?.status || '').split('|');
+      
+      let salesperson = 'SR-9999';
+      for (const part of statusParts) {
+        if (part && part !== 'VISIT_SCHEDULED' && part !== 'NEW' && part !== 'CONTACTED' && part !== 'PROPOSAL' && part !== 'SCHEDULED' && part !== 'DONE' && part !== 'NEGOTIATION' && part !== 'BOOKED' && part !== 'CONVERTED' && part !== 'LOST' && part !== 'READY_TO_BOOK' && part !== 'UNASSIGNED' && part !== username) {
+          const isSales = (data?.allUsers || []).some(u => (u.username === part || u.employee_id === part) && u.role === 'Sales');
+          if (isSales) {
+            salesperson = part;
+            break;
+          }
+        }
+      }
+
+      const finalStatus = `${newStatusType}|${salesperson}`;
+      const res = await fetch(`/api/inquiries?id=${leadId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: finalStatus })
+      });
+      const json = await res.json();
+      if (json.success) {
+        if (newStatusType === 'READY_TO_BOOK') {
+          alert('Deal closed from CP side and marked as Ready to Book! The assigned salesperson has been notified to complete the buyer booking registration.');
+        }
+        fetchData();
+      } else {
+        alert(json.error || 'Failed to update status.');
+      }
+    } catch (e) {
+      alert('Network error updating status.');
+    }
+  };
+
+  const handleDownloadReceipt = (payout) => {
+    const comm = commissions.find(c => c.id === payout.commission_id);
+    const clientName = comm ? comm.client_name : 'N/A';
+    const unitId = comm ? `V-${comm.unit_id}` : 'N/A';
+    const firmName = cpDetails.firm_name || 'N/A';
+    const reraNum = cpDetails.rera_number || 'N/A';
+    const payDate = new Date(payout.paid_at || payout.created_at).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Pop-up blocked. Please allow pop-ups for this page to download receipts.');
+      return;
+    }
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Receipt_PAY-${payout.id.slice(0, 8).toUpperCase()}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
+            body {
+              font-family: 'Inter', sans-serif;
+              margin: 0;
+              padding: 40px;
+              color: #1f2937;
+              background-color: #faf9f6;
+            }
+            .receipt-container {
+              max-width: 700px;
+              margin: 0 auto;
+              background: #ffffff;
+              border: 1px solid #e5e7eb;
+              border-radius: 12px;
+              padding: 40px;
+              box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+              position: relative;
+              overflow: hidden;
+            }
+            .receipt-container::before {
+              content: '';
+              position: absolute;
+              top: 0;
+              left: 0;
+              right: 0;
+              height: 6px;
+              background: linear-gradient(90deg, #137333 0%, #d9a036 100%);
+            }
+            .header-row {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              border-bottom: 2px solid #f3f4f6;
+              padding-bottom: 24px;
+              margin-bottom: 24px;
+            }
+            .brand-name {
+              font-family: 'Playfair Display', serif;
+              font-size: 24px;
+              font-weight: 700;
+              color: #137333;
+              margin: 0;
+            }
+            .brand-sub {
+              font-size: 10px;
+              letter-spacing: 1.5px;
+              color: #d9a036;
+              margin: 2px 0 0 0;
+              text-transform: uppercase;
+              font-weight: 600;
+            }
+            .receipt-title {
+              font-size: 16px;
+              font-weight: 700;
+              color: #1f2937;
+              text-align: right;
+              margin: 0;
+            }
+            .receipt-num {
+              font-size: 12px;
+              color: #6b7280;
+              text-align: right;
+              margin: 4px 0 0 0;
+            }
+            .meta-grid {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 24px;
+              margin-bottom: 32px;
+            }
+            .meta-block h4 {
+              font-size: 11px;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              color: #9ca3af;
+              margin: 0 0 8px 0;
+              font-weight: 700;
+            }
+            .meta-block p {
+              font-size: 13px;
+              line-height: 1.5;
+              margin: 0;
+              color: #374151;
+            }
+            .payout-table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 32px;
+            }
+            .payout-table th {
+              background-color: #f9fafb;
+              border-bottom: 1px solid #e5e7eb;
+              padding: 12px;
+              font-size: 11px;
+              text-transform: uppercase;
+              color: #4b5563;
+              font-weight: 700;
+              text-align: left;
+            }
+            .payout-table td {
+              border-bottom: 1px solid #f3f4f6;
+              padding: 16px 12px;
+              font-size: 13px;
+              color: #1f2937;
+            }
+            .payout-table td.amount-col {
+              text-align: right;
+              font-weight: 700;
+            }
+            .total-row {
+              display: flex;
+              justify-content: flex-end;
+              align-items: center;
+              gap: 16px;
+              margin-top: 16px;
+              border-top: 2px solid #f3f4f6;
+              padding-top: 16px;
+            }
+            .total-label {
+              font-size: 14px;
+              font-weight: 600;
+              color: #4b5563;
+            }
+            .total-val {
+              font-size: 20px;
+              font-weight: 800;
+              color: #137333;
+            }
+            .status-badge {
+              display: inline-block;
+              font-size: 10px;
+              font-weight: 700;
+              background-color: #e6f4ea;
+              color: #137333;
+              padding: 4px 8px;
+              border-radius: 4px;
+              border: 1px solid #b7e1cd;
+              text-transform: uppercase;
+            }
+            .footer-note {
+              margin-top: 48px;
+              text-align: center;
+              font-size: 11px;
+              color: #9ca3af;
+              border-top: 1px solid #f3f4f6;
+              padding-top: 16px;
+              line-height: 1.5;
+            }
+            @media print {
+              body {
+                background: #fff;
+                padding: 0;
+              }
+              .receipt-container {
+                border: none;
+                box-shadow: none;
+                padding: 20px;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="receipt-container">
+            <div class="header-row">
+              <div>
+                <h1 class="brand-name">DreamSpaces</h1>
+                <div class="brand-sub">Vanya Residences</div>
+              </div>
+              <div>
+                <h2 class="receipt-title">COMMISSION PAYOUT VOUCHER</h2>
+                <div class="receipt-num">Ref: PAY-${payout.id.slice(0, 8).toUpperCase()}</div>
+              </div>
+            </div>
+            
+            <div class="meta-grid">
+              <div class="meta-block">
+                <h4>Referred Partner (CP)</h4>
+                <p>
+                  <strong>${firmName}</strong><br/>
+                  RERA Registration: ${reraNum}<br/>
+                  Broker Username: ${username}
+                </p>
+              </div>
+              <div class="meta-block">
+                <h4>Payment Details</h4>
+                <p>
+                  Disbursement Date: ${payDate}<br/>
+                  Payment Status: <span class="status-badge">CLEARED</span><br/>
+                  Remarks: Brokerage Remittance
+                </p>
+              </div>
+            </div>
+
+            <table class="payout-table">
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th>Referred Client</th>
+                  <th>Unit Number</th>
+                  <th style="text-align: right;">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <strong>Real Estate Brokerage Commission</strong><br/>
+                    <span style="font-size: 11px; color: #6b7280;">Referred client booking complete</span>
+                  </td>
+                  <td>${clientName}</td>
+                  <td>${unitId}</td>
+                  <td class="amount-col">${payout.amount}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="total-row">
+              <span class="total-label">Total Amount Disbursed:</span>
+              <span class="total-val">${payout.amount}</span>
+            </div>
+
+            <div class="footer-note">
+              Thank you for partnering with DreamSpaces. This is a computer generated disbursement advice.<br/>
+              No physical signature is required. For support, write to cp-desk@dreamspaces.co.
+            </div>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   const getStatusBadge = (statusStr) => {
     if (!statusStr) return <span className="badge available">NEW</span>;
-    const rawStatus = statusStr.split('|')[0].toUpperCase();
-    if (rawStatus === 'NEW') return <span className="badge available">NEW</span>;
-    if (rawStatus === 'CONTACTED') return <span className="badge negotiation">UNDER REVIEW</span>;
-    if (rawStatus === 'VISIT_SCHEDULED') return <span className="badge reserved" style={{ background: '#e8f5e9', color: '#2e7d32', border: '1px solid #a5d6a7' }}>🏠 VISIT SCHEDULED</span>;
-    if (rawStatus === 'QUALIFIED') return <span className="badge reserved">APPROVED</span>;
-    if (rawStatus === 'CONVERTED' || rawStatus === 'DONE' || rawStatus === 'BOOKED') return <span className="badge available" style={{ background: '#e8f5e9', color: '#1b5e20' }}>✅ CLOSED</span>;
-    if (rawStatus === 'LOST') return <span className="badge sold">REJECTED</span>;
-    return <span className="badge available">{rawStatus}</span>;
+    const parts = statusStr.split('|');
+    const rawStatus = parts[0].toUpperCase();
+    
+    let badge = <span className="badge available">{rawStatus}</span>;
+    if (rawStatus === 'NEW') badge = <span className="badge available">NEW</span>;
+    else if (rawStatus === 'CONTACTED') badge = <span className="badge negotiation">UNDER REVIEW</span>;
+    else if (rawStatus === 'VISIT_SCHEDULED') badge = <span className="badge reserved" style={{ background: '#e8f5e9', color: '#2e7d32', border: '1px solid #a5d6a7' }}>🏠 VISIT SCHEDULED</span>;
+    else if (rawStatus === 'QUALIFIED') badge = <span className="badge reserved">APPROVED</span>;
+    else if (rawStatus === 'READY_TO_BOOK') badge = <span className="badge reserved" style={{ background: '#fff3cd', color: '#856404', border: '1px solid #ffeeba' }}>🤝 READY TO BOOK</span>;
+    else if (rawStatus === 'CONVERTED' || rawStatus === 'DONE' || rawStatus === 'BOOKED') badge = <span className="badge available" style={{ background: '#e8f5e9', color: '#1b5e20' }}>✅ CLOSED</span>;
+    else if (rawStatus === 'LOST') badge = <span className="badge sold">REJECTED</span>;
+
+    const visitTime = rawStatus === 'VISIT_SCHEDULED' && parts.length > 2 ? parts[2] : null;
+    if (visitTime) {
+      return (
+        <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px' }}>
+          {badge}
+          <span style={{ fontSize: '0.68rem', color: '#2e7d32', marginTop: '0.15rem', fontWeight: '500', whiteSpace: 'nowrap' }}>
+            🕒 {new Date(visitTime).toLocaleDateString('en-IN', {day: 'numeric', month: 'short'})} · {new Date(visitTime).toLocaleTimeString('en-IN', {hour: '2-digit', minute:'2-digit'})}
+          </span>
+        </div>
+      );
+    }
+    return badge;
+  };
+
+  const parseMessageField = (msg, fieldName, fallback = '') => {
+    if (!msg) return fallback;
+    const regex = new RegExp(`${fieldName}:\\s*(.*?)(?:\\.\\s*(?:Preference|Location|Budget|Source|Remarks):|$)`, 'i');
+    const match = msg.match(regex);
+    return match ? match[1].trim() : fallback;
   };
 
   if (loading && !data) {
@@ -295,7 +647,7 @@ export default function ChannelPartnerClient({ username }) {
     );
   }
 
-  const cpDetails = data?.cp || { firm_name: 'Apex Luxury Realty', rera_number: 'RERA-MUM-98765-CP', commission_rate: 2.50 };
+  const cpDetails = data?.cp || { firm_name: 'N/A', rera_number: 'N/A', commission_rate: 2.50 };
   const leads = data?.leads || [];
   const commissions = data?.commissions || [];
   const payouts = data?.payouts || [];
@@ -535,7 +887,7 @@ export default function ChannelPartnerClient({ username }) {
                 <h3 className="serif" style={{ margin: '0 0 1rem 0' }}>Lead Status</h3>
                 <div className="donut-chart-mock" style={{ background: 'conic-gradient(#137333 0% 60%, var(--vanya-gold) 60% 85%, #c62828 85% 100%)' }}>
                   <div className="donut-inner">
-                    <h2 className="serif">{leads.length}</h2>
+                    <h2 className="num-mono">{leads.length}</h2>
                     <span>TOTAL LEADS</span>
                   </div>
                 </div>
@@ -566,7 +918,7 @@ export default function ChannelPartnerClient({ username }) {
                     {leads.slice(0, 4).map((l, i) => (
                       <tr key={l.id || i}>
                         <td><strong>{l.name}</strong></td>
-                        <td>{l.message?.includes('Preference:') ? l.message.match(/Preference:\s*([^.]+)/)[1] : 'Any BHK'}</td>
+                        <td>{parseMessageField(l.message, 'Preference', 'Any BHK')}</td>
                         <td>{getStatusBadge(l.status)}</td>
                       </tr>
                     ))}
@@ -724,8 +1076,8 @@ export default function ChannelPartnerClient({ username }) {
                 </thead>
                 <tbody>
                   {filteredLeads.map((l, i) => {
-                    const req = l.message?.includes('Preference:') ? l.message.match(/Preference:\s*([^.]+)/)[1] : 'Any BHK';
-                    const budget = l.message?.includes('Budget:') ? l.message.match(/Budget:\s*([^.]+)/)[1] : '₹ 50-80 L';
+                    const req = parseMessageField(l.message, 'Preference', 'Any BHK');
+                    const budget = parseMessageField(l.message, 'Budget', '₹ 50-80 L');
                     return (
                       <tr key={l.id || i}>
                         <td>
@@ -777,19 +1129,19 @@ export default function ChannelPartnerClient({ username }) {
                   </div>
                   <div>
                     <span style={{ fontSize: '0.65rem', color: '#999', display: 'block', fontWeight: 'bold' }}>PREFERRED LOCATION</span>
-                    <div>{selectedLead.message?.includes('Location:') ? selectedLead.message.match(/Location:\s*([^.]+)/)[1] : 'Baner, Pune'}</div>
+                    <div>{parseMessageField(selectedLead.message, 'Location', 'Baner, Pune')}</div>
                   </div>
                   <div>
                     <span style={{ fontSize: '0.65rem', color: '#999', display: 'block', fontWeight: 'bold' }}>BUDGET RANGE</span>
-                    <div>{selectedLead.message?.includes('Budget:') ? selectedLead.message.match(/Budget:\s*([^.]+)/)[1] : '₹ 50-80 L'}</div>
+                    <div>{parseMessageField(selectedLead.message, 'Budget', '₹ 50-80 L')}</div>
                   </div>
                   <div>
                     <span style={{ fontSize: '0.65rem', color: '#999', display: 'block', fontWeight: 'bold' }}>REQUIREMENT</span>
-                    <div>{selectedLead.message?.includes('Preference:') ? selectedLead.message.match(/Preference:\s*([^.]+)/)[1] : '3 BHK'}</div>
+                    <div>{parseMessageField(selectedLead.message, 'Preference', '3 BHK')}</div>
                   </div>
                   <div>
                     <span style={{ fontSize: '0.65rem', color: '#999', display: 'block', fontWeight: 'bold' }}>SOURCE OF LEAD</span>
-                    <div>{selectedLead.message?.includes('Source:') ? selectedLead.message.match(/Source:\s*([^.]+)/)[1] : 'Direct Referral'}</div>
+                    <div>{parseMessageField(selectedLead.message, 'Source', 'Direct Referral')}</div>
                   </div>
                 </div>
                 <div style={{ marginTop: '1.5rem' }}>
@@ -801,48 +1153,129 @@ export default function ChannelPartnerClient({ username }) {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                <div className="widget-card">
-                  <h3 className="serif" style={{ margin: '0 0 1.25rem 0' }}>Status Timeline</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', fontSize: '0.8rem' }}>
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                      <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#137333', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem' }}>✓</div>
-                      <div>
-                        <strong>Lead Submitted</strong>
-                        <div className="text-muted" style={{ fontSize: '0.65rem' }}>Successfully registered in CRM</div>
+                {(() => {
+                  const statusParts = (selectedLead.status || '').split('|');
+                  const stage = statusParts[0]?.toUpperCase();
+                  const isUnderReview = ['CONTACTED', 'QUALIFIED', 'VISIT_SCHEDULED', 'DONE', 'READY_TO_BOOK', 'BOOKED', 'CONVERTED'].includes(stage) || selectedLead.status?.includes('|');
+                  const isQualified = ['QUALIFIED', 'VISIT_SCHEDULED', 'DONE', 'READY_TO_BOOK', 'BOOKED', 'CONVERTED'].includes(stage);
+                  const isVisitScheduled = ['VISIT_SCHEDULED', 'DONE', 'READY_TO_BOOK', 'BOOKED', 'CONVERTED'].includes(stage);
+                  const isVisitDone = ['DONE', 'READY_TO_BOOK', 'BOOKED', 'CONVERTED'].includes(stage);
+                  const visitTime = statusParts.length > 2 ? statusParts[2] : null;
+
+                  return (
+                    <div className="widget-card">
+                      <h3 className="serif" style={{ margin: '0 0 1.25rem 0' }}>Status Timeline</h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', fontSize: '0.8rem' }}>
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                          <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#137333', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem' }}>✓</div>
+                          <div>
+                            <strong>Lead Submitted</strong>
+                            <div className="text-muted" style={{ fontSize: '0.65rem' }}>Successfully registered in CRM</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', opacity: isUnderReview ? 1 : 0.4 }}>
+                          <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: isUnderReview ? '#137333' : '#eee', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem' }}>
+                            {isUnderReview ? '✓' : ''}
+                          </div>
+                          <div>
+                            <strong>Under Review</strong>
+                            <div className="text-muted" style={{ fontSize: '0.65rem' }}>Representative assigned: {selectedLead.status?.includes('|') ? selectedLead.status.split('|')[1] : 'Pending'}</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', opacity: isQualified ? 1 : 0.4 }}>
+                          <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: isQualified ? '#137333' : '#eee', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem' }}>
+                            {isQualified ? '✓' : ''}
+                          </div>
+                          <div>
+                            <strong>Approved & Qualified</strong>
+                            <div className="text-muted" style={{ fontSize: '0.65rem' }}>Milestone RERA status confirmed</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', opacity: isVisitScheduled ? 1 : 0.4 }}>
+                          <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: isVisitScheduled ? '#137333' : '#eee', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem' }}>
+                            {isVisitScheduled ? '✓' : ''}
+                          </div>
+                          <div>
+                            <strong>Site Visit Scheduled</strong>
+                            <div className="text-muted" style={{ fontSize: '0.65rem' }}>
+                              {isVisitScheduled && visitTime ? (
+                                `Scheduled for: ${new Date(visitTime).toLocaleDateString('en-IN', {day: 'numeric', month: 'short'})} at ${new Date(visitTime).toLocaleTimeString('en-IN', {hour: '2-digit', minute:'2-digit'})}`
+                              ) : (
+                                "Awaiting schedule"
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', opacity: isVisitDone ? 1 : 0.4 }}>
+                          <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: isVisitDone ? '#137333' : '#eee', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem' }}>
+                            {isVisitDone ? '✓' : ''}
+                          </div>
+                          <div>
+                            <strong>Site Walk-in Done</strong>
+                            <div className="text-muted" style={{ fontSize: '0.65rem' }}>
+                              {isVisitDone ? "Physical site visit completed successfully" : "Pending physical walk-in"}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', opacity: (selectedLead.status?.startsWith('READY_TO_BOOK') || selectedLead.status?.startsWith('BOOKED') || selectedLead.status?.startsWith('CONVERTED')) ? 1 : 0.4 }}>
+                          <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: (selectedLead.status?.startsWith('READY_TO_BOOK') || selectedLead.status?.startsWith('BOOKED') || selectedLead.status?.startsWith('CONVERTED')) ? '#137333' : '#eee', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem' }}>
+                            {(selectedLead.status?.startsWith('READY_TO_BOOK') || selectedLead.status?.startsWith('BOOKED') || selectedLead.status?.startsWith('CONVERTED')) ? '✓' : ''}
+                          </div>
+                          <div>
+                            <strong>Ready to Book</strong>
+                            <div className="text-muted" style={{ fontSize: '0.65rem' }}>Deal closed by CP, details unlocked for salesman</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', opacity: (selectedLead.status?.startsWith('BOOKED') || selectedLead.status?.startsWith('CONVERTED')) ? 1 : 0.4 }}>
+                          <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: (selectedLead.status?.startsWith('BOOKED') || selectedLead.status?.startsWith('CONVERTED')) ? '#137333' : '#eee', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem' }}>
+                            {(selectedLead.status?.startsWith('BOOKED') || selectedLead.status?.startsWith('CONVERTED')) ? '✓' : ''}
+                          </div>
+                          <div>
+                            <strong>Deal Finalized</strong>
+                            <div className="text-muted" style={{ fontSize: '0.65rem' }}>Buyer account registered & unit booked</div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                      <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: selectedLead.status?.includes('|') ? '#137333' : 'var(--vanya-gold)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem' }}>
-                        {selectedLead.status?.includes('|') ? '✓' : '●'}
-                      </div>
-                      <div>
-                        <strong>Under Review</strong>
-                        <div className="text-muted" style={{ fontSize: '0.65rem' }}>Representative assigned: {selectedLead.status?.includes('|') ? selectedLead.status.split('|')[1] : 'Pending'}</div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', opacity: selectedLead.status?.startsWith('QUALIFIED') ? 1 : 0.4 }}>
-                      <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: selectedLead.status?.startsWith('QUALIFIED') ? '#137333' : '#eee', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem' }}>
-                        {selectedLead.status?.startsWith('QUALIFIED') ? '✓' : ''}
-                      </div>
-                      <div>
-                        <strong>Approved & Qualified</strong>
-                        <div className="text-muted" style={{ fontSize: '0.65rem' }}>Milestone RERA status confirmed</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 <div className="widget-card">
                   <h3 className="serif" style={{ margin: '0 0 1rem 0' }}>Assigned To</h3>
                   {(() => {
-                    // Extract salesman ID from status e.g. "CONTACTED|SR-1001" or "VISIT_SCHEDULED|cp101|2026-06-10T10:00"
                     const statusParts = (selectedLead.status || '').split('|');
                     const stage = statusParts[0]?.toUpperCase();
-                    // For VISIT_SCHEDULED the cp set it, salesman may not be assigned yet
-                    const salesmanId = stage === 'VISIT_SCHEDULED' ? statusParts[2] : statusParts[1];
-                    const salesman = salesmanId
-                      ? allUsers.find(u => u.username === salesmanId || u.employee_id === salesmanId)
-                      : null;
+                    
+                    let salesman = null;
+                    let salesmanId = null;
+
+                    // 1. Scan status parts for a valid Salesperson in allUsers
+                    for (let i = 1; i < statusParts.length; i++) {
+                      const part = statusParts[i];
+                      if (part && part !== username) {
+                        const found = allUsers.find(u => u.username === part || u.employee_id === part);
+                        if (found && found.role === 'Sales') {
+                          salesman = found;
+                          salesmanId = part;
+                          break;
+                        }
+                      }
+                    }
+
+                    // 2. If not found, check statusParts[1] (if it exists and is not the CP username)
+                    if (!salesman) {
+                      const fallbackPart = statusParts[1];
+                      if (fallbackPart && fallbackPart !== username && !fallbackPart.includes('-') && !fallbackPart.includes('T')) {
+                        salesmanId = fallbackPart;
+                        salesman = allUsers.find(u => u.username === salesmanId || u.employee_id === salesmanId);
+                      }
+                    }
+
+                    // 3. If still not found, default to Vikram Sethi (SR-9999)
+                    if (!salesman) {
+                      salesmanId = 'SR-9999';
+                      salesman = allUsers.find(u => u.username === salesmanId || u.employee_id === salesmanId);
+                    }
 
                     if (!salesman && !salesmanId) {
                       return (
@@ -877,6 +1310,117 @@ export default function ChannelPartnerClient({ username }) {
                     );
                   })()}
                 </div>
+
+                {/* ---- CP CRM WORKFLOW ACTIONS ---- */}
+                {(() => {
+                  const st = (selectedLead.status || '').split('|')[0].toUpperCase();
+                  const isClosed = ['CONVERTED', 'BOOKED', 'LOST', 'READY_TO_BOOK'].includes(st);
+                  if (isClosed) {
+                    if (st === 'READY_TO_BOOK') {
+                      return (
+                        <div className="widget-card" style={{ borderTop: '3px solid var(--vanya-gold)', background: '#fffdf5', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          <h3 className="serif" style={{ margin: '0', fontSize: '1rem', color: 'var(--vanya-green)' }}>🎉 Deal Submitted</h3>
+                          <p style={{ fontSize: '0.78rem', color: '#666', lineHeight: 1.5, margin: 0 }}>
+                            You have closed this deal and marked it as <strong>Ready to Book</strong>. The assigned salesperson has been notified to complete the buyer login creation and flat registration!
+                          </p>
+                        </div>
+                      );
+                    }
+                    if (st === 'LOST') {
+                      return (
+                        <div className="widget-card" style={{ borderTop: '3px solid #dc2626', background: '#fef2f2', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          <h3 className="serif" style={{ margin: '0', fontSize: '1rem', color: '#b91c1c' }}>❌ Deal Marked as Lost</h3>
+                          <p style={{ fontSize: '0.78rem', color: '#991b1b', lineHeight: 1.5, margin: 0 }}>
+                            This lead has been marked as <strong>Lost / Rejected</strong>. No further actions can be taken.
+                          </p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }
+                  
+                  // Scan status parts for a valid Salesperson in allUsers
+                  const statusParts = (selectedLead.status || '').split('|');
+                  let salesperson = 'SR-9999';
+                  for (let i = 1; i < statusParts.length; i++) {
+                    const part = statusParts[i];
+                    if (part && part !== username) {
+                      const found = allUsers.find(u => u.username === part || u.employee_id === part);
+                      if (found && found.role === 'Sales') {
+                        salesperson = part;
+                        break;
+                      }
+                    }
+                  }
+                  
+                  return (
+                    <div className="widget-card" style={{ borderTop: '3px solid var(--vanya-gold)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      <h3 className="serif" style={{ margin: '0 0 0.25rem 0', fontSize: '1.1rem', color: 'var(--vanya-green)' }}>Broker CRM Actions</h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        
+                        {/* 1. Mark site walk-in done */}
+                        {(st === 'VISIT_SCHEDULED' || st === 'NEW' || st === 'CONTACTED') && (
+                          <button 
+                            onClick={async () => {
+                              if (confirm("Mark the site walk-in viewing as completed for this client?")) {
+                                await handleUpdateStatus(selectedLead.id, 'DONE');
+                              }
+                            }}
+                            className="btn-outline-dark" 
+                            style={{ width: '100%', padding: '0.6rem', fontSize: '0.78rem', cursor: 'pointer', textAlign: 'left', fontWeight: '600', border: '1px solid var(--vanya-green)', color: 'var(--vanya-green)', background: 'transparent' }}
+                          >
+                            🚶‍♂️ Mark Site Walk-in Complete
+                          </button>
+                        )}
+
+                        {/* 2. Send Proposal */}
+                        <button 
+                          onClick={() => handleUpdateStatus(selectedLead.id, 'PROPOSAL')}
+                          className="btn-outline-dark" 
+                          style={{ width: '100%', padding: '0.6rem', fontSize: '0.78rem', cursor: 'pointer', textAlign: 'left', fontWeight: '600', border: '1px solid #ccc', background: 'transparent' }}
+                        >
+                          📄 Send Proposal / Brochure
+                        </button>
+
+                        {/* 3. Move to Negotiation */}
+                        <button 
+                          onClick={() => handleUpdateStatus(selectedLead.id, 'NEGOTIATION')}
+                          className="btn-outline-dark" 
+                          style={{ width: '100%', padding: '0.6rem', fontSize: '0.78rem', cursor: 'pointer', textAlign: 'left', fontWeight: '600', border: '1px solid #ccc', background: 'transparent' }}
+                        >
+                          🤝 Move to Negotiation
+                        </button>
+
+                        {/* 4. Close Deal (Ready to Book) */}
+                        <button 
+                          onClick={async () => {
+                            if (confirm("Are you sure you want to close this deal and mark it as Ready to Book? This will notify the assigned salesperson to finalize the unit booking details and buyer account registration.")) {
+                              await handleUpdateStatus(selectedLead.id, 'READY_TO_BOOK');
+                            }
+                          }}
+                          className="btn-primary" 
+                          style={{ width: '100%', padding: '0.7rem', fontSize: '0.78rem', cursor: 'pointer', textAlign: 'center', fontWeight: 'bold', background: 'var(--vanya-gold)', color: 'white', border: 'none', borderRadius: '6px' }}
+                        >
+                          🎉 Close Deal (Ready to Book)
+                        </button>
+
+                        {/* 5. Mark Deal as Lost */}
+                        <button 
+                          onClick={async () => {
+                            if (confirm("Are you sure you want to mark this deal as Lost?")) {
+                              await handleUpdateStatus(selectedLead.id, 'LOST');
+                            }
+                          }}
+                          className="btn-primary" 
+                          style={{ width: '100%', padding: '0.6rem', fontSize: '0.78rem', cursor: 'pointer', textAlign: 'center', fontWeight: 'bold', background: '#dc2626', color: 'white', border: 'none', borderRadius: '6px' }}
+                        >
+                          ❌ Mark Deal as Lost
+                        </button>
+
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* ---- SCHEDULE SITE VISIT CARD ---- */}
                 {(() => {
@@ -1057,7 +1601,7 @@ export default function ChannelPartnerClient({ username }) {
                       <td><span className="badge available">{p.status}</span></td>
                       <td>Commission Payout Clear</td>
                       <td>
-                        <button className="btn-outline" style={{ padding: '4px 10px', fontSize: '0.68rem', margin: 0 }}>
+                        <button onClick={() => handleDownloadReceipt(p)} className="btn-outline" style={{ padding: '4px 10px', fontSize: '0.68rem', margin: 0, cursor: 'pointer' }}>
                           📥 RECEIPT
                         </button>
                       </td>

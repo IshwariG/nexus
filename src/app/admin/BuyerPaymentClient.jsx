@@ -26,7 +26,7 @@ export default function BuyerPaymentClient({ unitId, amountDue }) {
             <p className="text-muted mb-2">You are paying the next installment for Unit {unitId}.</p>
             <div style={{background: '#f8fafc', padding: '1.5rem', borderRadius: '12px', marginBottom: '2rem'}}>
               <span style={{fontSize: '0.7rem', color: '#999', letterSpacing: '1px'}}>TOTAL AMOUNT DUE</span>
-              <h2 className="serif" style={{margin: 0}}>{amountDue}</h2>
+              <h2 className="num-mono" style={{margin: 0}}>{amountDue}</h2>
             </div>
             
             <h4 style={{fontSize: '0.8rem', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '1px'}}>Select Payment Method</h4>

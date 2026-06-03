@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-export default function VisitManagerClient({ inquiryId, currentStatus, salesmanId }) {
+export default function VisitManagerClient({ inquiryId, currentStatus, salesmanId, isCpLead = false }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
@@ -30,6 +30,10 @@ export default function VisitManagerClient({ inquiryId, currentStatus, salesmanI
 
   if (currentStatus.startsWith('DONE')) {
     return <span className="badge available" style={{fontSize: '0.6rem'}}>VISIT COMPLETED</span>;
+  }
+
+  if (isCpLead) {
+    return <span className="badge negotiation" style={{fontSize: '0.6rem', background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a'}}>MANAGED BY CP</span>;
   }
 
   return (

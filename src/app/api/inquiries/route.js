@@ -20,11 +20,12 @@ export async function POST(request) {
     const data = await request.json();
     
     // --- Duplicate Detection ---
+    const isUnitAssignment = data.source && data.source.startsWith('UNIT_ASSIGNMENT_');
     const emailVal = data.email ? data.email.trim() : '';
     const phoneVal = data.phone ? data.phone.trim() : '';
     const aadhaarVal = data.aadhaar ? data.aadhaar.trim() : '';
 
-    if (emailVal || phoneVal || aadhaarVal) {
+    if (!isUnitAssignment && (emailVal || phoneVal || aadhaarVal)) {
       let query = supabase.from('Inquiries').select('id, name, source, created_at, email, phone, aadhaar');
       const orConditions = [];
       if (emailVal) orConditions.push(`email.eq.${emailVal}`);
@@ -109,17 +110,24 @@ export async function POST(request) {
     if (data.source && data.source.startsWith('UNIT_ASSIGNMENT_')) {
       const unitId = data.source.replace('UNIT_ASSIGNMENT_', '');
       
-      // 1. Check if there was a lead for this phone number referred by a CP
+      // 1. Check if there was a lead referred by a CP that matches this phone number
       const { data: cpLeads } = await supabase
         .from('Inquiries')
-        .select('source')
-        .eq('phone', data.phone)
+        .select('source, phone')
         .like('source', 'CP_Referral|%')
         .order('created_at', { ascending: false });
 
-      if (cpLeads && cpLeads.length > 0) {
+      const normalizePhone = (p) => {
+        if (!p) return '';
+        return p.replace(/[^\d]/g, '').slice(-10);
+      };
+
+      const targetPhoneNormalized = normalizePhone(data.phone);
+      const matchingCpLead = cpLeads ? cpLeads.find(lead => normalizePhone(lead.phone) === targetPhoneNormalized) : null;
+
+      if (matchingCpLead) {
         // Find the CP username from source (e.g. CP_Referral|cp101)
-        const cpUsername = cpLeads[0].source.split('|')[1];
+        const cpUsername = matchingCpLead.source.split('|')[1];
         
         // 2. Fetch the CP's profile for commission rate
         const { data: cpProfile } = await supabase
@@ -154,7 +162,7 @@ export async function POST(request) {
             const commLakhs = (priceLakhs * rate) / 100;
             const formattedCommission = `₹ ${commLakhs.toFixed(2)} L`;
 
-            // 5. Insert Commission Record
+            // 5. Insert Commission Record as APPROVED
             await supabase
               .from('Commissions')
               .insert([

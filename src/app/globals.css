@@ -10,7 +10,7 @@
   --font-serif: "Playfair Display", serif;
   --font-sans: "Inter", sans-serif;
   --font-cormorant: "Cormorant Garamond", serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-mono: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --max-width: 1400px;
 
   /* Compatibility variables */

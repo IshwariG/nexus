@@ -99,15 +99,15 @@ export default function AdminCPCommissionsClient({ initialCommissions, cpPartner
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
           <div style={{ background: 'var(--admin-bg)', border: '1px solid #e8eaed', borderRadius: '10px', padding: '1rem', textAlign: 'center' }}>
             <div style={{ fontSize: '0.65rem', fontWeight: '700', color: '#6b7280', letterSpacing: '1px', marginBottom: '0.4rem' }}>TOTAL COMMISSION POOL</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--vanya-green)', fontFamily: 'Playfair Display, serif' }}>{formatINR(totalAll)}</div>
+            <div style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--vanya-green)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{formatINR(totalAll)}</div>
           </div>
           <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '1rem', textAlign: 'center' }}>
             <div style={{ fontSize: '0.65rem', fontWeight: '700', color: '#166534', letterSpacing: '1px', marginBottom: '0.4rem' }}>TOTAL DISBURSED</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#137333', fontFamily: 'Playfair Display, serif' }}>{formatINR(totalPaid)}</div>
+            <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#137333', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{formatINR(totalPaid)}</div>
           </div>
           <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '1rem', textAlign: 'center' }}>
             <div style={{ fontSize: '0.65rem', fontWeight: '700', color: '#92400e', letterSpacing: '1px', marginBottom: '0.4rem' }}>PENDING DISBURSEMENT</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#d97706', fontFamily: 'Playfair Display, serif' }}>{formatINR(totalPending)}</div>
+            <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#d97706', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{formatINR(totalPending)}</div>
           </div>
         </div>
       )}

@@ -1610,7 +1610,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                               style={{ transition: 'stroke-dasharray 0.8s ease' }} />
                           </svg>
                           <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                            <h2 className="serif" style={{ margin: 0, fontSize: '2.2rem', color: 'var(--vanya-green)', fontWeight: 'bold', lineHeight: 1 }}>{totalUnits}</h2>
+                            <h2 className="num-mono" style={{ margin: 0, fontSize: '2.2rem', color: 'var(--vanya-green)', fontWeight: 'bold', lineHeight: 1 }}>{totalUnits}</h2>
                             <span style={{ fontSize: '0.58rem', color: '#9ca3af', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>TOTAL UNITS</span>
                           </div>
                         </div>
@@ -1778,7 +1778,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                 <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                               </svg>
                             </div>
-                            <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
+                            <h3 className="num-mono" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
                               {baseCurrency === "USD" ? "$" : "₹"} {avgPriceLakhs >= 100 ? `${(avgPriceLakhs / 100).toFixed(1)} Cr` : `${avgPriceLakhs.toFixed(0)} L`}
                             </h3>
                           </div>
@@ -1793,7 +1793,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                 <rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 7V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3" />
                               </svg>
                             </div>
-                            <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
+                            <h3 className="num-mono" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
                               {baseCurrency === "USD" ? "$" : "₹"} {totalPortfolioLakhs >= 100 ? `${(totalPortfolioLakhs / 100).toFixed(1)} Cr` : `${totalPortfolioLakhs.toFixed(0)} L`}
                             </h3>
                           </div>
@@ -1809,7 +1809,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
                               </svg>
                             </div>
-                            <h3 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
+                            <h3 className="num-mono" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
                               {project === 'vanya-estate' ? '18.2' : project === 'vanya-meadows' ? '12.4' : conversionRateReal}%
                             </h3>
                           </div>
@@ -1830,7 +1830,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                               <text x="7" y="18" fill="#137333" stroke="none" fontSize="18" fontWeight="bold" fontFamily="serif">{baseCurrency === "USD" ? "$" : "₹"}</text>
                             </svg>
                           </div>
-                          <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
+                          <h3 className="num-mono" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
                             {baseCurrency === "USD" ? "$" : "₹"} {totalRevenueLakhs >= 100 ? `${(totalRevenueLakhs / 100).toFixed(1)} Cr` : totalRevenueFormatted}
                           </h3>
                         </div>
@@ -1852,7 +1852,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                 <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
                               </svg>
                             </div>
-                            <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
+                            <h3 className="num-mono" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
                               {soldUnitsCount} <span style={{ fontSize: '1.05rem', color: '#9ca3af', fontWeight: 'normal' }}>/ {totalUnits}</span>
                             </h3>
                           </div>
@@ -1886,7 +1886,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                               <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
                             </svg>
                           </div>
-                          <h3 className="serif" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
+                          <h3 className="num-mono" style={{ margin: 0, fontSize: '1.7rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
                             {project === 'vanya-estate' ? 32 : project === 'vanya-meadows' ? 45 : (realSalesCycle > 0 ? realSalesCycle : 24)} Days
                           </h3>
                         </div>
@@ -1975,7 +1975,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                 <circle cx="18" cy="18" r="15.915" fill="none" stroke="#1a73e8" strokeWidth="4.5" strokeDasharray={`${holdPct} ${100 - holdPct}`} strokeDashoffset={`-${confPct + pendPct + cancPct}`} />
                               </svg>
                               <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                                <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{totalBk}</h2>
+                                <h2 className="num-mono" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{totalBk}</h2>
                                 <span style={{ fontSize: '0.45rem', color: '#9ca3af', letterSpacing: '0.5px', textTransform: 'uppercase', fontWeight: 'bold' }}>Total</span>
                               </div>
                             </div>
@@ -2010,7 +2010,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                         <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase' }}>Revenue Overview</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '1rem' }}>
-                        <h2 className="serif" style={{ margin: 0, fontSize: '1.6rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{baseCurrency === "USD" ? "$" : "₹"} {totalRevenueFormatted}</h2>
+                        <h2 className="num-mono" style={{ margin: 0, fontSize: '1.6rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{baseCurrency === "USD" ? "$" : "₹"} {totalRevenueFormatted}</h2>
                         <span style={{ fontSize: '0.68rem', color: '#137333', fontWeight: 'bold' }}>↑ 15% from last month</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', height: '230px', alignItems: 'flex-end', gap: '1rem', position: 'relative', marginTop: '1.5rem' }}>
@@ -2343,19 +2343,19 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
               <div className="widget-card">
                 <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'bold' }}>TOTAL COLLECTION</span>
-                <h3 className="serif" style={{ margin: '0.2rem 0', color: '#137333', fontSize: '1.6rem' }}>₹ {totalCollectionFormatted}</h3>
+                <h3 className="num-mono" style={{ margin: '0.2rem 0', color: '#137333', fontSize: '1.6rem' }}>₹ {totalCollectionFormatted}</h3>
               </div>
               <div className="widget-card">
                 <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'bold' }}>COLLECTED THIS MONTH</span>
-                <h3 className="serif" style={{ margin: '0.2rem 0', color: '#137333', fontSize: '1.6rem' }}>₹ {collectedThisMonthFormatted}</h3>
+                <h3 className="num-mono" style={{ margin: '0.2rem 0', color: '#137333', fontSize: '1.6rem' }}>₹ {collectedThisMonthFormatted}</h3>
               </div>
               <div className="widget-card">
                 <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'bold' }}>PENDING INSTALMENTS</span>
-                <h3 className="serif" style={{ margin: '0.2rem 0', color: 'var(--vanya-gold)', fontSize: '1.6rem' }}>₹ {pendingInstallmentsFormatted}</h3>
+                <h3 className="num-mono" style={{ margin: '0.2rem 0', color: 'var(--vanya-gold)', fontSize: '1.6rem' }}>₹ {pendingInstallmentsFormatted}</h3>
               </div>
               <div className="widget-card">
                 <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'bold' }}>OVERDUE AMOUNT</span>
-                <h3 className="serif" style={{ margin: '0.2rem 0', color: '#c62828', fontSize: '1.6rem' }}>₹ {overdueAmountFormatted}</h3>
+                <h3 className="num-mono" style={{ margin: '0.2rem 0', color: '#c62828', fontSize: '1.6rem' }}>₹ {overdueAmountFormatted}</h3>
               </div>
             </div>
 
@@ -2450,7 +2450,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around', flexGrow: 1, padding: '0.5rem 0' }}>
                       <div className="donut-chart-mock" style={{ margin: '0', background: `conic-gradient(#137333 0% ${digitalPercent}%, var(--vanya-gold) ${digitalPercent}% ${digitalPercent + bankPercent}%, #1a73e8 ${digitalPercent + bankPercent}% 100%)` }}>
                         <div className="donut-inner">
-                          <h2 className="serif" style={{ fontSize: '1.3rem', color: '#137333' }}>{digitalPercent}%</h2>
+                          <h2 className="num-mono" style={{ fontSize: '1.3rem', color: '#137333' }}>{digitalPercent}%</h2>
                           <span style={{ fontSize: '0.5rem' }}>DIGITAL</span>
                         </div>
                       </div>

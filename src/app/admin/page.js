@@ -64,7 +64,7 @@ export default async function AdminDashboard(props) {
   } catch(e) {}
   
   if (userRole === 'Sales') {
-    return <SalespersonCRMClient inquiries={inquiries} units={units} buyers={buyers} userId={userId} isImpersonating={isImpersonating} />;
+    return <SalespersonCRMClient inquiries={inquiries} units={units} buyers={buyers} userId={userId} isImpersonating={isImpersonating} cpPartners={cpPartners} allUsers={allUsers} />;
   }
 
   if (userRole === 'Buyer') {

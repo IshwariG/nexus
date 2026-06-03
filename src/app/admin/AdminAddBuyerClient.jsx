@@ -138,6 +138,7 @@ export default function AdminAddBuyerClient() {
             width: '100%', 
             padding: '1.25rem', 
             background: 'linear-gradient(135deg, var(--vanya-green) 0%, #2d2d2d 100%)',
+            color: '#fff',
             fontSize: '0.8rem',
             letterSpacing: '2px',
             boxShadow: '0 10px 20px rgba(17, 54, 41, 0.2)'

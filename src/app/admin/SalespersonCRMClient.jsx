@@ -5,7 +5,15 @@ import { useRouter } from 'next/navigation';
 import PortfolioTable from './PortfolioTable';
 import VisitManagerClient from './VisitManagerClient';
 
-export default function SalespersonCRMClient({ inquiries = [], units = [], buyers = [], userId = 'SR-9999', isImpersonating = false }) {
+export default function SalespersonCRMClient({ 
+  inquiries = [], 
+  units = [], 
+  buyers = [], 
+  userId = 'SR-9999', 
+  isImpersonating = false,
+  cpPartners = [],
+  allUsers = []
+}) {
   const router = useRouter();
 
   // Masking helpers for CP Protection
@@ -13,7 +21,19 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
   const shouldMaskContact = (inq) => {
     if (!inq || !inq.source || !inq.source.startsWith('CP_Referral|')) return false;
     const stage = (inq.status || '').split('|')[0].toUpperCase();
-    return !['DONE', 'BOOKED', 'CONVERTED'].includes(stage);
+    return !['DONE', 'BOOKED', 'CONVERTED', 'READY_TO_BOOK'].includes(stage);
+  };
+
+  const getDisplayName = (inq) => {
+    if (!inq || !inq.name) return '';
+    if (shouldMaskContact(inq)) {
+      return inq.name.split(' ').map(part => {
+        if (!part) return '';
+        if (part.length <= 1) return part + '•';
+        return part[0] + '•'.repeat(part.length - 1);
+      }).join(' ');
+    }
+    return inq.name;
   };
 
   const getDisplayPhone = (inq) => {
@@ -1031,7 +1051,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                     .slice(0, 5).map((inq, i) => (
                     <tr key={inq.id || i}>
                       <td>
-                        <strong>{inq.name}</strong>
+                        <strong>{getDisplayName(inq)}</strong>
                         <br />
                         <span className="text-muted" style={{ fontSize: '0.72rem' }}>📞 {getDisplayPhone(inq)}</span>
                       </td>
@@ -1042,7 +1062,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                         </span>
                       </td>
                       <td>
-                        <VisitManagerClient inquiryId={inq.id} currentStatus={inq.status} salesmanId={userId} />
+                        <VisitManagerClient inquiryId={inq.id} currentStatus={inq.status} salesmanId={userId} isCpLead={shouldMaskContact(inq)} />
                       </td>
                     </tr>
                   ))}
@@ -1183,7 +1203,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                           setActiveTab('details');
                         }}>
                           <td>
-                            <strong>{inq.name}</strong>
+                            <strong>{getDisplayName(inq)}</strong>
                             <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '0.1rem' }}>{city}</div>
                           </td>
                           <td style={{ fontSize: '0.8rem', color: '#4b5563' }}>
@@ -1204,21 +1224,25 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                               <button onClick={() => { setSelectedLeadId(inq.id); setActiveTab('details'); }} className="btn-dark" style={{ padding: '6px 12px', fontSize: '0.65rem', background: 'var(--vanya-green)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                                 View Details
                               </button>
-                              <button onClick={() => {
-                                const raw = inq.status.split('|')[0];
-                                const nextState = raw === 'NEW' ? 'CONTACTED' : 'NEW';
-                                handleUpdateStatus(inq.id, nextState);
-                              }} style={{
-                                padding: '6px 12px',
-                                fontSize: '0.65rem',
-                                border: '1px solid #ddd',
-                                background: 'white',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                color: '#4b5563'
-                              }}>
-                                {inq.status.startsWith('NEW') ? 'Mark Attended' : 'Undo'}
-                              </button>
+                              {!shouldMaskContact(inq) ? (
+                                <button onClick={() => {
+                                  const raw = inq.status.split('|')[0];
+                                  const nextState = raw === 'NEW' ? 'CONTACTED' : 'NEW';
+                                  handleUpdateStatus(inq.id, nextState);
+                                }} style={{
+                                  padding: '6px 12px',
+                                  fontSize: '0.65rem',
+                                  border: '1px solid #ddd',
+                                  background: 'white',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  color: '#4b5563'
+                                }}>
+                                  {inq.status.startsWith('NEW') ? 'Mark Attended' : 'Undo'}
+                                </button>
+                              ) : (
+                                <span style={{ fontSize: '0.65rem', color: '#9ca3af', fontStyle: 'italic', padding: '6px 0', display: 'inline-block' }}>Managed by CP</span>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1254,7 +1278,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                 fontSize: '0.78rem'
               }}>&larr; Back to Leads List</button>
               
-              <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)' }}>Client Workspace: {selectedLead.name}</h2>
+              <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)' }}>Client Workspace: {getDisplayName(selectedLead)}</h2>
               {getStatusBadge(selectedLead.status)}
             </div>
 
@@ -1308,48 +1332,121 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                       <span className="text-muted" style={{ display: 'block', fontSize: '0.68rem' }}>ORIGINAL MESSAGE</span>
                       <p style={{ background: '#f9fafb', padding: '0.6rem', borderRadius: '6px', margin: '0.2rem 0 0 0', color: '#4b5563' }}>{selectedLead.message}</p>
                     </div>
+                    {selectedLead.source?.startsWith('CP_Referral|') && (
+                      <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #f1f3f5' }}>
+                        <span className="text-muted" style={{ display: 'block', fontSize: '0.68rem', color: 'var(--vanya-gold)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>🤝 Referring Channel Partner</span>
+                        {(() => {
+                          const cpUsername = selectedLead.source?.split('|')[1];
+                          const cpPartner = cpPartners.find(p => p.username === cpUsername);
+                          const cpUser = allUsers.find(u => u.username === cpUsername);
+                          
+                          const brokerName = cpUser?.full_name || cpUser?.username || `Partner (${cpUsername})`;
+                          const brokerFirm = cpPartner?.firm_name || 'Firm details unavailable';
+                          const brokerPhone = cpUser?.phone || 'Phone unavailable';
+                          const brokerEmail = cpUser?.email || 'Email unavailable';
+                          
+                          return (
+                            <div style={{ marginTop: '0.5rem', background: '#faf9f6', padding: '0.75rem', borderRadius: '8px', border: '1px solid #f1eede' }}>
+                              <strong style={{ display: 'block', color: 'var(--vanya-green)', fontSize: '0.85rem' }}>{brokerName}</strong>
+                              <span style={{ display: 'block', fontSize: '0.72rem', color: '#666', marginBottom: '0.25rem' }}>{brokerFirm}</span>
+                              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem', fontSize: '0.75rem' }}>
+                                <span>📞 {brokerPhone}</span>
+                                <span>•</span>
+                                <span>✉️ {brokerEmail}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* Workflow Actions */}
-                <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '1.75rem', border: '1px solid #f1f3f5' }}>
-                  <h3 className="serif" style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem' }}>CRM Actions</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    <button onClick={() => {
-                      setDialerLead(selectedLead);
-                      setIsCallActive(true);
-                      setCallNotes('');
-                      setCallDuration(0);
-                      const timer = setInterval(() => {
-                        setCallDuration(d => d + 1);
-                      }, 1000);
-                      window.callTimerRef = timer;
-                    }} className="btn-outline-dark" style={{ width: '100%', padding: '0.8rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold', border: '2px solid var(--vanya-green)', color: 'var(--vanya-green)' }}>
-                      📞 Start Telephony Outbound Call
-                    </button>
-                    <button onClick={() => handleWalkInComplete(selectedLead.id)} className="btn-outline-dark" style={{ width: '100%', padding: '0.8rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold', border: '2px solid var(--vanya-gold)', color: 'var(--vanya-gold)' }}>
-                      🚶‍♂️ Mark Site Walk-in Complete (Promote to Opportunity)
-                    </button>
-                    <button onClick={() => { setCallbackLeadId(selectedLead.id); setIsCallbackModalOpen(true); }} className="btn-outline-dark" style={{ width: '100%', padding: '0.8rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
-                      📞 Schedule Follow Up
-                    </button>
-                    <button onClick={() => { setVisitLeadId(selectedLead.id); setIsVisitModalOpen(true); }} className="btn-outline-dark" style={{ width: '100%', padding: '0.8rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
-                      🚶‍♂️ Book Site Visit
-                    </button>
-                    <button onClick={() => handleUpdateStatus(selectedLead.id, 'PROPOSAL')} style={{ width: '100%', padding: '0.8rem', textAlign: 'left', background: 'none', border: '1px solid var(--vanya-green)', color: 'var(--vanya-green)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
-                      📄 Send Proposal / Brochure
-                    </button>
-                    <button onClick={() => handleUpdateStatus(selectedLead.id, 'NEGOTIATION')} style={{ width: '100%', padding: '0.8rem', textAlign: 'left', background: 'none', border: '1px solid var(--vanya-gold)', color: 'var(--vanya-gold)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
-                      🤝 Move to Negotiation
-                    </button>
-                    <button onClick={() => handleUpdateStatus(selectedLead.id, 'CONVERTED')} style={{ width: '100%', padding: '0.8rem', textAlign: 'left', background: '#d9a036', border: 'none', color: 'white', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
-                      🎉 Close Deal (Converted Booking)
-                    </button>
-                    <button onClick={() => handleUpdateStatus(selectedLead.id, 'LOST')} style={{ width: '100%', padding: '0.8rem', textAlign: 'left', background: '#dc2626', border: 'none', color: 'white', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
-                      ❌ Mark Deal as Lost
-                    </button>
-                  </div>
-                </div>
+                {(() => {
+                  const isCpLead = selectedLead && selectedLead.source && selectedLead.source.startsWith('CP_Referral|');
+                  const isClosed = selectedLead && ['CONVERTED', 'BOOKED', 'LOST'].includes((selectedLead.status || '').split('|')[0].toUpperCase());
+                  const isReadyToBook = selectedLead && (selectedLead.status || '').split('|')[0].toUpperCase() === 'READY_TO_BOOK';
+
+                  if (isClosed) {
+                    return (
+                      <div className="widget-card" style={{ background: '#f0fdf4', borderRadius: '12px', padding: '2rem 1.75rem', border: '1px solid #bbf7d0', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{ fontSize: '2rem' }}>🎉</div>
+                        <h3 className="serif" style={{ margin: '0 0 0.25rem 0', fontSize: '1.1rem', color: '#166534' }}>Deal Finalized</h3>
+                        <p style={{ fontSize: '0.78rem', color: '#15803d', lineHeight: 1.5, margin: 0 }}>
+                          This deal has been successfully closed. The buyer account is created and unit booking is registered. No further actions are required.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  if (isCpLead) {
+                    if (isReadyToBook) {
+                      return (
+                        <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '1.75rem', border: '1px solid #f1f3f5' }}>
+                          <h3 className="serif" style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem' }}>CRM Actions</h3>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <button onClick={() => handleUpdateStatus(selectedLead.id, 'CONVERTED')} style={{ width: '100%', padding: '0.8rem', textAlign: 'center', background: '#d9a036', border: 'none', color: 'white', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
+                              🎉 Close Deal (Converted Booking)
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className="widget-card" style={{ background: '#f8fafc', borderRadius: '12px', padding: '2rem 1.75rem', border: '1px dashed #cbd5e1', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                          <div style={{ fontSize: '2rem' }}>🔒</div>
+                          <h3 className="serif" style={{ margin: '0 0 0.25rem 0', fontSize: '1.1rem', color: '#475569' }}>Awaiting Broker Action</h3>
+                          <p style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5, margin: 0 }}>
+                            This lead was referred by a Channel Partner. All pipeline management, site visits, and negotiation are handled directly by the broker. You will be able to close the deal once the broker marks it as <strong>Ready to Book</strong>.
+                          </p>
+                        </div>
+                      );
+                    }
+                  }
+
+                  // Normal Lead CRM Actions
+                  return (
+                    <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '1.75rem', border: '1px solid #f1f3f5' }}>
+                      <h3 className="serif" style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem' }}>CRM Actions</h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <button onClick={() => {
+                          setDialerLead(selectedLead);
+                          setIsCallActive(true);
+                          setCallNotes('');
+                          setCallDuration(0);
+                          const timer = setInterval(() => {
+                            setCallDuration(d => d + 1);
+                          }, 1000);
+                          window.callTimerRef = timer;
+                        }} className="btn-outline-dark" style={{ width: '100%', padding: '0.8rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold', border: '2px solid var(--vanya-green)', color: 'var(--vanya-green)' }}>
+                          📞 Start Telephony Outbound Call
+                        </button>
+                        <button onClick={() => handleWalkInComplete(selectedLead.id)} className="btn-outline-dark" style={{ width: '100%', padding: '0.8rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold', border: '2px solid var(--vanya-gold)', color: 'var(--vanya-gold)' }}>
+                          🚶‍♂️ Mark Site Walk-in Complete (Promote to Opportunity)
+                        </button>
+                        <button onClick={() => { setCallbackLeadId(selectedLead.id); setIsCallbackModalOpen(true); }} className="btn-outline-dark" style={{ width: '100%', padding: '0.8rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
+                          📞 Schedule Follow Up
+                        </button>
+                        <button onClick={() => { setVisitLeadId(selectedLead.id); setIsVisitModalOpen(true); }} className="btn-outline-dark" style={{ width: '100%', padding: '0.8rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
+                          🚶 Book Site Visit
+                        </button>
+                        <button onClick={() => handleUpdateStatus(selectedLead.id, 'PROPOSAL')} style={{ width: '100%', padding: '0.8rem', textAlign: 'left', background: 'none', border: '1px solid var(--vanya-green)', color: 'var(--vanya-green)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
+                          📄 Send Proposal / Brochure
+                        </button>
+                        <button onClick={() => handleUpdateStatus(selectedLead.id, 'NEGOTIATION')} style={{ width: '100%', padding: '0.8rem', textAlign: 'left', background: 'none', border: '1px solid var(--vanya-gold)', color: 'var(--vanya-gold)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
+                          🤝 Move to Negotiation
+                        </button>
+                        <button onClick={() => handleUpdateStatus(selectedLead.id, 'CONVERTED')} style={{ width: '100%', padding: '0.8rem', textAlign: 'left', background: '#d9a036', border: 'none', color: 'white', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
+                          🎉 Close Deal (Converted Booking)
+                        </button>
+                        <button onClick={() => handleUpdateStatus(selectedLead.id, 'LOST')} style={{ width: '100%', padding: '0.8rem', textAlign: 'left', background: '#dc2626', border: 'none', color: 'white', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
+                          ❌ Mark Deal as Lost
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
 
               </div>
 
@@ -1526,7 +1623,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                 <tbody>
                   {myInquiries.filter(inq => inq.status.includes('CONTACTED')).map((inq, i) => (
                     <tr key={inq.id || i}>
-                      <td><strong>{inq.name}</strong></td>
+                      <td><strong>{getDisplayName(inq)}</strong></td>
                       <td>📞 {getDisplayPhone(inq)}</td>
                       <td>✉️ {getDisplayEmail(inq)}</td>
                       <td style={{ fontWeight: 'bold', color: '#d9a036' }}>Upcoming Callback</td>
@@ -1599,7 +1696,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                     };
                     return myInquiries.filter(inq => inq.status.includes('CONVERTED') || inq.status.includes('BOOKED')).map((inq, i) => (
                       <tr key={inq.id || i}>
-                        <td><strong>{inq.name}</strong></td>
+                        <td><strong>{getDisplayName(inq)}</strong></td>
                         <td>{getDisplayEmail(inq)}</td>
                         <td>{getDisplayPhone(inq)}</td>
                         <td><span style={{ background: '#f3f4f6', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>{getUnitFromMessage(inq.message)}</span></td>
@@ -1654,7 +1751,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                     })
                     .map((inq, i) => (
                     <tr key={inq.id || i}>
-                      <td><strong>{inq.name}</strong></td>
+                      <td><strong>{getDisplayName(inq)}</strong></td>
                       <td>{getDisplayPhone(inq)}</td>
                       <td><span style={{ background: '#f3f4f6', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>3BHK Supreme</span></td>
                       <td>{inq.message?.includes('visit on') ? inq.message.split('visit on')[1] : 'Upcoming scheduled time'}</td>
@@ -1664,7 +1761,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
                         </span>
                       </td>
                       <td>
-                        <VisitManagerClient inquiryId={inq.id} currentStatus={inq.status} salesmanId={userId} />
+                        <VisitManagerClient inquiryId={inq.id} currentStatus={inq.status} salesmanId={userId} isCpLead={shouldMaskContact(inq)} />
                       </td>
                     </tr>
                   ))}
@@ -2386,7 +2483,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
         }}>
           <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
             <span style={{ fontSize: '0.68rem', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--vanya-gold)', display: 'block', fontWeight: 'bold' }}>SYSTEM DIALER ACTIVE</span>
-            <strong style={{ fontSize: '1.25rem', display: 'block', margin: '0.25rem 0' }}>{dialerLead.name}</strong>
+            <strong style={{ fontSize: '1.25rem', display: 'block', margin: '0.25rem 0' }}>{getDisplayName(dialerLead)}</strong>
             <span style={{ fontSize: '0.82rem', opacity: 0.8 }}>Calling: {getDisplayPhone(dialerLead)}</span>
           </div>
 
@@ -2412,7 +2509,7 @@ export default function SalespersonCRMClient({ inquiries = [], units = [], buyer
           `}} />
 
           <div style={{ textAlign: 'center', margin: '1rem 0' }}>
-            <span style={{ fontSize: '1.5rem', fontFamily: 'monospace', fontWeight: 'bold' }}>
+            <span style={{ fontSize: '1.5rem', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', fontWeight: 'bold' }}>
               {Math.floor(callDuration / 60).toString().padStart(2, '0')}:{(callDuration % 60).toString().padStart(2, '0')}
             </span>
           </div>
