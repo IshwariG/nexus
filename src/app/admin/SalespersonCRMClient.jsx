@@ -1553,10 +1553,11 @@ export default function SalespersonCRMClient({
                 {/* Workflow Actions */}
                 {(() => {
                   const isCpLead = selectedLead && selectedLead.source && selectedLead.source.startsWith('CP_Referral|');
-                  const isClosed = selectedLead && ['CONVERTED', 'BOOKED', 'LOST'].includes((selectedLead.status || '').split('|')[0].toUpperCase());
+                  const isWon = selectedLead && ['CONVERTED', 'BOOKED'].includes((selectedLead.status || '').split('|')[0].toUpperCase());
+                  const isLost = selectedLead && (selectedLead.status || '').split('|')[0].toUpperCase() === 'LOST';
                   const isReadyToBook = selectedLead && (selectedLead.status || '').split('|')[0].toUpperCase() === 'READY_TO_BOOK';
 
-                  if (isClosed) {
+                  if (isWon) {
                     return (
                       <div className="widget-card" style={{ background: '#f0fdf4', borderRadius: '12px', padding: '2rem 1.75rem', border: '1px solid #bbf7d0', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
                         <div style={{ fontSize: '2rem' }}>🎉</div>
@@ -1568,7 +1569,22 @@ export default function SalespersonCRMClient({
                     );
                   }
 
+                  if (isLost) {
+                    return (
+                      <div className="widget-card" style={{ background: '#fef2f2', borderRadius: '12px', padding: '2rem 1.75rem', border: '1px solid #fca5a5', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{ fontSize: '2rem' }}>❌</div>
+                        <h3 className="serif" style={{ margin: '0 0 0.25rem 0', fontSize: '1.1rem', color: '#991b1b' }}>Deal Lost</h3>
+                        <p style={{ fontSize: '0.78rem', color: '#b91c1c', lineHeight: 1.5, margin: 0 }}>
+                          This deal has been marked as Lost/Rejected. No further actions are required.
+                        </p>
+                      </div>
+                    );
+                  }
+
                   if (isCpLead) {
+                    const currentStatus = (selectedLead.status || '').split('|')[0].toUpperCase();
+                    const hasWalkedIn = ['DONE', 'NEGOTIATION', 'READY_TO_BOOK', 'BOOKED', 'CONVERTED'].includes(currentStatus);
+
                     if (isReadyToBook) {
                       return (
                         <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '1.75rem', border: '1px solid #f1f3f5' }}>
@@ -1582,12 +1598,22 @@ export default function SalespersonCRMClient({
                       );
                     } else {
                       return (
-                        <div className="widget-card" style={{ background: '#f8fafc', borderRadius: '12px', padding: '2rem 1.75rem', border: '1px dashed #cbd5e1', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                          <div style={{ fontSize: '2rem' }}>🔒</div>
-                          <h3 className="serif" style={{ margin: '0 0 0.25rem 0', fontSize: '1.1rem', color: '#475569' }}>Awaiting Broker Action</h3>
-                          <p style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5, margin: 0 }}>
-                            This lead was referred by a Channel Partner. All pipeline management, site visits, and negotiation are handled directly by the broker. You will be able to close the deal once the broker marks it as <strong>Ready to Book</strong>.
-                          </p>
+                        <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '1.75rem', border: '1px solid #f1f3f5' }}>
+                          <h3 className="serif" style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem' }}>CRM Actions</h3>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            {!hasWalkedIn && (
+                              <button onClick={() => handleWalkInComplete(selectedLead.id)} className="btn-outline-dark" style={{ width: '100%', padding: '0.8rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold', border: '2px solid var(--vanya-gold)', color: 'var(--vanya-gold)' }}>
+                                🚶‍♂️ Mark Site Walk-in Complete (Promote to Opportunity)
+                              </button>
+                            )}
+                            <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '2rem 1.75rem', border: '1px dashed #cbd5e1', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                              <div style={{ fontSize: '2rem' }}>🔒</div>
+                              <h3 className="serif" style={{ margin: '0 0 0.25rem 0', fontSize: '1.1rem', color: '#475569' }}>Awaiting Broker Action</h3>
+                              <p style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5, margin: 0 }}>
+                                This lead was referred by a Channel Partner. All pipeline management, site visits, and negotiation are handled directly by the broker. You will be able to close the deal once the broker marks it as <strong>Ready to Book</strong>.
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       );
                     }
@@ -1609,9 +1635,6 @@ export default function SalespersonCRMClient({
                           window.callTimerRef = timer;
                         }} className="btn-outline-dark" style={{ width: '100%', padding: '0.8rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold', border: '2px solid var(--vanya-green)', color: 'var(--vanya-green)' }}>
                           📞 Start Telephony Outbound Call
-                        </button>
-                        <button onClick={() => handleWalkInComplete(selectedLead.id)} className="btn-outline-dark" style={{ width: '100%', padding: '0.8rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold', border: '2px solid var(--vanya-gold)', color: 'var(--vanya-gold)' }}>
-                          🚶‍♂️ Mark Site Walk-in Complete (Promote to Opportunity)
                         </button>
                         <button onClick={() => { setCallbackLeadId(selectedLead.id); setIsCallbackModalOpen(true); }} className="btn-outline-dark" style={{ width: '100%', padding: '0.8rem', textAlign: 'left', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}>
                           📞 Schedule Follow Up
@@ -1743,6 +1766,14 @@ export default function SalespersonCRMClient({
                               <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: '#D9A036' }}></span>
                               <strong style={{ fontSize: '0.82rem', display: 'block' }}>Site Visit Scheduled / Done</strong>
                               <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Booked visit for client</span>
+                            </div>
+                          )}
+
+                          {hasReached('DONE') && (
+                            <div style={{ position: 'relative' }}>
+                              <span style={{ position: 'absolute', left: '-29px', width: '12px', height: '12px', borderRadius: '50%', background: 'var(--vanya-gold)' }}></span>
+                              <strong style={{ fontSize: '0.82rem', display: 'block' }}>Site Walk-in Completed</strong>
+                              <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Physical site walk-in verified</span>
                             </div>
                           )}
 
