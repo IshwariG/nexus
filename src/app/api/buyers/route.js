@@ -110,8 +110,7 @@ export async function PATCH(request) {
   try {
     const { searchParams } = new URL(request.url);
     const username = searchParams.get('username');
-    const body = await request.json();
-    const { unit_id, total_amount, amount_paid, construction_progress, possession_date, mobile, email, address, pan_number } = body;
+    const { unit_id, total_amount, amount_paid, construction_progress, possession_date, mobile, email, address, pan_number, milestones } = body;
 
     const updateObj = {};
     if (unit_id !== undefined) updateObj.unit_id = unit_id;
@@ -121,6 +120,7 @@ export async function PATCH(request) {
     if (email !== undefined) updateObj.email = email;
     if (address !== undefined) updateObj.address = address;
     if (pan_number !== undefined) updateObj.pan_number = pan_number;
+    if (milestones !== undefined) updateObj.milestones = milestones;
     if (construction_progress !== undefined) {
       // Strip '%' sign and ensure it is stored as integer
       updateObj.construction_progress = parseInt(String(construction_progress).replace('%', ''), 10) || 0;

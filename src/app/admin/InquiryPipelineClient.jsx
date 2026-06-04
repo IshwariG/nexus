@@ -123,7 +123,7 @@ export default function InquiryPipelineClient({
 
   const salesmenMap = {
     'SR-9999': { name: 'Vikram Sethi', initials: 'VS', color: 'bg-blue' },
-    'SR-1111': { name: 'Ananya Rao', initials: 'AR', color: 'bg-green' },
+    'SR-1111': { name: 'Administrator', initials: 'AD', color: 'bg-green' },
     'SR-2222': { name: 'Rahul Verma', initials: 'RV', color: 'bg-red' },
     'SR-3333': { name: 'Sneha Patil', initials: 'SP', color: 'bg-yellow' },
     'SR-4444': { name: 'Aditya Sharma', initials: 'AS', color: 'bg-purple' }

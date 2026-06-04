@@ -188,7 +188,23 @@
   .inquiry-content {
     flex-direction: column;
   }
+  .inquiry-text {
+    border-right: none !important;
+    border-bottom: 1px solid rgba(28,27,26,0.08);
+  }
   .inquiry-text, .inquiry-form-container {
-    padding: 2rem;
+    padding: 2.5rem 2rem !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .inquiry-page {
+    padding: 6rem 1rem 2rem !important;
+  }
+  .inquiry-text, .inquiry-form-container {
+    padding: 1.5rem 1rem !important;
+  }
+  .inquiry-title {
+    font-size: 2.2rem !important;
   }
 }

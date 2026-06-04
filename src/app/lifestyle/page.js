@@ -76,7 +76,7 @@ export default function Lifestyle() {
         <div className="legacy-form-container">
           {/* Note: I'm reusing the CSS from the global input classes if available, or just a simple form structure */}
           <form style={{display: 'flex', flexDirection: 'column', gap: '2rem'}}>
-            <div style={{display: 'flex', gap: '2rem'}}>
+            <div className="form-row-2col">
               <div style={{flex: 1}}>
                 <label style={{display: 'block', textAlign: 'left', fontSize: '0.7rem', color: '#888', marginBottom: '0.5rem', letterSpacing: '1px'}}>FULL NAME</label>
                 <input type="text" style={{width: '100%', padding: '1rem', border: 'none', borderBottom: '1px solid #ddd', background: 'transparent'}} placeholder="Your Name" />

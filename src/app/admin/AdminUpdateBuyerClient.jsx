@@ -9,10 +9,24 @@ export default function AdminUpdateBuyerClient({ buyer }) {
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [milestones, setMilestones] = useState([]);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (buyer?.milestones) {
+      setMilestones(buyer.milestones);
+    } else {
+      setMilestones([
+        { step: "Foundation", status: "PENDING" },
+        { step: "Structure", status: "PENDING" },
+        { step: "Finishing", status: "PENDING" },
+        { step: "Handover", status: "PENDING" }
+      ]);
+    }
+  }, [buyer, isOpen]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -24,6 +38,7 @@ export default function AdminUpdateBuyerClient({ buyer }) {
       amount_paid: e.target.amount_paid.value,
       construction_progress: parseInt(e.target.construction_progress.value) || 0,
       possession_date: e.target.possession_date.value,
+      milestones: milestones
     };
 
     try {
@@ -88,6 +103,30 @@ export default function AdminUpdateBuyerClient({ buyer }) {
             <div className="form-group mt-1">
               <label>Possession Date</label>
               <input name="possession_date" type="date" defaultValue={buyer.possession_date} required />
+            </div>
+
+            <div style={{ marginTop: '1.25rem' }}>
+              <label style={{ fontWeight: 'bold', fontSize: '0.78rem', color: '#137333', display: 'block', marginBottom: '0.5rem' }}>CONSTRUCTION MILESTONES</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.62rem', background: '#fafafa', border: '1px solid #f1f3f5', padding: '0.88rem', borderRadius: '8px' }}>
+                {milestones.map((m, idx) => (
+                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151' }}>{m.step}</span>
+                    <select 
+                      value={m.status} 
+                      onChange={(e) => {
+                        const newM = [...milestones];
+                        newM[idx] = { ...newM[idx], status: e.target.value };
+                        setMilestones(newM);
+                      }}
+                      style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #d1d5db', fontSize: '0.75rem', width: '130px', background: '#fff' }}
+                    >
+                      <option value="PENDING">PENDING</option>
+                      <option value="IN PROGRESS">IN PROGRESS</option>
+                      <option value="COMPLETED">COMPLETED</option>
+                    </select>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 

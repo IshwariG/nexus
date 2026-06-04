@@ -19,6 +19,7 @@ import { revertToAdmin, logoutUser, impersonateSales } from './actions';
 export default function AdminViewClient({ inquiries, units, buyers, cpPartners, commissions, project, allUsers = [], opportunities = [] }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Call logs states
   const [allCallLogs, setAllCallLogs] = useState([]);
@@ -178,7 +179,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
     const salesUsers = allUsers.filter(u => u.role === 'Sales');
     const mockExecs = [
       { username: 'SR-9999', full_name: 'Vikram Sethi' },
-      { username: 'SR-1111', full_name: 'Ananya Rao' },
+      { username: 'SR-1111', full_name: 'Administrator' },
       { username: 'SR-2222', full_name: 'Rahul Verma' },
       { username: 'SR-3333', full_name: 'Sneha Patil' },
       { username: 'SR-4444', full_name: 'Aditya Sharma' }
@@ -217,12 +218,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
     });
   }, [allUsers, inquiries, allCallLogs]);
 
-  // Sourcing team targets states
-  const [sourcingMetricsList, setSourcingMetricsList] = useState([]);
-  const [selectedZone, setSelectedZone] = useState('East');
-  const [newSourcingCp, setNewSourcingCp] = useState('');
-  const [newSourcingTarget, setNewSourcingTarget] = useState(25);
-  const [newSourcingActual, setNewSourcingActual] = useState(0);
+
 
   useEffect(() => {
     if (activeTab === 'dashboard' || activeTab === 'leads') {
@@ -236,79 +232,19 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
         .catch(err => console.error('Failed to load call logs:', err));
     }
     
-    if (activeTab === 'sourcing-manager' || activeTab === 'dashboard') {
-      fetch('/api/sourcing')
-        .then(res => res.json())
-        .then(json => {
-          if (json.success) {
-            setSourcingMetricsList(json.data || []);
-          }
-        })
-        .catch(err => console.error('Failed to load sourcing metrics:', err));
-    }
   }, [activeTab]);
-
-  const handleAddSourcingMetric = async (e) => {
-    e.preventDefault();
-    if (!newSourcingCp.trim()) return;
-    try {
-      const res = await fetch('/api/sourcing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cp_username: newSourcingCp,
-          zone: selectedZone,
-          walk_in_target: newSourcingTarget,
-          walk_in_actual: newSourcingActual
-        })
-      });
-      const json = await res.json();
-      if (json.success) {
-        setSourcingMetricsList(prev => [json.data, ...prev]);
-        setNewSourcingCp('');
-        alert('Sourcing metrics registered successfully!');
-      } else {
-        alert('Error: ' + json.error);
-      }
-    } catch(err) {
-      console.error(err);
-    }
-  };
-
-  const handleUpdateSourcingActual = async (id, currentActual) => {
-    const newVal = prompt('Enter new physical walk-in count:', currentActual);
-    if (newVal === null) return;
-    const actualInt = parseInt(newVal);
-    if (isNaN(actualInt)) {
-      alert('Invalid count');
-      return;
-    }
-    try {
-      const res = await fetch('/api/sourcing', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, walk_in_actual: actualInt })
-      });
-      const json = await res.json();
-      if (json.success) {
-        setSourcingMetricsList(prev => prev.map(m => m.id === id ? { ...m, walk_in_actual: actualInt } : m));
-        alert('Walk-in count updated successfully!');
-      }
-    } catch(err) {
-      console.error(err);
-    }
-  };
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
     const tab = p.get('tab');
     if (tab) {
-      setActiveTab(tab);
+      setActiveTab(tab === 'sourcing-manager' ? 'dashboard' : tab);
     }
   }, []);
 
   const changeTab = (tabName) => {
     setActiveTab(tabName);
+    setIsMobileSidebarOpen(false);
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       params.set('tab', tabName);
@@ -510,8 +446,30 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
   // Quick lead allocation selection
   const [leadAssignState, setLeadAssignState] = useState({ leadId: null, salesmanId: '' });
 
-  // Leads overview month navigation state (base at May 2026)
-  const [leadsMonth, setLeadsMonth] = useState(new Date("2026-05-01"));
+  // Leads overview: view = 'week' | 'month' | 'year'
+  const [leadsView, setLeadsView]     = useState('month');
+  
+  // Leads Overview absolute selections
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
+  const [selectedWeek, setSelectedWeek] = useState(() => {
+    const day = new Date().getDate();
+    if (day <= 7) return 0;
+    if (day <= 14) return 1;
+    if (day <= 21) return 2;
+    return 3;
+  });
+
+  const resetToCurrentPeriod = () => {
+    const now = new Date();
+    setSelectedYear(now.getFullYear());
+    setSelectedMonth(now.getMonth());
+    const curDay = now.getDate();
+    if (curDay <= 7) setSelectedWeek(0);
+    else if (curDay <= 14) setSelectedWeek(1);
+    else if (curDay <= 21) setSelectedWeek(2);
+    else setSelectedWeek(3);
+  };
 
   // Dashboard view type (Analytical vs Executive)
   const [dashboardSubTab, setDashboardSubTab] = useState('analytical');
@@ -519,31 +477,545 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
   // Analytical Performance phase toggle (Phase 1 = overview, Phase 2 = detailed)
   const [analyticalPhase, setAnalyticalPhase] = useState(1);
 
-  // Monthly Sales Velocity range filter
-  // - WEEK: last 7 days (daily bars)
-  // - MONTH: current month (weekly bars)
-  // - H1/H2: Jan-Jun / Jul-Dec (monthly bars)
+  // Monthly Sales Velocity absolute selections
   const [velocityRange, setVelocityRange] = useState('MONTH');
-  const [velocityOffset, setVelocityOffset] = useState(0);
+  const [velocityYear, setVelocityYear] = useState(() => new Date().getFullYear());
+  const [velocityMonth, setVelocityMonth] = useState(() => new Date().getMonth());
+  const [velocityWeek, setVelocityWeek] = useState(() => {
+    const day = new Date().getDate();
+    if (day <= 7) return 0;
+    if (day <= 14) return 1;
+    if (day <= 21) return 2;
+    return 3;
+  });
 
-  const handlePrevMonth = () => {
-    setLeadsMonth(prev => {
-      const d = new Date(prev);
-      d.setMonth(d.getMonth() - 1);
-      return d;
-    });
+  const resetVelocityPeriod = () => {
+    const now = new Date();
+    setVelocityYear(now.getFullYear());
+    setVelocityMonth(now.getMonth());
+    const curDay = now.getDate();
+    if (curDay <= 7) setVelocityWeek(0);
+    else if (curDay <= 14) setVelocityWeek(1);
+    else if (curDay <= 21) setVelocityWeek(2);
+    else setVelocityWeek(3);
   };
 
-  const handleNextMonth = () => {
-    setLeadsMonth(prev => {
-      const d = new Date(prev);
-      d.setMonth(d.getMonth() + 1);
-      return d;
-    });
-  };
-
-  // Revenue overview view type toggle ('past' vs 'projection')
+  // Revenue Overview absolute selections
+  const [revenueView, setRevenueView] = useState('month'); // 'week' | 'month' | 'year'
+  const [revenueYear, setRevenueYear] = useState(() => new Date().getFullYear());
+  const [revenueMonth, setRevenueMonth] = useState(() => new Date().getMonth());
+  const [revenueWeek, setRevenueWeek] = useState(() => {
+    const day = new Date().getDate();
+    if (day <= 7) return 0;
+    if (day <= 14) return 1;
+    if (day <= 21) return 2;
+    return 3;
+  });
   const [revenueViewType, setRevenueViewType] = useState('past');
+
+  const resetRevenuePeriod = () => {
+    const now = new Date();
+    setRevenueYear(now.getFullYear());
+    setRevenueMonth(now.getMonth());
+    const curDay = now.getDate();
+    if (curDay <= 7) setRevenueWeek(0);
+    else if (curDay <= 14) setRevenueWeek(1);
+    else if (curDay <= 21) setRevenueWeek(2);
+    else setRevenueWeek(3);
+  };
+
+  // Finance Page absolute selections
+  const [financeView, setFinanceView] = useState('month'); // 'week' | 'month' | 'year'
+  const [financeYear, setFinanceYear] = useState(() => new Date().getFullYear());
+  const [financeMonth, setFinanceMonth] = useState(() => new Date().getMonth());
+  const [financeWeek, setFinanceWeek] = useState(() => {
+    const day = new Date().getDate();
+    if (day <= 7) return 0;
+    if (day <= 14) return 1;
+    if (day <= 21) return 2;
+    return 3;
+  });
+  const [financeViewType, setFinanceViewType] = useState('past');
+
+  const resetFinancePeriod = () => {
+    const now = new Date();
+    setFinanceYear(now.getFullYear());
+    setFinanceMonth(now.getMonth());
+    const curDay = now.getDate();
+    if (curDay <= 7) setFinanceWeek(0);
+    else if (curDay <= 14) setFinanceWeek(1);
+    else if (curDay <= 21) setFinanceWeek(2);
+    else setFinanceWeek(3);
+  };
+
+  const isFinanceNextDisabled = () => {
+    const now = new Date();
+    const curYr = now.getFullYear();
+    const curMo = now.getMonth();
+    const curDay = now.getDate();
+    let curWk = 0;
+    if (curDay <= 7) curWk = 0;
+    else if (curDay <= 14) curWk = 1;
+    else if (curDay <= 21) curWk = 2;
+    else curWk = 3;
+
+    if (financeView === 'week') {
+      return financeYear > curYr || 
+             (financeYear === curYr && financeMonth > curMo) || 
+             (financeYear === curYr && financeMonth === curMo && financeWeek >= curWk);
+    }
+    if (financeView === 'month') {
+      return financeYear > curYr || 
+             (financeYear === curYr && financeMonth >= curMo);
+    }
+    if (financeView === 'year') {
+      return financeYear >= curYr;
+    }
+    return false;
+  };
+
+  const handlePrevFinancePeriod = () => {
+    if (financeView === 'week') {
+      if (financeWeek > 0) {
+        setFinanceWeek(financeWeek - 1);
+      } else {
+        if (financeMonth > 0) {
+          setFinanceMonth(financeMonth - 1);
+          setFinanceWeek(3);
+        } else {
+          const prevYr = financeYear - 1;
+          if (availableYears.includes(prevYr)) {
+            setFinanceYear(prevYr);
+            setFinanceMonth(11);
+            setFinanceWeek(3);
+          }
+        }
+      }
+    } else if (financeView === 'month') {
+      if (financeMonth > 0) {
+        setFinanceMonth(financeMonth - 1);
+      } else {
+        const prevYr = financeYear - 1;
+        if (availableYears.includes(prevYr)) {
+          setFinanceYear(prevYr);
+          setFinanceMonth(11);
+        }
+      }
+    } else if (financeView === 'year') {
+      const prevYr = financeYear - 1;
+      if (availableYears.includes(prevYr)) {
+        setFinanceYear(prevYr);
+      }
+    }
+  };
+
+  const handleNextFinancePeriod = () => {
+    if (financeView === 'week') {
+      if (financeWeek < 3) {
+        setFinanceWeek(financeWeek + 1);
+      } else {
+        if (financeMonth < 11) {
+          setFinanceMonth(financeMonth + 1);
+          setFinanceWeek(0);
+        } else {
+          const nextYr = financeYear + 1;
+          if (availableYears.includes(nextYr)) {
+            setFinanceYear(nextYr);
+            setFinanceMonth(0);
+            setFinanceWeek(0);
+          }
+        }
+      }
+    } else if (financeView === 'month') {
+      if (financeMonth < 11) {
+        setFinanceMonth(financeMonth + 1);
+      } else {
+        const nextYr = financeYear + 1;
+        if (availableYears.includes(nextYr)) {
+          setFinanceYear(nextYr);
+          setFinanceMonth(0);
+        }
+      }
+    } else if (financeView === 'year') {
+      const nextYr = financeYear + 1;
+      if (availableYears.includes(nextYr)) {
+        setFinanceYear(nextYr);
+      }
+    }
+  };
+
+  // Reusable custom Select sub-component with hover state
+  const SelectField = ({ value, onChange, options, style = {} }) => {
+    const [hover, setHover] = useState(false);
+    return (
+      <select
+        value={value}
+        onChange={onChange}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        style={{
+          background: '#fff',
+          border: hover ? '1px solid #cbd5e1' : '1px solid #e2e8f0',
+          borderRadius: '8px',
+          padding: '6px 10px',
+          fontSize: '0.72rem',
+          fontWeight: '700',
+          color: '#1e293b',
+          cursor: 'pointer',
+          outline: 'none',
+          boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+          transition: 'all 0.15s ease-in-out',
+          fontFamily: 'inherit',
+          ...style
+        }}
+      >
+        {options.map(opt => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    );
+  };
+
+  // Shared date and year lists
+  const availableYears = useMemo(() => {
+    const years = new Set();
+    const curYear = new Date().getFullYear();
+    for (let y = curYear - 2; y <= curYear + 2; y++) {
+      years.add(y);
+    }
+    inquiries.forEach(inq => {
+      if (inq.created_at) {
+        const yr = new Date(inq.created_at).getFullYear();
+        if (yr) years.add(yr);
+      }
+    });
+    return Array.from(years).sort((a, b) => a - b);
+  }, [inquiries]);
+
+  const getWeek4EndDay = (yr, mo) => {
+    return new Date(yr, mo + 1, 0).getDate();
+  };
+
+  const getWeekOptions = (yr, mo) => [
+    { value: 0, label: `1–7` },
+    { value: 1, label: `8–14` },
+    { value: 2, label: `15–21` },
+    { value: 3, label: `22–${getWeek4EndDay(yr, mo)}` }
+  ];
+
+  const formatCompactRupees = (valLakhs) => {
+    const rupees = valLakhs * 100000;
+    if (rupees === 0) return '₹0';
+    if (rupees >= 10000000) {
+      return `₹${(rupees / 10000000).toFixed(2).replace(/\.00$/, '')} Cr`;
+    }
+    if (rupees >= 100000) {
+      return `₹${(rupees / 100000).toFixed(2).replace(/\.00$/, '')} L`;
+    }
+    if (rupees >= 1000) {
+      return `₹${(rupees / 1000).toFixed(1).replace(/\.0$/, '')} K`;
+    }
+    return `₹${rupees}`;
+  };
+
+  const isNextDisabled = () => {
+    const now = new Date();
+    const curYr = now.getFullYear();
+    const curMo = now.getMonth();
+    const curDay = now.getDate();
+    let curWk = 0;
+    if (curDay <= 7) curWk = 0;
+    else if (curDay <= 14) curWk = 1;
+    else if (curDay <= 21) curWk = 2;
+    else curWk = 3;
+
+    if (leadsView === 'week') {
+      return selectedYear > curYr || 
+             (selectedYear === curYr && selectedMonth > curMo) || 
+             (selectedYear === curYr && selectedMonth === curMo && selectedWeek >= curWk);
+    }
+    if (leadsView === 'month') {
+      return selectedYear > curYr || 
+             (selectedYear === curYr && selectedMonth >= curMo);
+    }
+    if (leadsView === 'year') {
+      return selectedYear >= curYr;
+    }
+    return false;
+  };
+
+  const handlePrevPeriod = () => {
+    if (leadsView === 'week') {
+      if (selectedWeek > 0) {
+        setSelectedWeek(selectedWeek - 1);
+      } else {
+        if (selectedMonth > 0) {
+          setSelectedMonth(selectedMonth - 1);
+          setSelectedWeek(3);
+        } else {
+          const prevYr = selectedYear - 1;
+          if (availableYears.includes(prevYr)) {
+            setSelectedYear(prevYr);
+            setSelectedMonth(11);
+            setSelectedWeek(3);
+          }
+        }
+      }
+    } else if (leadsView === 'month') {
+      if (selectedMonth > 0) {
+        setSelectedMonth(selectedMonth - 1);
+      } else {
+        const prevYr = selectedYear - 1;
+        if (availableYears.includes(prevYr)) {
+          setSelectedYear(prevYr);
+          setSelectedMonth(11);
+        }
+      }
+    } else if (leadsView === 'year') {
+      const prevYr = selectedYear - 1;
+      if (availableYears.includes(prevYr)) {
+        setSelectedYear(prevYr);
+      }
+    }
+  };
+
+  const handleNextPeriod = () => {
+    if (leadsView === 'week') {
+      if (selectedWeek < 3) {
+        setSelectedWeek(selectedWeek + 1);
+      } else {
+        if (selectedMonth < 11) {
+          setSelectedMonth(selectedMonth + 1);
+          setSelectedWeek(0);
+        } else {
+          const nextYr = selectedYear + 1;
+          if (availableYears.includes(nextYr)) {
+            setSelectedYear(nextYr);
+            setSelectedMonth(0);
+            setSelectedWeek(0);
+          }
+        }
+      }
+    } else if (leadsView === 'month') {
+      if (selectedMonth < 11) {
+        setSelectedMonth(selectedMonth + 1);
+      } else {
+        const nextYr = selectedYear + 1;
+        if (availableYears.includes(nextYr)) {
+          setSelectedYear(nextYr);
+          setSelectedMonth(0);
+        }
+      }
+    } else if (leadsView === 'year') {
+      const nextYr = selectedYear + 1;
+      if (availableYears.includes(nextYr)) {
+        setSelectedYear(nextYr);
+      }
+    }
+  };
+
+  const isVelocityNextDisabled = () => {
+    const now = new Date();
+    const curYr = now.getFullYear();
+    const curMo = now.getMonth();
+    const curDay = now.getDate();
+    let curWk = 0;
+    if (curDay <= 7) curWk = 0;
+    else if (curDay <= 14) curWk = 1;
+    else if (curDay <= 21) curWk = 2;
+    else curWk = 3;
+
+    if (velocityRange === 'WEEK') {
+      return velocityYear > curYr || 
+             (velocityYear === curYr && velocityMonth > curMo) || 
+             (velocityYear === curYr && velocityMonth === curMo && velocityWeek >= curWk);
+    }
+    if (velocityRange === 'MONTH') {
+      return velocityYear > curYr || 
+             (velocityYear === curYr && velocityMonth >= curMo);
+    }
+    if (velocityRange === 'H1') {
+      return velocityYear > curYr || (velocityYear === curYr && curMo < 6);
+    }
+    if (velocityRange === 'H2') {
+      return velocityYear >= curYr;
+    }
+    return false;
+  };
+
+  const handlePrevVelocityPeriod = () => {
+    if (velocityRange === 'WEEK') {
+      if (velocityWeek > 0) {
+        setVelocityWeek(velocityWeek - 1);
+      } else {
+        if (velocityMonth > 0) {
+          setVelocityMonth(velocityMonth - 1);
+          setVelocityWeek(3);
+        } else {
+          const prevYr = velocityYear - 1;
+          if (availableYears.includes(prevYr)) {
+            setVelocityYear(prevYr);
+            setVelocityMonth(11);
+            setVelocityWeek(3);
+          }
+        }
+      }
+    } else if (velocityRange === 'MONTH') {
+      if (velocityMonth > 0) {
+        setVelocityMonth(velocityMonth - 1);
+      } else {
+        const prevYr = velocityYear - 1;
+        if (availableYears.includes(prevYr)) {
+          setVelocityYear(prevYr);
+          setVelocityMonth(11);
+        }
+      }
+    } else if (velocityRange === 'H1') {
+      const prevYr = velocityYear - 1;
+      if (availableYears.includes(prevYr)) {
+        setVelocityYear(prevYr);
+        setVelocityRange('H2');
+      }
+    } else if (velocityRange === 'H2') {
+      setVelocityRange('H1');
+    }
+  };
+
+  const handleNextVelocityPeriod = () => {
+    if (velocityRange === 'WEEK') {
+      if (velocityWeek < 3) {
+        setVelocityWeek(velocityWeek + 1);
+      } else {
+        if (velocityMonth < 11) {
+          setVelocityMonth(velocityMonth + 1);
+          setVelocityWeek(0);
+        } else {
+          const nextYr = velocityYear + 1;
+          if (availableYears.includes(nextYr)) {
+            setVelocityYear(nextYr);
+            setVelocityMonth(0);
+            setVelocityWeek(0);
+          }
+        }
+      }
+    } else if (velocityRange === 'MONTH') {
+      if (velocityMonth < 11) {
+        setVelocityMonth(velocityMonth + 1);
+      } else {
+        const nextYr = velocityYear + 1;
+        if (availableYears.includes(nextYr)) {
+          setVelocityYear(nextYr);
+          setVelocityMonth(0);
+        }
+      }
+    } else if (velocityRange === 'H1') {
+      setVelocityRange('H2');
+    } else if (velocityRange === 'H2') {
+      const nextYr = velocityYear + 1;
+      if (availableYears.includes(nextYr)) {
+        setVelocityYear(nextYr);
+        setVelocityRange('H1');
+      }
+    }
+  };
+
+  const isRevenueNextDisabled = () => {
+    const now = new Date();
+    const curYr = now.getFullYear();
+    const curMo = now.getMonth();
+    const curDay = now.getDate();
+    let curWk = 0;
+    if (curDay <= 7) curWk = 0;
+    else if (curDay <= 14) curWk = 1;
+    else if (curDay <= 21) curWk = 2;
+    else curWk = 3;
+
+    if (revenueView === 'week') {
+      return revenueYear > curYr || 
+             (revenueYear === curYr && revenueMonth > curMo) || 
+             (revenueYear === curYr && revenueMonth === curMo && revenueWeek >= curWk);
+    }
+    if (revenueView === 'month') {
+      return revenueYear > curYr || 
+             (revenueYear === curYr && revenueMonth >= curMo);
+    }
+    if (revenueView === 'year') {
+      return revenueYear >= curYr;
+    }
+    return false;
+  };
+
+  const handlePrevRevenuePeriod = () => {
+    if (revenueView === 'week') {
+      if (revenueWeek > 0) {
+        setRevenueWeek(revenueWeek - 1);
+      } else {
+        if (revenueMonth > 0) {
+          setRevenueMonth(revenueMonth - 1);
+          setRevenueWeek(3);
+        } else {
+          const prevYr = revenueYear - 1;
+          if (availableYears.includes(prevYr)) {
+            setRevenueYear(prevYr);
+            setRevenueMonth(11);
+            setRevenueWeek(3);
+          }
+        }
+      }
+    } else if (revenueView === 'month') {
+      if (revenueMonth > 0) {
+        setRevenueMonth(revenueMonth - 1);
+      } else {
+        const prevYr = revenueYear - 1;
+        if (availableYears.includes(prevYr)) {
+          setRevenueYear(prevYr);
+          setRevenueMonth(11);
+        }
+      }
+    } else if (revenueView === 'year') {
+      const prevYr = revenueYear - 1;
+      if (availableYears.includes(prevYr)) {
+        setRevenueYear(prevYr);
+      }
+    }
+  };
+
+  const handleNextRevenuePeriod = () => {
+    if (revenueView === 'week') {
+      if (revenueWeek < 3) {
+        setRevenueWeek(revenueWeek + 1);
+      } else {
+        if (revenueMonth < 11) {
+          setRevenueMonth(revenueMonth + 1);
+          setRevenueWeek(0);
+        } else {
+          const nextYr = revenueYear + 1;
+          if (availableYears.includes(nextYr)) {
+            setRevenueYear(nextYr);
+            setRevenueMonth(0);
+            setRevenueWeek(0);
+          }
+        }
+      }
+    } else if (revenueView === 'month') {
+      if (revenueMonth < 11) {
+        setRevenueMonth(revenueMonth + 1);
+      } else {
+        const nextYr = revenueYear + 1;
+        if (availableYears.includes(nextYr)) {
+          setRevenueYear(nextYr);
+          setRevenueMonth(0);
+        }
+      }
+    } else if (revenueView === 'year') {
+      const nextYr = revenueYear + 1;
+      if (availableYears.includes(nextYr)) {
+        setRevenueYear(nextYr);
+      }
+    }
+  };
 
   // Helper to parse amount strings like "₹ 14.25 Cr" or "₹ 15.20 L" or "₹ 85,000" to Lakhs
   const parseAmountVal = (val) => {
@@ -569,75 +1041,112 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
     return num;
   };
 
-  // Helper to compute monthly revenue from real BuyerDetails and PropertyUnits
-  const getRevenueData = () => {
-    const baseDate = new Date();
-    
-    if (revenueViewType === 'past') {
-      const months = [];
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date(baseDate);
-        d.setDate(1);
-        d.setMonth(baseDate.getMonth() - i);
-        months.push({
-          label: d.toLocaleString('default', { month: 'short' }).toUpperCase(),
-          year: d.getFullYear(),
-          monthIndex: d.getMonth(),
-          value: 0
-        });
-      }
-      
-      buyers.forEach(buyer => {
-        const amt = parseAmountVal(buyer.amount_paid);
-        const dtRaw = buyer.paid_at || buyer.payment_date || buyer.updated_at || buyer.created_at;
-        const dt = dtRaw ? new Date(dtRaw) : null;
-        if (!dt || Number.isNaN(dt.getTime())) return;
-        const m = months.find(x => x.year === dt.getFullYear() && x.monthIndex === dt.getMonth());
-        if (m) m.value += amt;
-      });
-      
-      return months;
-    } else {
-      const months = [];
-      for (let i = 1; i <= 6; i++) {
-        const d = new Date(baseDate);
-        d.setDate(1);
-        d.setMonth(baseDate.getMonth() + i);
-        months.push({
-          label: d.toLocaleString('default', { month: 'short' }).toUpperCase(),
-          year: d.getFullYear(),
-          monthIndex: d.getMonth(),
-          value: 0
-        });
-      }
-      
-      buyers.forEach(buyer => {
-        const total = parseAmountVal(buyer.total_amount);
-        const paid = parseAmountVal(buyer.amount_paid);
+  // Helper to compute monthly/weekly/daily revenue from real BuyerDetails and PropertyUnits
+  const getRevenueData = (view = revenueView, yr = revenueYear, mo = revenueMonth, wk = revenueWeek, type = revenueViewType) => {
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+    const payments = (buyers || [])
+      .map((b) => {
+        const total = parseAmountVal(b.total_amount);
+        const paid = parseAmountVal(b.amount_paid);
         const remaining = total - paid;
         
-        if (buyer.next_payment_date) {
-          const npDate = new Date(buyer.next_payment_date);
-          const targetMonth = months.find(m => m.year === npDate.getFullYear() && m.monthIndex === npDate.getMonth());
-          if (targetMonth) {
-            targetMonth.value += remaining * 0.5;
-            months.forEach(m => {
-              m.value += (remaining * 0.5) / 6;
-            });
-          } else {
-            months.forEach(m => {
-              m.value += remaining / 6;
-            });
-          }
-        } else {
-          months.forEach(m => {
-            m.value += remaining / 6;
-          });
-        }
+        // For actuals:
+        const dtRaw = b.paid_at || b.payment_date || b.updated_at || b.created_at;
+        const dtActual = dtRaw ? new Date(dtRaw) : null;
+        
+        // For projection:
+        const dtProj = b.next_payment_date ? new Date(b.next_payment_date) : null;
+        
+        return { total, paid, remaining, dtActual, dtProj, rawBuyer: b };
       });
-      
-      return months;
+
+    let points = [];
+
+    if (view === 'week') {
+      let startDay = 1;
+      let endDay = 7;
+      if (wk === 0) { startDay = 1; endDay = 7; }
+      else if (wk === 1) { startDay = 8; endDay = 14; }
+      else if (wk === 2) { startDay = 15; endDay = 21; }
+      else if (wk === 3) {
+        startDay = 22;
+        endDay = getWeek4EndDay(yr, mo);
+      }
+
+      for (let day = startDay; day <= endDay; day++) {
+        const d = new Date(yr, mo, day);
+        const label = `${DAYS[d.getDay()]} ${day}`;
+        let value = 0;
+
+        payments.forEach(p => {
+          if (type === 'past') {
+            if (p.dtActual && p.dtActual.getFullYear() === yr && p.dtActual.getMonth() === mo && p.dtActual.getDate() === day) {
+              value += p.paid;
+            }
+          } else {
+            // Projection
+            if (p.dtProj && p.dtProj.getFullYear() === yr && p.dtProj.getMonth() === mo && p.dtProj.getDate() === day) {
+              value += p.remaining * 0.5;
+            }
+          }
+        });
+
+        points.push({ label, value });
+      }
+    } else if (view === 'month') {
+      const dim = getWeek4EndDay(yr, mo);
+      const weeks = [
+        { s: 1, e: 7 },
+        { s: 8, e: 14 },
+        { s: 15, e: 21 },
+        { s: 22, e: dim }
+      ];
+
+      weeks.forEach((w, index) => {
+        let value = 0;
+        payments.forEach(p => {
+          if (type === 'past') {
+            if (p.dtActual && p.dtActual.getFullYear() === yr && p.dtActual.getMonth() === mo) {
+              const dateVal = p.dtActual.getDate();
+              if (dateVal >= w.s && dateVal <= w.e) {
+                value += p.paid;
+              }
+            }
+          } else {
+            // Projection
+            if (p.dtProj && p.dtProj.getFullYear() === yr && p.dtProj.getMonth() === mo) {
+              const dateVal = p.dtProj.getDate();
+              if (dateVal >= w.s && dateVal <= w.e) {
+                value += p.remaining * 0.5;
+              }
+            }
+          }
+        });
+        points.push({ label: `W${index + 1} (${w.s}–${w.e} ${MONTHS[mo]})`, value });
+      });
+    } else {
+      // Year view
+      MONTHS.forEach((m, monthIdx) => {
+        let value = 0;
+        payments.forEach(p => {
+          if (type === 'past') {
+            if (p.dtActual && p.dtActual.getFullYear() === yr && p.dtActual.getMonth() === monthIdx) {
+              value += p.paid;
+            }
+          } else {
+            // Projection
+            if (p.dtProj && p.dtProj.getFullYear() === yr && p.dtProj.getMonth() === monthIdx) {
+              value += p.remaining * 0.5;
+            }
+          }
+        });
+        points.push({ label: m, value });
+      });
     }
+
+    return points;
   };
 
   const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -653,15 +1162,6 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
   };
 
   const getVelocityData = (range) => {
-    const now = new Date();
-    if (range === 'WEEK') {
-      now.setDate(now.getDate() + (velocityOffset * 7));
-    } else if (range === 'MONTH') {
-      now.setDate(1);
-      now.setMonth(now.getMonth() + velocityOffset);
-    } else if (range === 'H1' || range === 'H2') {
-      now.setFullYear(now.getFullYear() + velocityOffset);
-    }
     const payments = (buyers || [])
       .map((b) => {
         const amtLakhs = parseAmountVal(b.amount_paid);
@@ -671,56 +1171,71 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
       .filter((p) => p.dt && !Number.isNaN(p.dt.getTime()) && p.amtLakhs > 0);
 
     if (range === 'WEEK') {
-      const end = startOfDay(now);
-      const start = new Date(end);
-      start.setDate(start.getDate() - 6);
+      const yr = velocityYear;
+      const mo = velocityMonth;
+      let startDay = 1;
+      let endDay = 7;
+      if (velocityWeek === 0) { startDay = 1; endDay = 7; }
+      else if (velocityWeek === 1) { startDay = 8; endDay = 14; }
+      else if (velocityWeek === 2) { startDay = 15; endDay = 21; }
+      else if (velocityWeek === 3) {
+        startDay = 22;
+        endDay = getWeek4EndDay(yr, mo);
+      }
 
       const buckets = [];
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(start);
-        d.setDate(d.getDate() + i);
-        buckets.push({ label: formatShortDay(d), key: d.toISOString().slice(0, 10), valueLakhs: 0 });
+      for (let day = startDay; day <= endDay; day++) {
+        const d = new Date(yr, mo, day);
+        buckets.push({ label: formatShortDay(d), day, valueLakhs: 0 });
       }
 
       payments.forEach((p) => {
-        const day = startOfDay(p.dt);
-        if (day < start || day > end) return;
-        const key = day.toISOString().slice(0, 10);
-        const b = buckets.find((x) => x.key === key);
-        if (b) b.valueLakhs += p.amtLakhs;
+        if (p.dt.getFullYear() === yr && p.dt.getMonth() === mo) {
+          const dateVal = p.dt.getDate();
+          const b = buckets.find((x) => x.day === dateVal);
+          if (b) b.valueLakhs += p.amtLakhs;
+        }
       });
 
       return buckets.map((b) => ({ label: b.label, valueCr: b.valueLakhs / 100 }));
     }
 
     if (range === 'MONTH') {
-      const year = now.getFullYear();
-      const month = now.getMonth();
-      const start = new Date(year, month, 1);
-      const end = new Date(year, month + 1, 0, 23, 59, 59, 999);
+      const yr = velocityYear;
+      const mo = velocityMonth;
+      const dim = getWeek4EndDay(yr, mo);
+      const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-      const weeksInMonth = getWeekOfMonth(new Date(year, month + 1, 0));
-      const buckets = Array.from({ length: weeksInMonth }, (_, i) => ({
-        label: `WK ${i + 1}`,
-        week: i + 1,
+      const weeks = [
+        { s: 1, e: 7 },
+        { s: 8, e: 14 },
+        { s: 15, e: 21 },
+        { s: 22, e: dim }
+      ];
+
+      const buckets = weeks.map((w, index) => ({
+        label: `W${index + 1} (${w.s}–${w.e} ${MONTHS[mo]})`,
+        s: w.s,
+        e: w.e,
         valueLakhs: 0
       }));
 
       payments.forEach((p) => {
-        if (p.dt < start || p.dt > end) return;
-        const w = getWeekOfMonth(p.dt);
-        const b = buckets.find((x) => x.week === w);
-        if (b) b.valueLakhs += p.amtLakhs;
+        if (p.dt.getFullYear() === yr && p.dt.getMonth() === mo) {
+          const dateVal = p.dt.getDate();
+          const b = buckets.find((x) => dateVal >= x.s && dateVal <= x.e);
+          if (b) b.valueLakhs += p.amtLakhs;
+        }
       });
 
       return buckets.map((b) => ({ label: b.label, valueCr: b.valueLakhs / 100 }));
     }
 
-    const half = range === 'H2' ? 'H2' : 'H1';
-    const year = now.getFullYear();
-    const startMonth = half === 'H1' ? 0 : 6; // Jan=0 or Jul=6
+    // H1 or H2
+    const yr = velocityYear;
+    const startMonth = range === 'H1' ? 0 : 6; // Jan=0 or Jul=6
     const monthNames =
-      half === 'H1'
+      range === 'H1'
         ? ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN']
         : ['JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
@@ -731,7 +1246,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
     }));
 
     payments.forEach((p) => {
-      if (p.dt.getFullYear() !== year) return;
+      if (p.dt.getFullYear() !== yr) return;
       const mi = p.dt.getMonth();
       const b = buckets.find((x) => x.monthIndex === mi);
       if (b) b.valueLakhs += p.amtLakhs;
@@ -1038,43 +1553,97 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
 
   // Projects list is now managed dynamically as a state variable
 
-  // Compute dynamic Leads Overview data based on leadsMonth
-  const getLeadsOverviewData = () => {
-    const year = leadsMonth.getFullYear();
-    const month = leadsMonth.getMonth();
-    
-    const monthInquiries = inquiries.filter(inq => {
-      if (inq.source?.startsWith('UNIT_ASSIGNMENT_') || inq.status?.startsWith('SCHEDULED|') || inq.status?.startsWith('DONE|')) {
-        return false;
+  // ── Leads Overview: data + navigation ──────────────────────────────
+  const getLeadsChartInfo = () => {
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const isRealInq = (inq) =>
+      !inq.source?.startsWith('UNIT_ASSIGNMENT_') &&
+      !inq.status?.startsWith('SCHEDULED|') &&
+      !inq.status?.startsWith('DONE|');
+
+    let points = [], periodLabel = '';
+
+    if (leadsView === 'week') {
+      const yr = selectedYear;
+      const mo = selectedMonth;
+      let startDay = 1;
+      let endDay = 7;
+      if (selectedWeek === 0) { startDay = 1; endDay = 7; }
+      else if (selectedWeek === 1) { startDay = 8; endDay = 14; }
+      else if (selectedWeek === 2) { startDay = 15; endDay = 21; }
+      else if (selectedWeek === 3) {
+        startDay = 22;
+        endDay = getWeek4EndDay(yr, mo);
       }
-      const d = new Date(inq.created_at);
-      return d.getFullYear() === year && d.getMonth() === month;
-    });
-    
-    const intervals = [0, 0, 0, 0, 0];
-    monthInquiries.forEach(inq => {
-      const date = new Date(inq.created_at).getDate();
-      if (date <= 6) intervals[0]++;
-      else if (date <= 12) intervals[1]++;
-      else if (date <= 18) intervals[2]++;
-      else if (date <= 24) intervals[3]++;
-      else intervals[4]++;
-    });
-    
-    return {
-      intervals,
-      total: monthInquiries.length
-    };
+
+      periodLabel = `${startDay} ${MONTHS[mo]} – ${endDay} ${MONTHS[mo]} ${yr}`;
+      
+      for (let day = startDay; day <= endDay; day++) {
+        const d = new Date(yr, mo, day);
+        const label = `${DAYS[d.getDay()]} ${day}`;
+        const count = inquiries.filter(inq => {
+          if (!isRealInq(inq)) return false;
+          const id = new Date(inq.created_at);
+          return id.getFullYear() === yr && id.getMonth() === mo && id.getDate() === day;
+        }).length;
+        points.push({ label, count });
+      }
+    } else if (leadsView === 'month') {
+      const yr = selectedYear;
+      const mo = selectedMonth;
+      const dim = getWeek4EndDay(yr, mo);
+      periodLabel = `${MONTHS[mo]} ${yr}`;
+      
+      const weeks = [
+        { s: 1, e: 7 },
+        { s: 8, e: 14 },
+        { s: 15, e: 21 },
+        { s: 22, e: dim }
+      ];
+      
+      weeks.forEach((w, index) => {
+        const total = inquiries.filter(inq => {
+          if (!isRealInq(inq)) return false;
+          const d = new Date(inq.created_at);
+          return d.getFullYear() === yr && d.getMonth() === mo && d.getDate() >= w.s && d.getDate() <= w.e;
+        }).length;
+        points.push({ label: `W${index + 1} (${w.s}–${w.e} ${MONTHS[mo]})`, count: total });
+      });
+    } else {
+      const yr = selectedYear;
+      periodLabel = `${yr}`;
+      MONTHS.forEach((m, mo) => {
+        const count = inquiries.filter(inq => {
+          if (!isRealInq(inq)) return false;
+          const d = new Date(inq.created_at);
+          return d.getFullYear() === yr && d.getMonth() === mo;
+        }).length;
+        points.push({ label: m, count });
+      });
+    }
+
+    return { points, periodLabel };
   };
 
-  const leadsData = getLeadsOverviewData();
-  const maxLeads = Math.max(...leadsData.intervals, 5);
-  const yPoints = leadsData.intervals.map(count => 130 - (count / maxLeads) * 110);
-  const linePath = `M 0 ${yPoints[0]} L 125 ${yPoints[1]} L 250 ${yPoints[2]} L 375 ${yPoints[3]} L 500 ${yPoints[4]}`;
-  const fillAreaPath = `M 0 150 L 0 ${yPoints[0]} L 125 ${yPoints[1]} L 250 ${yPoints[2]} L 375 ${yPoints[3]} L 500 ${yPoints[4]} L 500 150 Z`;
+  const { points: leadsData, periodLabel: leadsPeriodLabel } = getLeadsChartInfo();
+  const leadsTotal = leadsData.reduce((s, p) => s + p.count, 0);
+
+  // Y-axis generation: round yMaxLeads up to nearest multiple of 4 (minimum 4)
+  const rawMax = Math.max(...leadsData.map(p => p.count), 0);
+  const yMaxLeads = rawMax < 4 ? 4 : Math.ceil(rawMax / 4) * 4;
+
+  const svgW = 500; const svgH = 145; const padL = 38; const padB = 30;
+  const plotW = svgW - padL - 12; const plotH = svgH - padB - 12;
+  const xStep   = plotW / Math.max(leadsData.length - 1, 1);
+  const yOf     = (c) => 12 + plotH - (c / yMaxLeads) * plotH;
+  const leadsPathD = leadsData.map((p, i) => `${i === 0 ? 'M' : 'L'} ${padL + i * xStep} ${yOf(p.count)}`).join(' ');
+  const leadsFillD = leadsData.length > 0
+    ? `M ${padL} ${12 + plotH} ${leadsData.map((p, i) => `L ${padL + i * xStep} ${yOf(p.count)}`).join(' ')} L ${padL + (leadsData.length - 1) * xStep} ${12 + plotH} Z`
+    : '';
 
   // Compute dynamic Revenue Overview data
-  const revMonths = getRevenueData();
+  const revMonths = getRevenueData(revenueView, revenueYear, revenueMonth, revenueWeek);
   const maxRev = Math.max(...revMonths.map(m => m.value), 10);
 
   // Mock activities for Dashboard Audit Log
@@ -1355,7 +1924,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
     <div className="admin-layout" style={{ background: 'var(--admin-bg)' }}>
       
       {/* 1. SIDEBAR NAVIGATION */}
-      <aside className="admin-sidebar" style={{ background: '#ffffff', borderRight: '1px solid #f1f3f5', display: 'flex', flexDirection: 'column', width: '260px', overflowY: 'auto' }}>
+      <aside className={`admin-sidebar ${isMobileSidebarOpen ? 'open' : ''}`} style={{ background: '#ffffff', borderRight: '1px solid #f1f3f5', display: 'flex', flexDirection: 'column', width: '260px', overflowY: 'auto' }}>
         <div className="admin-sidebar-logo" style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #f1f3f5' }}>
           <h2 className="serif" style={{ color: 'var(--vanya-green)', margin: 0, fontSize: '1.25rem', letterSpacing: '1px', fontWeight: 'bold' }}>DreamSpaces</h2>
           <span className="text-muted" style={{ fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--vanya-gold)' }}>Admin Panel</span>
@@ -1394,9 +1963,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
           </button>
 
 
-          <button className={activeTab === 'sourcing-manager' ? 'active' : ''} onClick={() => changeTab('sourcing-manager')}>
-            <span className="nav-icon">🗺️</span> Sourcing Zone Manager
-          </button>
+
           <button className={activeTab === 'alerts' ? 'active' : ''} onClick={() => changeTab('alerts')}>
             <span className="nav-icon">⚠️</span> Alerts Log
           </button>
@@ -1416,13 +1983,16 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
       </aside>
 
       {/* MAIN CONTAINER */}
+      {isMobileSidebarOpen && <div className="mobile-sidebar-backdrop" onClick={() => setIsMobileSidebarOpen(false)} />}
       <main className="admin-main" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh', overflowX: 'hidden' }}>
         
         {/* 2. TOP NAVBAR */}
         <header className="admin-header" style={{ padding: '1rem 2.5rem', background: '#ffffff', borderBottom: '1px solid #f1f3f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100 }}>
-          <div>
-            <h1 className="serif" style={{ fontSize: '1.35rem', margin: 0, color: 'var(--vanya-green)' }}>Welcome back, Admin! 👋</h1>
-
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button className="mobile-sidebar-toggle" onClick={() => setIsMobileSidebarOpen(true)}>☰</button>
+            <div>
+              <h1 className="serif" style={{ fontSize: '1.35rem', margin: 0, color: 'var(--vanya-green)' }}>Welcome back, Admin! 👋</h1>
+            </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
@@ -1572,26 +2142,24 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
               {/* ===== PHASE 1: Overview ===== */}
               {analyticalPhase === 1 && (() => {
                 const velocityData = getVelocityData(velocityRange);
-                const maxVelocity = Math.max(...velocityData.map(d => d.valueCr), 1);
-                const targetLine = maxVelocity * 0.55; // target line at ~55% of max
-                const yAxisMax = Math.ceil(maxVelocity * 1.2);
-                const ySteps = [0, 2, 4, 6, 8];
-                const effectiveMax = Math.max(yAxisMax, 8);
+                const rawMaxVelocity = Math.max(...velocityData.map(d => d.valueCr), 0);
+                const velocityYMax = rawMaxVelocity < 4 ? 4 : Math.ceil(rawMaxVelocity / 4) * 4;
+                const targetLine = velocityYMax * 0.55;
                 const totalUnits = totalUnitsCount;
 
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
                     {/* TOP ROW: Inventory Donut | Monthly Sales Velocity | Right KPI Stack */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr 220px', gap: '1.5rem', alignItems: 'stretch' }}>
+                    <div className="responsive-grid-3col" style={{ display: 'grid', gridTemplateColumns: '220px 410px 1fr', gap: '1.5rem', alignItems: 'stretch' }}>
 
                       {/* LEFT: Inventory Distribution Donut */}
-                      <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                        <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '1rem' }}>INVENTORY DISTRIBUTION</span>
+                      <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>INVENTORY DISTRIBUTION</span>
 
                         {/* Donut Chart */}
-                        <div style={{ position: 'relative', width: '160px', height: '160px', marginBottom: '1rem' }}>
-                          <svg width="160" height="160" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
+                        <div style={{ position: 'relative', width: '135px', height: '135px', marginBottom: '0.6rem' }}>
+                          <svg width="135" height="135" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
                             <circle cx="18" cy="18" r="14" fill="none" stroke="#f1f3f5" strokeWidth="3.8" />
                             {/* AVAILABLE (green) - drawn first as background arc */}
                             <circle cx="18" cy="18" r="14" fill="none" stroke="#137333" strokeWidth="4" pathLength="100"
@@ -1610,7 +2178,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                               style={{ transition: 'stroke-dasharray 0.8s ease' }} />
                           </svg>
                           <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                            <h2 className="num-mono" style={{ margin: 0, fontSize: '2.2rem', color: 'var(--vanya-green)', fontWeight: 'bold', lineHeight: 1 }}>{totalUnits}</h2>
+                            <h2 className="num-mono" style={{ margin: 0, fontSize: '1.8rem', color: 'var(--vanya-green)', fontWeight: 'bold', lineHeight: 1 }}>{totalUnits}</h2>
                             <span style={{ fontSize: '0.58rem', color: '#9ca3af', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>TOTAL UNITS</span>
                           </div>
                         </div>
@@ -1638,86 +2206,130 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                       </div>
 
                       {/* CENTER: Monthly Sales Velocity Bar Chart */}
-                      <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem 1.75rem' }}>
+                      <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1rem 1.25rem', maxWidth: '410px', width: '100%', margin: '0 auto' }}>
 
                         {/* Chart Header */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                          <div>
-                            <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#1f2937', letterSpacing: '0.5px' }}>MONTHLY SALES VELOCITY</span>
-                            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.35rem' }}>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.65rem', color: '#4b5563', fontWeight: '600' }}>
-                                <span style={{ width: '8px', height: '8px', background: '#137333', borderRadius: '50%', display: 'inline-block' }}></span>
-                                REVENUE
-                              </span>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.65rem', color: '#4b5563', fontWeight: '600' }}>
-                                <span style={{ width: '8px', height: '8px', background: 'transparent', border: '2px solid #137333', borderRadius: '50%', display: 'inline-block', boxSizing: 'border-box' }}></span>
-                                TARGET
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Velocity Range Filter Dropdown */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <button 
-                              onClick={() => setVelocityOffset(prev => prev - 1)}
-                              style={{ background: '#f1f3f5', border: 'none', borderRadius: '4px', padding: '0.3rem 0.6rem', cursor: 'pointer', color: '#4b5563', fontSize: '0.9rem', fontWeight: 'bold' }}
-                            >
-                              &lt;
-                            </button>
+                        <div style={{ marginBottom: '0.75rem' }}>
+                          <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#1f2937', letterSpacing: '0.5px' }}>MONTHLY SALES VELOCITY</span>
+                          
+                          {/* Velocity Range Filter Dropdown - Moved below title */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.4rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
                             <select
                               value={velocityRange}
                               onChange={(e) => {
                                 setVelocityRange(e.target.value);
-                                setVelocityOffset(0);
+                                resetVelocityPeriod();
                               }}
                               style={{
-                                padding: '0.4rem 0.75rem',
-                                fontSize: '0.85rem',
-                                border: '1px solid #d1d5db',
+                                padding: '3px 8px',
+                                fontSize: '0.68rem',
+                                border: '1px solid #e2e8f0',
                                 borderRadius: '6px',
                                 background: '#fff',
-                                color: '#374151',
-                                fontWeight: '600',
+                                color: '#1e293b',
+                                fontWeight: '700',
                                 cursor: 'pointer',
-                                outline: 'none'
+                                outline: 'none',
+                                boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+                                transition: 'all 0.15s ease-in-out'
                               }}
                             >
-                              <option value="WEEK">Week</option>
-                              <option value="MONTH">Month</option>
-                              <option value="H1">Jan - Jun</option>
-                              <option value="H2">Jul - Dec</option>
+                              <option value="WEEK">Week View</option>
+                              <option value="MONTH">Month View</option>
+                              <option value="H1">Jan - Jun (H1)</option>
+                              <option value="H2">Jul - Dec (H2)</option>
                             </select>
-                            <button 
-                              onClick={() => setVelocityOffset(prev => prev + 1)}
-                              disabled={velocityOffset >= 0}
-                              style={{ background: velocityOffset >= 0 ? '#f9fafb' : '#f1f3f5', border: 'none', borderRadius: '4px', padding: '0.3rem 0.6rem', cursor: velocityOffset >= 0 ? 'not-allowed' : 'pointer', color: velocityOffset >= 0 ? '#d1d5db' : '#4b5563', fontSize: '0.9rem', fontWeight: 'bold' }}
-                            >
-                              &gt;
-                            </button>
+
+                            <span style={{ color: '#cbd5e1', fontSize: '0.72rem' }}>|</span>
+
+                            <button onClick={handlePrevVelocityPeriod}
+                              style={{ width: '24px', height: '24px', borderRadius: '50%', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', transition: 'all 0.15s' }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                              onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                            >◀</button>
+
+                            <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                              {velocityRange === 'WEEK' && (
+                                <SelectField
+                                  value={velocityWeek}
+                                  onChange={(e) => setVelocityWeek(Number(e.target.value))}
+                                  options={getWeekOptions(velocityYear, velocityMonth).map(opt => ({ value: opt.value, label: `Week ${opt.value + 1}` }))}
+                                  style={{ padding: '3px 8px', fontSize: '0.68rem' }}
+                                />
+                              )}
+                              {(velocityRange === 'WEEK' || velocityRange === 'MONTH') && (
+                                <SelectField
+                                  value={velocityMonth}
+                                  onChange={(e) => setVelocityMonth(Number(e.target.value))}
+                                  options={['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, idx) => ({ value: idx, label: m }))}
+                                  style={{ padding: '3px 8px', fontSize: '0.68rem' }}
+                                />
+                              )}
+                              <SelectField
+                                value={velocityYear}
+                                onChange={(e) => setVelocityYear(Number(e.target.value))}
+                                options={availableYears.map(yr => ({ value: yr, label: String(yr) }))}
+                                style={{ padding: '3px 8px', fontSize: '0.68rem' }}
+                              />
+                            </div>
+
+                            <button onClick={handleNextVelocityPeriod}
+                              disabled={isVelocityNextDisabled()}
+                              style={{ 
+                                width: '24px', 
+                                height: '24px', 
+                                borderRadius: '50%', 
+                                border: '1px solid #e2e8f0', 
+                                background: isVelocityNextDisabled() ? '#f1f5f9' : '#fff', 
+                                cursor: isVelocityNextDisabled() ? 'not-allowed' : 'pointer', 
+                                fontSize: '0.75rem', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                color: isVelocityNextDisabled() ? '#cbd5e1' : '#475569', 
+                                boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', 
+                                transition: 'all 0.15s' 
+                              }}
+                              onMouseEnter={e => { if (!isVelocityNextDisabled()) e.currentTarget.style.background = '#f8fafc'; }}
+                              onMouseLeave={e => { if (!isVelocityNextDisabled()) e.currentTarget.style.background = '#fff'; }}
+                            >▶</button>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '1rem', marginTop: '0.35rem' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.65rem', color: '#4b5563', fontWeight: '600' }}>
+                              <span style={{ width: '8px', height: '8px', background: '#137333', borderRadius: '50%', display: 'inline-block' }}></span>
+                              REVENUE
+                            </span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.65rem', color: '#4b5563', fontWeight: '600' }}>
+                              <span style={{ width: '8px', height: '8px', background: 'transparent', border: '2px solid #137333', borderRadius: '50%', display: 'inline-block', boxSizing: 'border-box' }}></span>
+                              TARGET
+                            </span>
                           </div>
                         </div>
 
                         {/* Y-Axis label */}
-                        <span style={{ fontSize: '0.6rem', color: '#9ca3af', fontWeight: '600' }}>₹ Cr</span>
+                        <span style={{ fontSize: '0.65rem', color: '#9ca3af', fontWeight: '700', letterSpacing: '0.5px' }}>₹ CR REVENUE</span>
 
                         {/* SVG Bar Chart */}
-                        <div style={{ position: 'relative', height: '220px', marginTop: '0.25rem' }}>
+                        <div style={{ position: 'relative', height: '180px', marginTop: '0.25rem' }}>
                           <svg viewBox="0 0 600 220" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ overflow: 'visible' }}>
                             {/* Horizontal grid lines + Y-axis labels */}
-                            {[0, 2, 4, 6, 8].map((val, i) => {
-                              const y = 195 - (val / effectiveMax) * 170;
+                            {[0, 1, 2, 3, 4].map(i => {
+                              const frac = i / 4;
+                              const y = 195 - frac * 170;
+                              const val = (velocityYMax * frac).toFixed(1).replace(/\.0$/, '');
                               return (
                                 <g key={i}>
                                   <line x1="40" y1={y} x2="580" y2={y} stroke="#f1f3f5" strokeWidth="1" />
-                                  <text x="30" y={y + 4} textAnchor="end" style={{ fontSize: '0.95rem', fill: '#6b7280', fontWeight: '700' }}>{val}</text>
+                                  <text x="30" y={y + 4} textAnchor="end" style={{ fontSize: '13px', fill: '#6b7280', fontWeight: '700' }}>{val}</text>
                                 </g>
                               );
                             })}
 
                             {/* Target dashed line */}
                             <line
-                              x1="40" y1={195 - (targetLine / effectiveMax) * 170}
-                              x2="580" y2={195 - (targetLine / effectiveMax) * 170}
+                              x1="40" y1={195 - (targetLine / velocityYMax) * 170}
+                              x2="580" y2={195 - (targetLine / velocityYMax) * 170}
                               stroke="#137333" strokeWidth="1.5" strokeDasharray="8 4" opacity="0.4"
                             />
 
@@ -1730,9 +2342,9 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                               const gap = Math.max(minGap, Math.floor(totalWidth / (n * 8)));
                               const barWidth = Math.min(maxBarWidth, Math.floor((totalWidth - gap * (n + 1)) / n));
                               const x = 40 + gap + idx * (barWidth + gap);
-                              const barHeight = Math.max(3, (d.valueCr / effectiveMax) * 170);
+                              const barHeight = Math.max(3, (d.valueCr / velocityYMax) * 170);
                               const y = 195 - barHeight;
-                              const crLabel = d.valueCr >= 0.1 ? `${d.valueCr.toFixed(1)} Cr` : d.valueCr > 0 ? `${(d.valueCr * 100).toFixed(0)} L` : '0';
+                              const labelVal = formatCompactRupees(d.valueCr * 100);
 
                               return (
                                 <g key={idx}>
@@ -1744,13 +2356,24 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                     style={{ transition: 'height 0.5s ease, y 0.5s ease' }}
                                   />
                                   {/* Value label */}
-                                  <text x={x + barWidth / 2} y={y - 8} textAnchor="middle" style={{ fontSize: '0.85rem', fill: '#1f2937', fontWeight: '800' }}>
-                                    {crLabel}
+                                  <text x={x + barWidth / 2} y={y - 8} textAnchor="middle" style={{ fontSize: '12px', fill: '#1f2937', fontWeight: '800' }}>
+                                    {labelVal}
                                   </text>
                                   {/* Month label */}
-                                  <text x={x + barWidth / 2} y={215} textAnchor="middle" style={{ fontSize: '0.9rem', fill: '#4b5563', fontWeight: '700' }}>
-                                    {d.label}
-                                  </text>
+                                  {d.label.includes('(') ? (
+                                    <>
+                                      <text x={x + barWidth / 2} y={207} textAnchor="middle" style={{ fontSize: '11px', fill: '#4b5563', fontWeight: '700' }}>
+                                        {d.label.split(' ')[0]}
+                                      </text>
+                                      <text x={x + barWidth / 2} y={218} textAnchor="middle" style={{ fontSize: '10px', fill: '#6b7280', fontWeight: '600' }}>
+                                        {d.label.slice(d.label.indexOf('('))}
+                                      </text>
+                                    </>
+                                  ) : (
+                                    <text x={x + barWidth / 2} y={215} textAnchor="middle" style={{ fontSize: '13px', fill: '#4b5563', fontWeight: '700' }}>
+                                      {d.label}
+                                    </text>
+                                  )}
                                 </g>
                               );
                             })}
@@ -1767,7 +2390,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                       </div>
 
                       {/* RIGHT: 3 Stacked KPI Cards */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div className="kpi-stacked-container">
 
                         {/* Avg Price Per Unit */}
                         <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.25rem 1.25rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
@@ -1778,7 +2401,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                 <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                               </svg>
                             </div>
-                            <h3 className="num-mono" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
+                            <h3 className="num-mono" style={{ margin: 0, fontSize: '1.15rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
                               {baseCurrency === "USD" ? "$" : "₹"} {avgPriceLakhs >= 100 ? `${(avgPriceLakhs / 100).toFixed(1)} Cr` : `${avgPriceLakhs.toFixed(0)} L`}
                             </h3>
                           </div>
@@ -1793,7 +2416,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                 <rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 7V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3" />
                               </svg>
                             </div>
-                            <h3 className="num-mono" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
+                            <h3 className="num-mono" style={{ margin: 0, fontSize: '1.15rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
                               {baseCurrency === "USD" ? "$" : "₹"} {totalPortfolioLakhs >= 100 ? `${(totalPortfolioLakhs / 100).toFixed(1)} Cr` : `${totalPortfolioLakhs.toFixed(0)} L`}
                             </h3>
                           </div>
@@ -1809,7 +2432,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
                               </svg>
                             </div>
-                            <h3 className="num-mono" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
+                            <h3 className="num-mono" style={{ margin: 0, fontSize: '1.15rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
                               {project === 'vanya-estate' ? '18.2' : project === 'vanya-meadows' ? '12.4' : conversionRateReal}%
                             </h3>
                           </div>
@@ -1819,7 +2442,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                     </div>
 
                     {/* BOTTOM ROW: Total Revenue | Units Sold | Avg Sales Cycle */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>
+                    <div className="responsive-grid-3col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>
 
                       {/* Total Revenue */}
                       <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem' }}>
@@ -1917,83 +2540,219 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
                   {/* Row 1: Leads Overview + Bookings by Status */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '1.5rem' }}>
+                  <div className="responsive-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '1.5rem' }}>
 
-                    {/* Leads Overview Curve Chart */}
-                    <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                        <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase' }}>Leads Overview</span>
-                        <div style={{ display: 'flex', gap: '1rem', fontSize: '0.68rem', fontWeight: 'bold' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#b08e40' }}>
-                            <span style={{ width: '8px', height: '8px', background: '#b08e40', borderRadius: '50%', display: 'inline-block' }}></span> This Month
-                          </span>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#1a73e8' }}>
-                            <span style={{ width: '8px', height: '8px', background: '#1a73e8', borderRadius: '50%', display: 'inline-block' }}></span> Last Month
-                          </span>
+                    {/* ── Leads Overview Curve Chart ── */}
+                    <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem', animation: 'fadeSlideUp 0.5s ease both' }}>
+
+                      {/* Top row: title + view tabs */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div>
+                          <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase' }}>Leads Overview</span>
+                          <span style={{ marginLeft: '0.6rem', fontSize: '0.7rem', color: '#9ca3af' }}>{leadsTotal} leads</span>
+                        </div>
+                        <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: '8px', padding: '3px', gap: '2px' }}>
+                          {[['week','Week'],['month','Month'],['year','Year']].map(([val, label]) => (
+                            <button key={val}
+                              onClick={() => { setLeadsView(val); resetToCurrentPeriod(); }}
+                              style={{ padding: '4px 10px', fontSize: '0.65rem', fontWeight: '700', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: 'all 0.2s',
+                                background: leadsView === val ? 'var(--vanya-green)' : 'transparent',
+                                color: leadsView === val ? '#fff' : '#6b7280' }}>
+                              {label}
+                            </button>
+                          ))}
                         </div>
                       </div>
-                      <div style={{ height: '180px', width: '100%', position: 'relative' }}>
-                        <svg viewBox="0 0 500 150" width="100%" height="100%" style={{ overflow: 'visible' }}>
-                          <line x1="30" y1="20" x2="470" y2="20" stroke="#f1f3f5" strokeDasharray="3 3" />
-                          <line x1="30" y1="65" x2="470" y2="65" stroke="#f1f3f5" strokeDasharray="3 3" />
-                          <line x1="30" y1="110" x2="470" y2="110" stroke="#f1f3f5" strokeDasharray="3 3" />
-                          <line x1="30" y1="130" x2="470" y2="130" stroke="#e9ecef" strokeWidth="1" />
-                          <path d="M 30 110 C 100 80, 150 120, 220 70 C 290 30, 360 90, 420 50 C 450 35, 460 40, 470 45" fill="none" stroke="#1a73e8" strokeWidth="2.5" strokeLinecap="round" opacity="0.65" />
-                          <path d="M 30 95 C 100 65, 140 100, 220 50 C 300 10, 350 70, 420 30 C 445 15, 460 20, 470 15" fill="none" stroke="#b08e40" strokeWidth="3.5" strokeLinecap="round" />
-                          {[{ x: 30, y: 95 }, { x: 103, y: 73 }, { x: 176, y: 80 }, { x: 249, y: 35 }, { x: 322, y: 48 }, { x: 395, y: 38 }, { x: 470, y: 15 }].map((node, i) => (
-                            <circle key={i} cx={node.x} cy={node.y} r="4.5" fill="#b08e40" stroke="#fff" strokeWidth="2.5" />
-                          ))}
-                          {['20 May', '21 May', '22 May', '23 May', '24 May', '25 May', '26 May'].map((label, idx) => {
-                            const x = 30 + idx * 73.3;
-                            return (<text key={idx} x={x} y="148" textAnchor="middle" style={{ fontSize: '0.62rem', fill: '#888', fontWeight: 'bold' }}>{label}</text>);
+
+                      {/* Navigation row: ◀ period select ▶ */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                        <button onClick={handlePrevPeriod}
+                          style={{ width: '28px', height: '28px', borderRadius: '50%', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', transition: 'all 0.15s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                        >◀</button>
+                        
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          {leadsView === 'week' && (
+                            <SelectField
+                              value={selectedWeek}
+                              onChange={(e) => setSelectedWeek(Number(e.target.value))}
+                              options={getWeekOptions(selectedYear, selectedMonth).map(opt => ({ value: opt.value, label: `Week ${opt.value + 1} (${opt.label})` }))}
+                            />
+                          )}
+                          {(leadsView === 'week' || leadsView === 'month') && (
+                            <SelectField
+                              value={selectedMonth}
+                              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                              options={['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, idx) => ({ value: idx, label: m }))}
+                            />
+                          )}
+                          <SelectField
+                            value={selectedYear}
+                            onChange={(e) => setSelectedYear(Number(e.target.value))}
+                            options={availableYears.map(yr => ({ value: yr, label: String(yr) }))}
+                          />
+                        </div>
+
+                        <button onClick={handleNextPeriod}
+                          disabled={isNextDisabled()}
+                          style={{ 
+                            width: '28px', 
+                            height: '28px', 
+                            borderRadius: '50%', 
+                            border: '1px solid #e2e8f0', 
+                            background: isNextDisabled() ? '#f1f5f9' : '#fff', 
+                            cursor: isNextDisabled() ? 'not-allowed' : 'pointer', 
+                            fontSize: '0.85rem', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            color: isNextDisabled() ? '#cbd5e1' : '#475569', 
+                            boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', 
+                            transition: 'all 0.15s' 
+                          }}
+                          onMouseEnter={e => { if (!isNextDisabled()) e.currentTarget.style.background = '#f8fafc'; }}
+                          onMouseLeave={e => { if (!isNextDisabled()) e.currentTarget.style.background = '#fff'; }}
+                        >▶</button>
+                      </div>
+
+                      {/* SVG Chart */}
+                      <div style={{ height: '185px', width: '100%', position: 'relative' }}>
+                        <svg viewBox={`0 0 ${svgW} ${svgH}`} width="100%" height="100%" style={{ overflow: 'visible' }}>
+                          <defs>
+                            <linearGradient id="leadGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="var(--vanya-green)" stopOpacity="0.15" />
+                              <stop offset="100%" stopColor="var(--vanya-green)" stopOpacity="0" />
+                            </linearGradient>
+                          </defs>
+
+                          {/* Y-axis: 5 nice ticks */}
+                          {[0, 1, 2, 3, 4].map(i => {
+                            const frac = i / 4;
+                            const y    = 12 + plotH * (1 - frac);
+                            const val  = Math.round(yMaxLeads * frac);
+                            return (
+                              <g key={i}>
+                                <line x1={padL} y1={y} x2={svgW - 12} y2={y} stroke={i === 0 ? '#e5e7eb' : '#f3f4f6'} strokeDasharray={i === 0 ? '0' : '4 3'} strokeWidth={i === 0 ? 1.2 : 1} />
+                                <text x={padL - 5} y={y + 4} textAnchor="end" style={{ fontSize: '0.52rem', fill: '#b0b0b0', fontFamily: 'monospace' }}>{val}</text>
+                              </g>
+                            );
+                          })}
+
+                          {/* Fill area */}
+                          {leadsFillD && <path d={leadsFillD} fill="url(#leadGrad)" />}
+
+                          {/* Line */}
+                          {leadsPathD && (
+                            <path d={leadsPathD} fill="none" stroke="var(--vanya-green)" strokeWidth="2.5"
+                              strokeLinecap="round" strokeLinejoin="round"
+                              style={{ strokeDasharray: 2000, strokeDashoffset: 2000, animation: 'drawLine 1.2s ease forwards' }} />
+                          )}
+
+                          {/* Data points with hover tooltip */}
+                          {leadsData.map((p, i) => {
+                            const cx = padL + i * xStep;
+                            const cy = yOf(p.count);
+                            return (
+                              <g key={i} style={{ cursor: 'pointer' }}>
+                                <circle cx={cx} cy={cy} r="10" fill="transparent" />
+                                <circle cx={cx} cy={cy} r="4.5" fill="var(--vanya-green)" stroke="#fff" strokeWidth="2"
+                                  style={{ opacity: 0, animation: `fadeIn 0.3s ease ${1 + i * 0.07}s forwards` }} />
+                                <title>{p.label}: {p.count} lead{p.count !== 1 ? 's' : ''}</title>
+                              </g>
+                            );
+                          })}
+
+                          {/* X-axis labels — rotate if many points */}
+                          {leadsData.map((p, i) => {
+                            const cx = padL + i * xStep;
+                            const rotate = leadsData.length > 8 ? `rotate(-35, ${cx}, ${svgH - 4})` : null;
+                            return (
+                              <text key={i} x={cx} y={svgH - 4}
+                                textAnchor={rotate ? 'end' : 'middle'}
+                                transform={rotate || ''}
+                                style={{ fontSize: leadsData.length > 8 ? '0.48rem' : '0.55rem', fill: '#6b7280', fontWeight: '600' }}>
+                                {p.label}
+                              </text>
+                            );
                           })}
                         </svg>
                       </div>
+
+                      {/* Empty state */}
+                      {leadsTotal === 0 && (
+                        <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                          No leads recorded in this period
+                        </div>
+                      )}
                     </div>
 
-                    {/* Bookings by Status Donut Chart */}
-                    <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+                    {/* ── Bookings by Status Donut Chart — Real DB Data ── */}
+                    <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', animation: 'fadeSlideUp 0.5s 0.15s ease both' }}>
                       <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '1.25rem' }}>Bookings by Status</span>
                       {(() => {
-                        const totalBk = buyers.length || 562;
-                        const confirmedBk = Math.round(totalBk * 0.49);
-                        const pendingBk = Math.round(totalBk * 0.28);
-                        const cancelledBk = Math.round(totalBk * 0.13);
-                        const onHoldBk = Math.max(0, totalBk - confirmedBk - pendingBk - cancelledBk);
-                        const confPct = Math.round((confirmedBk / totalBk) * 100);
-                        const pendPct = Math.round((pendingBk / totalBk) * 100);
-                        const cancPct = Math.round((cancelledBk / totalBk) * 100);
-                        const holdPct = Math.max(0, 100 - confPct - pendPct - cancPct);
+                        // Real data from buyers table
+                        const totalBk = buyers.length;
+                        const confirmedBk = buyers.filter(b => (b.booking_status || b.status || '').toLowerCase().includes('confirm')).length;
+                        const cancelledBk = buyers.filter(b => (b.booking_status || b.status || '').toLowerCase().includes('cancel')).length;
+                        const onHoldBk   = buyers.filter(b => (b.booking_status || b.status || '').toLowerCase().includes('hold')).length;
+                        const pendingBk  = Math.max(0, totalBk - confirmedBk - cancelledBk - onHoldBk);
+
+                        const safePct = (n) => totalBk > 0 ? Math.round((n / totalBk) * 100) : 0;
+                        const confPct = safePct(confirmedBk);
+                        const pendPct = safePct(pendingBk);
+                        const cancPct = safePct(cancelledBk);
+                        const holdPct = safePct(onHoldBk);
+
+                        // Donut segments — animated with CSS strokeDashoffset
+                        const r = 15.915;
+                        const circ = 2 * Math.PI * r; // ≈ 100
+                        const segments = [
+                          { label: 'Confirmed', count: confirmedBk, pct: confPct, color: '#137333', offset: 0 },
+                          { label: 'Pending',   count: pendingBk,   pct: pendPct, color: '#c9a84c', offset: confPct },
+                          { label: 'Cancelled', count: cancelledBk, pct: cancPct, color: '#c5221f', offset: confPct + pendPct },
+                          { label: 'On Hold',   count: onHoldBk,   pct: holdPct, color: '#1a73e8', offset: confPct + pendPct + cancPct },
+                        ];
+
                         return (
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around', flexGrow: 1 }}>
-                            <div style={{ position: 'relative', width: '120px', height: '120px' }}>
+                            {/* Donut */}
+                            <div style={{ position: 'relative', width: '120px', height: '120px', flexShrink: 0 }}>
                               <svg width="120" height="120" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
-                                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#f1f3f5" strokeWidth="4.2" />
-                                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#137333" strokeWidth="4.5" strokeDasharray={`${confPct} ${100 - confPct}`} strokeDashoffset="0" />
-                                <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--vanya-gold)" strokeWidth="4.5" strokeDasharray={`${pendPct} ${100 - pendPct}`} strokeDashoffset={`-${confPct}`} />
-                                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#c5221f" strokeWidth="4.5" strokeDasharray={`${cancPct} ${100 - cancPct}`} strokeDashoffset={`-${confPct + pendPct}`} />
-                                <circle cx="18" cy="18" r="15.915" fill="none" stroke="#1a73e8" strokeWidth="4.5" strokeDasharray={`${holdPct} ${100 - holdPct}`} strokeDashoffset={`-${confPct + pendPct + cancPct}`} />
+                                <circle cx="18" cy="18" r={r} fill="none" stroke="#f1f3f5" strokeWidth="4.2" />
+                                {totalBk === 0 ? (
+                                  <circle cx="18" cy="18" r={r} fill="none" stroke="#e5e7eb" strokeWidth="4.2" />
+                                ) : segments.map((seg, i) => seg.pct > 0 && (
+                                  <circle key={i} cx="18" cy="18" r={r} fill="none"
+                                    stroke={seg.color} strokeWidth="4.5"
+                                    strokeDasharray={`${seg.pct} ${100 - seg.pct}`}
+                                    strokeDashoffset={`-${seg.offset}`}
+                                    style={{ transition: 'stroke-dasharray 0.8s ease, stroke-dashoffset 0.8s ease' }} />
+                                ))}
                               </svg>
-                              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                                <h2 className="num-mono" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{totalBk}</h2>
+                              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center' }}>
+                                <h2 className="num-mono" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold', animation: 'countUp 0.6s ease' }}>{totalBk}</h2>
                                 <span style={{ fontSize: '0.45rem', color: '#9ca3af', letterSpacing: '0.5px', textTransform: 'uppercase', fontWeight: 'bold' }}>Total</span>
                               </div>
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', minWidth: '130px' }}>
-                              {[
-                                { label: 'Confirmed', count: confirmedBk, pct: confPct, color: '#137333' },
-                                { label: 'Pending', count: pendingBk, pct: pendPct, color: 'var(--vanya-gold)' },
-                                { label: 'Cancelled', count: cancelledBk, pct: cancPct, color: '#c5221f' },
-                                { label: 'On Hold', count: onHoldBk, pct: holdPct, color: '#1a73e8' }
-                              ].map((item, i) => (
-                                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+
+                            {/* Legend */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '130px' }}>
+                              {segments.map((item, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem',
+                                  animation: `fadeSlideUp 0.4s ${0.1 * i}s ease both` }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                    <span style={{ width: '8px', height: '8px', background: item.color, borderRadius: '50%', display: 'inline-block' }}></span>
+                                    <span style={{ width: '9px', height: '9px', background: item.color, borderRadius: '50%', display: 'inline-block', flexShrink: 0 }}></span>
                                     <span style={{ fontWeight: '500', color: '#4b5563' }}>{item.label}</span>
                                   </div>
-                                  <span style={{ fontWeight: 'bold', color: '#113' }}>{item.count} <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'normal' }}>({item.pct}%)</span></span>
+                                  <span style={{ fontWeight: 'bold', color: '#1c1b1a' }}>
+                                    {item.count} <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'normal' }}>({item.pct}%)</span>
+                                  </span>
                                 </div>
                               ))}
+                              {totalBk === 0 && (
+                                <div style={{ fontSize: '0.72rem', color: '#9ca3af', textAlign: 'center', marginTop: '0.5rem' }}>No bookings yet</div>
+                              )}
                             </div>
                           </div>
                         );
@@ -2002,28 +2761,137 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                   </div>
 
                   {/* Row 2: Revenue Overview + Top Projects */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '1.5rem' }}>
+                  <div className="responsive-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '1.5rem' }}>
 
                     {/* Revenue Overview Bar Chart */}
-                    <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                        <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase' }}>Revenue Overview</span>
+                    <div style={{ background: '#fff', border: '1px solid #e8eaed', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+                      
+                      {/* Top row: Title + View Tabs */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div>
+                          <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase' }}>Revenue Overview</span>
+                        </div>
+                        <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: '8px', padding: '3px', gap: '2px' }}>
+                          {[['week','Week'],['month','Month'],['year','Year']].map(([val, label]) => (
+                            <button key={val}
+                              onClick={() => { setRevenueView(val); resetRevenuePeriod(); }}
+                              style={{ padding: '4px 10px', fontSize: '0.65rem', fontWeight: '700', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: 'all 0.2s',
+                                background: revenueView === val ? 'var(--vanya-green)' : 'transparent',
+                                color: revenueView === val ? '#fff' : '#6b7280' }}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
+
+                      {/* Controls row: Past/Projection toggle + Absolute Period navigation */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                        {/* Actuals vs Projection toggle */}
+                        <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: '8px', padding: '3px', gap: '2px' }}>
+                          <button
+                            onClick={() => setRevenueViewType('past')}
+                            style={{ padding: '4px 10px', fontSize: '0.65rem', fontWeight: '700', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: 'all 0.2s',
+                              background: revenueViewType === 'past' ? '#1f2937' : 'transparent',
+                              color: revenueViewType === 'past' ? '#fff' : '#6b7280' }}
+                          >
+                            Actuals
+                          </button>
+                          <button
+                            onClick={() => setRevenueViewType('projection')}
+                            style={{ padding: '4px 10px', fontSize: '0.65rem', fontWeight: '700', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: 'all 0.2s',
+                              background: revenueViewType === 'projection' ? '#1f2937' : 'transparent',
+                              color: revenueViewType === 'projection' ? '#fff' : '#6b7280' }}
+                          >
+                            Projection
+                          </button>
+                        </div>
+
+                        {/* Absolute selectors */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <button onClick={handlePrevRevenuePeriod}
+                            style={{ width: '28px', height: '28px', borderRadius: '50%', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', transition: 'all 0.15s' }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                            onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                          >◀</button>
+
+                          <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                            {revenueView === 'week' && (
+                              <SelectField
+                                value={revenueWeek}
+                                onChange={(e) => setRevenueWeek(Number(e.target.value))}
+                                options={getWeekOptions(revenueYear, revenueMonth).map(opt => ({ value: opt.value, label: `Week ${opt.value + 1}` }))}
+                              />
+                            )}
+                            {(revenueView === 'week' || revenueView === 'month') && (
+                              <SelectField
+                                value={revenueMonth}
+                                onChange={(e) => setRevenueMonth(Number(e.target.value))}
+                                options={['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, idx) => ({ value: idx, label: m }))}
+                              />
+                            )}
+                            <SelectField
+                              value={revenueYear}
+                              onChange={(e) => setRevenueYear(Number(e.target.value))}
+                              options={availableYears.map(yr => ({ value: yr, label: String(yr) }))}
+                            />
+                          </div>
+
+                          <button onClick={handleNextRevenuePeriod}
+                            disabled={isRevenueNextDisabled()}
+                            style={{ 
+                              width: '28px', 
+                              height: '28px', 
+                              borderRadius: '50%', 
+                              border: '1px solid #e2e8f0', 
+                              background: isRevenueNextDisabled() ? '#f1f5f9' : '#fff', 
+                              cursor: isRevenueNextDisabled() ? 'not-allowed' : 'pointer', 
+                              fontSize: '0.85rem', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center', 
+                              color: isRevenueNextDisabled() ? '#cbd5e1' : '#475569', 
+                              boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', 
+                              transition: 'all 0.15s' 
+                            }}
+                            onMouseEnter={e => { if (!isRevenueNextDisabled()) e.currentTarget.style.background = '#f8fafc'; }}
+                            onMouseLeave={e => { if (!isRevenueNextDisabled()) e.currentTarget.style.background = '#fff'; }}
+                          >▶</button>
+                        </div>
+                      </div>
+
+                      {/* Header showing total and status */}
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '1rem' }}>
-                        <h2 className="num-mono" style={{ margin: 0, fontSize: '1.6rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{baseCurrency === "USD" ? "$" : "₹"} {totalRevenueFormatted}</h2>
-                        <span style={{ fontSize: '0.68rem', color: '#137333', fontWeight: 'bold' }}>↑ 15% from last month</span>
+                        <h2 className="num-mono" style={{ margin: 0, fontSize: '1.6rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>
+                          {baseCurrency === "USD" ? "$" : "₹"} {
+                            new Intl.NumberFormat('en-IN').format(Math.round(revMonths.reduce((sum, m) => sum + m.value, 0) * 100000))
+                          }
+                        </h2>
+                        <span style={{ fontSize: '0.68rem', color: '#137333', fontWeight: 'bold' }}>
+                          {revenueViewType === 'past' ? 'Actual Collections' : 'Projected Inflow'}
+                        </span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', height: '230px', alignItems: 'flex-end', gap: '1rem', position: 'relative', marginTop: '1.5rem' }}>
+
+                      {/* SVG/Div Chart container */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', height: '230px', alignItems: 'flex-end', gap: '0.5rem', position: 'relative', marginTop: '1.5rem', width: '100%' }}>
                         <div style={{ position: 'absolute', bottom: '70%', left: 0, right: 0, borderTop: '2px dashed var(--vanya-gold)', opacity: 0.45, zIndex: 1 }}></div>
                         {revMonths.map((m, idx) => {
-                          const valFormatted = new Intl.NumberFormat('en-IN').format(Math.round(m.value * 100000));
-                          const maxVal = Math.max(...revMonths.map(d => d.value));
+                          const maxVal = Math.max(...revMonths.map(d => d.value), 1);
                           const hPerc = Math.max(10, Math.round((m.value / maxVal) * 100));
+                          
+                          const numBars = revMonths.length;
+                          const barWidth = numBars > 8 ? '35%' : '55%';
+                          const valFontSize = numBars > 8 ? '0.58rem' : '0.75rem';
+                          const labelFontSize = numBars > 8 ? '0.58rem' : '0.68rem';
+
                           return (
                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, height: '100%', justifyContent: 'flex-end', zIndex: 2 }}>
-                              <span style={{ fontSize: '0.95rem', fontWeight: 'bold', color: 'var(--vanya-green)', marginBottom: '8px' }}>{valFormatted}</span>
-                              <div style={{ height: `${hPerc}%`, width: '55%', background: 'linear-gradient(180deg, #2d7c5f, #b8d8c8)', borderRadius: '5px 5px 0 0', opacity: 0.85 }}></div>
-                              <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#4b5563', marginTop: '10px', letterSpacing: '0.3px' }}>{m.label.toUpperCase()}</span>
+                              <span style={{ fontSize: valFontSize, fontWeight: 'bold', color: 'var(--vanya-green)', marginBottom: '8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                {formatCompactRupees(m.value)}
+                              </span>
+                              <div style={{ height: `${hPerc}%`, width: barWidth, background: 'linear-gradient(180deg, #2d7c5f, #b8d8c8)', borderRadius: '5px 5px 0 0', opacity: 0.85, transition: 'height 0.3s ease' }}></div>
+                              <span style={{ fontSize: labelFontSize, fontWeight: '700', color: '#4b5563', marginTop: '10px', letterSpacing: '0.3px', textAlign: 'center', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                                {m.label}
+                              </span>
                             </div>
                           );
                         })}
@@ -2073,52 +2941,51 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                 </div>
               </div>
 
-                {/* Salesman Cards Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem' }}>
+                {/* Salesman Cards Grid — Real data from DB, sorted by revenue */}
+                <div className="responsive-grid-4col" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem' }}>
                   {(() => {
-                    const mockExecs = [
-                      { initials: 'VS', name: 'VIKRAM SETHI', title: 'SALESPERSON', id: 'SR-9999', revenue: '35,50,00,000' },
-                      { initials: 'AR', name: 'ANANYA RAO', title: 'SALESPERSON', id: 'SR-1111', revenue: '32,40,00,000' },
-                      { initials: 'RV', name: 'RAHUL VERMA', title: 'SALESPERSON', id: 'SR-2222', revenue: '24,80,00,000' },
-                      { initials: 'SP', name: 'SNEHA PATIL', title: 'SALESPERSON', id: 'SR-3333', revenue: '15,30,00,000' },
-                      { initials: 'AS', name: 'ADITYA SHARMA', title: 'SALESPERSON', id: 'SR-4444', revenue: '10,40,00,000' }
-                    ];
-                    const realExecs = allUsers.filter(u => u.role === 'Sales').map(exec => {
-                      const mockFallback = mockExecs.find(m => m.id === exec.username);
-                      
-                      const resolvedName = exec.full_name || (mockFallback ? mockFallback.name : exec.username);
-                      const resolvedTitle = exec.employee_id || (mockFallback ? mockFallback.title : 'SALES REPRESENTATIVE');
-                      
-                      let resolvedInitials = '';
-                      if (exec.full_name) {
-                        resolvedInitials = exec.full_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-                      } else if (mockFallback) {
-                        resolvedInitials = mockFallback.initials;
-                      } else {
-                        resolvedInitials = exec.username.substring(0, 2).toUpperCase();
-                      }
+                    // Build real salesman list from DB users only — no mock/fake data
+                    const realExecs = allUsers
+                      .filter(u => u.role === 'Sales')
+                      .map(exec => {
+                        // Calculate real revenue: sum of amount_paid for all buyers assigned to this salesman
+                        const salesmanRevenueLakhs = buyers
+                          .filter(b => b.salesman_id === exec.username || b.assigned_to === exec.username)
+                          .reduce((sum, b) => sum + parseAmountVal(b.amount_paid), 0);
 
-                      return {
-                        initials: resolvedInitials,
-                        name: resolvedName,
-                        title: resolvedTitle,
-                        id: exec.username,
-                        revenue: mockFallback ? mockFallback.revenue : '0.00', // Use mock revenue if available
-                        isActive: exec.is_active !== false
-                      };
-                    });
-                    
-                    const combinedExecs = [...realExecs, ...mockExecs].filter((exec, index, self) => 
-                      index === self.findIndex((t) => t.id === exec.id)
-                    ).map(exec => {
-                      const dbUser = allUsers.find(u => u.username === exec.id);
-                      return {
-                        ...exec,
-                        isActive: dbUser ? dbUser.is_active !== false : (exec.isActive !== false)
-                      };
-                    });
+                        // Format revenue in Indian number system
+                        const revenueFormatted = salesmanRevenueLakhs > 0
+                          ? new Intl.NumberFormat('en-IN').format(Math.round(salesmanRevenueLakhs * 100000))
+                          : '0';
 
-                    return combinedExecs.map((exec, idx) => (
+                        // Generate initials from full name
+                        const resolvedInitials = exec.full_name
+                          ? exec.full_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+                          : exec.username.substring(0, 2).toUpperCase();
+
+                        return {
+                          initials: resolvedInitials,
+                          name: (exec.full_name || exec.username).toUpperCase(),
+                          title: exec.employee_id || 'SALES REPRESENTATIVE',
+                          id: exec.username,
+                          revenueRaw: salesmanRevenueLakhs, // for sorting
+                          revenue: revenueFormatted,
+                          isActive: exec.is_active !== false
+                        };
+                      })
+                      // Sort by highest revenue first
+                      .sort((a, b) => b.revenueRaw - a.revenueRaw);
+
+                    // If no real salesmen in DB yet, show empty state
+                    if (realExecs.length === 0) {
+                      return (
+                        <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: '#9ca3af', fontSize: '0.85rem' }}>
+                          No salespersons added yet. Use the <strong>+ Add Salesperson</strong> button above to get started.
+                        </div>
+                      );
+                    }
+
+                    return realExecs.map((exec, idx) => (
                       <div key={exec.id || idx} style={{ background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', opacity: exec.isActive ? 1 : 0.6, transition: 'box-shadow 0.2s' }}>
                         <div style={{ width: '64px', height: '64px', borderRadius: '50%', border: exec.isActive ? '2px solid var(--vanya-green)' : '2px solid #9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.75rem' }}>
                           <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: exec.isActive ? 'var(--vanya-green)' : '#9ca3af' }}>{exec.initials}</span>
@@ -2144,7 +3011,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
 
                 {/* Project-wide Scheduled Visits */}
                 <div style={{ marginTop: '0.5rem' }}>
-                  <GlobalVisitsClient inquiries={inquiries} />
+                  <GlobalVisitsClient inquiries={inquiries} allUsers={allUsers} />
                 </div>
               </div>
             )}
@@ -2197,81 +3064,83 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
             {leadSubTab === 'distribute' && (
               <div className="widget-card mb-2">
                 <h3 className="serif" style={{ margin: '0 0 1rem 0', fontSize: '1rem' }}>Reassign / Distribute Leads</h3>
-                <table className="table-standard">
-                  <thead>
-                    <tr>
-                      <th>LEAD NAME</th>
-                      <th>SOURCE</th>
-                      <th>CURRENT REPRESENTATIVE</th>
-                      <th>STATUS</th>
-                      <th>ASSIGNMENT ACTION</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {inquiries
-                      .filter(inq => !inq.source?.startsWith('UNIT_ASSIGNMENT_') && !inq.status?.startsWith('SCHEDULED|'))
-                      .map((inq, i) => {
-                        const repId = inq.status && inq.status.includes('|') ? inq.status.split('|')[1] : 'unassigned';
-                        
-                        const getRepName = (id) => {
-                          const map = {
-                            'SR-9999': 'Vikram Sethi',
-                            'SR-1111': 'Ananya Rao',
-                            'SR-2222': 'Rahul Verma',
-                            'SR-3333': 'Sneha Patil',
-                            'SR-4444': 'Aditya Sharma',
+                <div className="table-responsive-wrapper">
+                  <table className="table-standard">
+                    <thead>
+                      <tr>
+                        <th>LEAD NAME</th>
+                        <th>SOURCE</th>
+                        <th>CURRENT REPRESENTATIVE</th>
+                        <th>STATUS</th>
+                        <th>ASSIGNMENT ACTION</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {inquiries
+                        .filter(inq => !inq.source?.startsWith('UNIT_ASSIGNMENT_') && !inq.status?.startsWith('SCHEDULED|'))
+                        .map((inq, i) => {
+                          const repId = inq.status && inq.status.includes('|') ? inq.status.split('|')[1] : 'unassigned';
+                          
+                          const getRepName = (id) => {
+                            const map = {
+                              'SR-9999': 'Vikram Sethi',
+                              'SR-1111': 'Administrator',
+                              'SR-2222': 'Rahul Verma',
+                              'SR-3333': 'Sneha Patil',
+                              'SR-4444': 'Aditya Sharma',
+                            };
+                            return map[id] || 'Awaiting Alloc';
                           };
-                          return map[id] || 'Awaiting Alloc';
-                        };
 
-                        return (
-                          <tr key={inq.id || i}>
-                            <td><strong>{inq.name}</strong><br/><span className="text-muted" style={{ fontSize: '0.7rem' }}>{inq.phone}</span></td>
-                            <td><span className="source-pill">{inq.source || 'PORTAL'}</span></td>
-                            <td><strong>{getRepName(repId)}</strong></td>
-                            <td><span className={`badge ${repId === 'unassigned' ? 'sold' : 'available'}`}>{repId === 'unassigned' ? 'UNASSIGNED' : 'ASSIGNED'}</span></td>
-                            <td>
-                              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <select 
-                                  value={leadAssignState.leadId === inq.id ? leadAssignState.salesmanId : repId}
-                                  onChange={(e) => setLeadAssignState({ leadId: inq.id, salesmanId: e.target.value })}
-                                  style={{ padding: '4px 8px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid #ccc' }}
-                                >
-                                  <option value="unassigned">Select Rep...</option>
-                                  {(() => {
-                                    const mockExecs = [
-                                      { username: 'SR-9999', full_name: 'Vikram Sethi' },
-                                      { username: 'SR-1111', full_name: 'Ananya Rao' },
-                                      { username: 'SR-2222', full_name: 'Rahul Verma' },
-                                      { username: 'SR-3333', full_name: 'Sneha Patil' },
-                                      { username: 'SR-4444', full_name: 'Aditya Sharma' }
-                                    ];
-                                    const salesUsers = allUsers.filter(u => u.role === 'Sales' && u.is_active !== false);
-                                    const combined = [...salesUsers];
-                                    mockExecs.forEach(m => {
-                                      if (!combined.some(c => c.username === m.username)) {
-                                        combined.push({ username: m.username, role: 'Sales', full_name: m.full_name });
-                                      }
-                                    });
-                                    const filteredCombined = combined.filter(c => {
-                                      const dbUser = allUsers.find(u => u.username === c.username);
-                                      return dbUser ? dbUser.is_active !== false : true;
-                                    });
-                                    return filteredCombined.map(c => (
-                                      <option key={c.username} value={c.username}>
-                                        {c.full_name || c.username} ({c.username})
-                                      </option>
-                                    ));
-                                  })()}
-                                </select>
-                                <button onClick={() => handleAssignLead(inq.id, leadAssignState.salesmanId)} className="btn-dark" style={{ padding: '4px 10px', fontSize: '0.65rem' }}>ALLOCATE</button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                  </tbody>
-                </table>
+                          return (
+                            <tr key={inq.id || i}>
+                              <td><strong>{inq.name}</strong><br/><span className="text-muted" style={{ fontSize: '0.7rem' }}>{inq.phone}</span></td>
+                              <td><span className="source-pill">{inq.source || 'PORTAL'}</span></td>
+                              <td><strong>{getRepName(repId)}</strong></td>
+                              <td><span className={`badge ${repId === 'unassigned' ? 'sold' : 'available'}`}>{repId === 'unassigned' ? 'UNASSIGNED' : 'ASSIGNED'}</span></td>
+                              <td>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                  <select 
+                                    value={leadAssignState.leadId === inq.id ? leadAssignState.salesmanId : repId}
+                                    onChange={(e) => setLeadAssignState({ leadId: inq.id, salesmanId: e.target.value })}
+                                    style={{ padding: '4px 8px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                                  >
+                                    <option value="unassigned">Select Rep...</option>
+                                    {(() => {
+                                      const mockExecs = [
+                                        { username: 'SR-9999', full_name: 'Vikram Sethi' },
+                                        { username: 'SR-1111', full_name: 'Administrator' },
+                                        { username: 'SR-2222', full_name: 'Rahul Verma' },
+                                        { username: 'SR-3333', full_name: 'Sneha Patil' },
+                                        { username: 'SR-4444', full_name: 'Aditya Sharma' }
+                                      ];
+                                      const salesUsers = allUsers.filter(u => u.role === 'Sales' && u.is_active !== false);
+                                      const combined = [...salesUsers];
+                                      mockExecs.forEach(m => {
+                                        if (!combined.some(c => c.username === m.username)) {
+                                          combined.push({ username: m.username, role: 'Sales', full_name: m.full_name });
+                                        }
+                                      });
+                                      const filteredCombined = combined.filter(c => {
+                                        const dbUser = allUsers.find(u => u.username === c.username);
+                                        return dbUser ? dbUser.is_active !== false : true;
+                                      });
+                                      return filteredCombined.map(c => (
+                                        <option key={c.username} value={c.username}>
+                                          {c.full_name || c.username} ({c.username})
+                                        </option>
+                                      ));
+                                    })()}
+                                  </select>
+                                  <button onClick={() => handleAssignLead(inq.id, leadAssignState.salesmanId)} className="btn-dark" style={{ padding: '4px 10px', fontSize: '0.65rem' }}>ALLOCATE</button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
@@ -2298,31 +3167,33 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem 2.5rem 2.5rem' }}>
             <div className="widget-card">
               <h3 className="serif" style={{ margin: '0 0 1rem 0' }}>ERP Bookings Log</h3>
-              <table className="table-standard">
-                <thead>
-                  <tr>
-                    <th>BUYER PORTAL ACCOUNT</th>
-                    <th>UNIT ID</th>
-                    <th>AMOUNT PAID</th>
-                    <th>TOTAL EQUITY VALUE</th>
-                    <th>HANDOVER PROJECTION</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {buyers.map((b, i) => (
-                    <tr key={i}>
-                      <td><strong>{b.username}</strong></td>
-                      <td>Flat {b.unit_id}</td>
-                      <td style={{ color: '#137333', fontWeight: 'bold' }}>{b.amount_paid}</td>
-                      <td><strong>{b.total_amount}</strong></td>
-                      <td>{b.possession_date || 'DECEMBER 2027'}</td>
+              <div className="table-responsive-wrapper">
+                <table className="table-standard">
+                  <thead>
+                    <tr>
+                      <th>BUYER PORTAL ACCOUNT</th>
+                      <th>UNIT ID</th>
+                      <th>AMOUNT PAID</th>
+                      <th>TOTAL EQUITY VALUE</th>
+                      <th>HANDOVER PROJECTION</th>
                     </tr>
-                  ))}
-                  {buyers.length === 0 && (
-                    <tr><td colSpan="5" className="text-muted" style={{ textAlign: 'center' }}>No active bookings logged. Enable Buyer Portal to begin.</td></tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {buyers.map((b, i) => (
+                      <tr key={i}>
+                        <td><strong>{b.username}</strong></td>
+                        <td>Flat {b.unit_id}</td>
+                        <td style={{ color: '#137333', fontWeight: 'bold' }}>{b.amount_paid}</td>
+                        <td><strong>{b.total_amount}</strong></td>
+                        <td>{b.possession_date || 'DECEMBER 2027'}</td>
+                      </tr>
+                    ))}
+                    {buyers.length === 0 && (
+                      <tr><td colSpan="5" className="text-muted" style={{ textAlign: 'center' }}>No active bookings logged. Enable Buyer Portal to begin.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -2340,7 +3211,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
         {/* ==================== 6. FINANCE PAGE ==================== */}
         {activeTab === 'finance' && (
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem 2.5rem 2.5rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
+            <div className="responsive-grid-4col" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
               <div className="widget-card">
                 <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 'bold' }}>TOTAL COLLECTION</span>
                 <h3 className="num-mono" style={{ margin: '0.2rem 0', color: '#137333', fontSize: '1.6rem' }}>₹ {totalCollectionFormatted}</h3>
@@ -2360,45 +3231,129 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
             </div>
 
             {/* Finance Charts */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
-              <div className="widget-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h3 className="serif" style={{ margin: 0 }}>Instalment Payment Trend</h3>
-                  <select 
-                    value={revenueViewType}
-                    onChange={(e) => setRevenueViewType(e.target.value)}
-                    style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem', border: '1px solid #d1d5db', borderRadius: '6px', background: '#fff', color: '#374151', fontWeight: '600', cursor: 'pointer' }}
-                  >
-                    <option value="past">Last 6 Months</option>
-                    <option value="projection">Next 6 Months</option>
-                  </select>
+            <div className="responsive-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+              <div className="widget-card" style={{ display: 'flex', flexDirection: 'column' }}>
+                {/* Top row: Title + View Tabs */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <h3 className="serif" style={{ margin: 0, fontSize: '0.9rem', fontWeight: 'bold', color: '#1f2937' }}>Instalment Payment Trend</h3>
+                  <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: '8px', padding: '3px', gap: '2px' }}>
+                    {[['week','Week'],['month','Month'],['year','Year']].map(([val, label]) => (
+                      <button key={val}
+                        onClick={() => { setFinanceView(val); resetFinancePeriod(); }}
+                        style={{ padding: '4px 10px', fontSize: '0.65rem', fontWeight: '700', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: 'all 0.2s',
+                          background: financeView === val ? 'var(--vanya-green)' : 'transparent',
+                          color: financeView === val ? '#fff' : '#6b7280' }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
+                {/* Controls row: Past/Projection toggle + Absolute Period navigation */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                  {/* Actuals vs Projection toggle */}
+                  <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: '8px', padding: '3px', gap: '2px' }}>
+                    <button
+                      onClick={() => setFinanceViewType('past')}
+                      style={{ padding: '3px 8px', fontSize: '0.62rem', fontWeight: '700', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: 'all 0.2s',
+                        background: financeViewType === 'past' ? '#1f2937' : 'transparent',
+                        color: financeViewType === 'past' ? '#fff' : '#6b7280' }}
+                    >
+                      Actuals
+                    </button>
+                    <button
+                      onClick={() => setFinanceViewType('projection')}
+                      style={{ padding: '3px 8px', fontSize: '0.62rem', fontWeight: '700', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: 'all 0.2s',
+                        background: financeViewType === 'projection' ? '#1f2937' : 'transparent',
+                        color: financeViewType === 'projection' ? '#fff' : '#6b7280' }}
+                    >
+                      Projection
+                    </button>
+                  </div>
+
+                  {/* Absolute selectors */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <button onClick={handlePrevFinancePeriod}
+                      style={{ width: '26px', height: '26px', borderRadius: '50%', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', transition: 'all 0.15s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                    >◀</button>
+
+                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                      {financeView === 'week' && (
+                        <SelectField
+                          value={financeWeek}
+                          onChange={(e) => setFinanceWeek(Number(e.target.value))}
+                          options={getWeekOptions(financeYear, financeMonth).map(opt => ({ value: opt.value, label: `Week ${opt.value + 1}` }))}
+                        />
+                      )}
+                      {(financeView === 'week' || financeView === 'month') && (
+                        <SelectField
+                          value={financeMonth}
+                          onChange={(e) => setFinanceMonth(Number(e.target.value))}
+                          options={['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, idx) => ({ value: idx, label: m }))}
+                        />
+                      )}
+                      <SelectField
+                        value={financeYear}
+                        onChange={(e) => setFinanceYear(Number(e.target.value))}
+                        options={availableYears.map(yr => ({ value: yr, label: String(yr) }))}
+                      />
+                    </div>
+
+                    <button onClick={handleNextFinancePeriod}
+                      disabled={isFinanceNextDisabled()}
+                      style={{ 
+                        width: '26px', 
+                        height: '26px', 
+                        borderRadius: '50%', 
+                        border: '1px solid #e2e8f0', 
+                        background: isFinanceNextDisabled() ? '#f1f5f9' : '#fff', 
+                        cursor: isFinanceNextDisabled() ? 'not-allowed' : 'pointer', 
+                        fontSize: '0.8rem', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        color: isFinanceNextDisabled() ? '#cbd5e1' : '#475569', 
+                        boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', 
+                        transition: 'all 0.15s' 
+                      }}
+                      onMouseEnter={e => { if (!isFinanceNextDisabled()) e.currentTarget.style.background = '#f8fafc'; }}
+                      onMouseLeave={e => { if (!isFinanceNextDisabled()) e.currentTarget.style.background = '#fff'; }}
+                    >▶</button>
+                  </div>
+                </div>
+
                 <div style={{ height: '180px', width: '100%' }}>
                   <svg viewBox="0 0 500 150" width="100%" height="100%" style={{ overflow: 'visible' }}>
                     <defs>
-                      <linearGradient id="chart-gradient" x1="0" y1="0" x2="0" y2="1">
+                      <linearGradient id="chart-gradient-finance" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#137333" stopOpacity="0.25" />
                         <stop offset="100%" stopColor="#137333" stopOpacity="0" />
                       </linearGradient>
                     </defs>
                     {(() => {
-                      const data = getRevenueData();
+                      const data = getRevenueData(financeView, financeYear, financeMonth, financeWeek, financeViewType);
                       const monthlyCollections = data.map(d => d.value);
                       const monthLabels = data.map(d => d.label);
                       
                       const maxColl = Math.max(...monthlyCollections, 1);
+                      const n = data.length;
+                      const plotWidth = 420;
+                      const xStep = n > 1 ? plotWidth / (n - 1) : plotWidth;
+
                       const points = monthlyCollections.map((coll, idx) => {
-                        const x = 40 + idx * 84; // 40 to 460 range
-                        const y = 110 - (coll / maxColl) * 80; // 30 to 110 range
+                        const x = 40 + idx * xStep;
+                        const y = 110 - (coll / maxColl) * 80;
                         return { x, y, coll, label: monthLabels[idx] };
                       });
 
-                      const pathD = `M ${points.map(p => `${p.x} ${p.y}`).join(' L ')}`;
-                      const areaD = `M 40 110 L ${points.map(p => `${p.x} ${p.y}`).join(' L ')} L 460 110 Z`;
+                      const pathD = points.length > 0 ? `M ${points.map(p => `${p.x} ${p.y}`).join(' L ')}` : '';
+                      const areaD = points.length > 0 ? `M 40 110 L ${points.map(p => `${p.x} ${p.y}`).join(' L ')} L 460 110 Z` : '';
 
                       const formatTrendAmount = (lakhs) => {
                         if (lakhs === 0) return '₹0';
-                        return `₹${new Intl.NumberFormat('en-IN', { notation: 'compact' }).format(Math.round(lakhs * 100000))}`;
+                        return formatCompactRupees(lakhs);
                       };
 
                       return (
@@ -2409,23 +3364,26 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                           <line x1="40" y1="110" x2="460" y2="110" stroke="#e9ecef" strokeWidth="1" />
 
                           {/* Gradient area */}
-                          <path d={areaD} fill="url(#chart-gradient)" />
+                          {areaD && <path d={areaD} fill="url(#chart-gradient-finance)" />}
 
                           {/* Trend Line */}
-                          <path d={pathD} fill="none" stroke="#137333" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                          {pathD && <path d={pathD} fill="none" stroke="#137333" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />}
 
                           {/* Dots, Values, and Labels */}
-                          {points.map((p, idx) => (
-                            <g key={idx}>
-                              <circle cx={p.x} cy={p.y} r="5" fill="#137333" stroke="#fff" strokeWidth="2" />
-                              <text x={p.x} y={p.y - 12} textAnchor="middle" style={{ fontSize: '0.62rem', fill: '#137333', fontWeight: 'bold' }}>
-                                {formatTrendAmount(p.coll)}
-                              </text>
-                              <text x={p.x} y="130" textAnchor="middle" style={{ fontSize: '0.65rem', fill: '#6c757d', fontWeight: 'bold' }}>
-                                {p.label}
-                              </text>
-                            </g>
-                          ))}
+                          {points.map((p, idx) => {
+                            const cleanLabel = p.label.includes('(') ? p.label.split(' ')[0] : p.label;
+                            return (
+                              <g key={idx}>
+                                <circle cx={p.x} cy={p.y} r="5" fill="#137333" stroke="#fff" strokeWidth="2" />
+                                <text x={p.x} y={p.y - 12} textAnchor="middle" style={{ fontSize: '0.62rem', fill: '#137333', fontWeight: 'bold' }}>
+                                  {formatTrendAmount(p.coll)}
+                                </text>
+                                <text x={p.x} y="130" textAnchor="middle" style={{ fontSize: '0.65rem', fill: '#6c757d', fontWeight: 'bold' }}>
+                                  {cleanLabel}
+                                </text>
+                              </g>
+                            );
+                          })}
                         </>
                       );
                     })()}
@@ -2486,45 +3444,47 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
             {/* Payments Ledger table */}
             <div className="widget-card">
               <h3 className="serif" style={{ margin: '0 0 1rem 0' }}>Recent Collections Log</h3>
-              <table className="table-standard">
-                <thead>
-                  <tr>
-                    <th>BUYER ACCOUNT</th>
-                    <th>PROJECT</th>
-                    <th>UNIT / DEMAND INSTALMENT</th>
-                    <th>AMOUNT RECEIVED</th>
-                    <th>PAYMENT STATUS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {buyers.map((b, i) => (
-                    <tr key={`bd-${i}`}>
-                      <td><strong>{b.username}</strong></td>
-                      <td>Vanya Residences</td>
-                      <td>Unit {b.unit_id} — Progress demand ({b.construction_progress}%)</td>
-                      <td style={{ color: '#137333', fontWeight: 'bold' }}>{b.amount_paid}</td>
-                      <td><span className="badge available">RECEIVED &amp; CLEAR</span></td>
+              <div className="table-responsive-wrapper">
+                <table className="table-standard">
+                  <thead>
+                    <tr>
+                      <th>BUYER ACCOUNT</th>
+                      <th>PROJECT</th>
+                      <th>UNIT / DEMAND INSTALMENT</th>
+                      <th>AMOUNT RECEIVED</th>
+                      <th>PAYMENT STATUS</th>
                     </tr>
-                  ))}
-                  {units
-                    .filter(u =>
-                      u.status === 'SOLD OUT' &&
-                      u.tag_color &&
-                      !['green', 'red', 'blue', ''].includes((u.tag_color || '').toLowerCase()) &&
-                      !buyers.some(b => b.username?.toLowerCase().trim() === u.tag_color?.toLowerCase().trim())
-                    )
-                    .map((u, i) => (
-                      <tr key={`leg-${i}`}>
-                        <td><strong>{u.tag_color}</strong></td>
+                  </thead>
+                  <tbody>
+                    {buyers.map((b, i) => (
+                      <tr key={`bd-${i}`}>
+                        <td><strong>{b.username}</strong></td>
                         <td>Vanya Residences</td>
-                        <td>Unit {u.unit_id} — {u.type}</td>
-                        <td style={{ color: '#6b7280', fontWeight: 'bold' }}>—</td>
-                        <td><span className="badge reserved">LEGACY ENTRY</span></td>
+                        <td>Unit {b.unit_id} — Progress demand ({b.construction_progress}%)</td>
+                        <td style={{ color: '#137333', fontWeight: 'bold' }}>{b.amount_paid}</td>
+                        <td><span className="badge available">RECEIVED &amp; CLEAR</span></td>
                       </tr>
-                    ))
-                  }
-                </tbody>
-              </table>
+                    ))}
+                    {units
+                      .filter(u =>
+                        u.status === 'SOLD OUT' &&
+                        u.tag_color &&
+                        !['green', 'red', 'blue', ''].includes((u.tag_color || '').toLowerCase()) &&
+                        !buyers.some(b => b.username?.toLowerCase().trim() === u.tag_color?.toLowerCase().trim())
+                      )
+                      .map((u, i) => (
+                        <tr key={`leg-${i}`}>
+                          <td><strong>{u.tag_color}</strong></td>
+                          <td>Vanya Residences</td>
+                          <td>Unit {u.unit_id} — {u.type}</td>
+                          <td style={{ color: '#6b7280', fontWeight: 'bold' }}>—</td>
+                          <td><span className="badge reserved">LEGACY ENTRY</span></td>
+                        </tr>
+                      ))
+                    }
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -2532,7 +3492,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
         {/* ==================== 7. CP PARTNERS PAGE ==================== */}
         {activeTab === 'cp' && (
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem 2.5rem 2.5rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '1.5rem' }}>
+            <div className="responsive-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '1.5rem' }}>
               {/* Commissions Approval Ledger */}
               <div>
                 <AdminCPCommissionsClient initialCommissions={commissions} cpPartners={cpPartners} />
@@ -2574,7 +3534,8 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                 </div>
               </div>
               
-              <table className="table-standard">
+              <div className="table-responsive-wrapper">
+                <table className="table-standard">
                 <thead>
                   <tr>
                     <th>USERNAME</th>
@@ -2687,6 +3648,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                   ))}
                 </tbody>
               </table>
+            </div>
             </div>
           </div>
         )}
@@ -2877,7 +3839,8 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem 2.5rem 2.5rem' }}>
             <div className="widget-card">
               <h3 className="serif" style={{ margin: '0 0 1.25rem 0' }}>ERP System Role Access Permissions</h3>
-              <table className="table-standard">
+              <div className="table-responsive-wrapper">
+                <table className="table-standard">
                 <thead>
                   <tr>
                     <th>ROLE NAME</th>
@@ -2908,6 +3871,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                   </tr>
                 </tbody>
               </table>
+            </div>
             </div>
           </div>
         )}
@@ -2951,139 +3915,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
         )}
 
 
-        {/* Sourcing Zone Manager Tab */}
-        {activeTab === 'sourcing-manager' && (
-          <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem 2.5rem 2.5rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1.5rem' }}>
-              
-              {/* Left Column: Sourcing Form */}
-              <div className="widget-card" style={{ height: 'fit-content' }}>
-                <h3 className="serif" style={{ margin: '0 0 1.25rem 0' }}>Assign Sourcing Target</h3>
-                <form onSubmit={handleAddSourcingMetric} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>SELECT CHANNEL PARTNER *</label>
-                    <select 
-                      required 
-                      value={newSourcingCp} 
-                      onChange={e => setNewSourcingCp(e.target.value)} 
-                      style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }}
-                    >
-                      <option value="">-- Select Partner --</option>
-                      {cpPartners.map(cp => (
-                        <option key={cp.id} value={cp.username}>{cp.firm_name} ({cp.username})</option>
-                      ))}
-                    </select>
-                  </div>
 
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>ZONE DATABASE *</label>
-                    <select 
-                      value={selectedZone} 
-                      onChange={e => setSelectedZone(e.target.value)} 
-                      style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }}
-                    >
-                      <option value="East">East Zone Database</option>
-                      <option value="West">West Zone Database</option>
-                    </select>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>WALK-IN TARGET *</label>
-                      <input 
-                        type="number" 
-                        required 
-                        value={newSourcingTarget} 
-                        onChange={e => setNewSourcingTarget(e.target.value)} 
-                        style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }} 
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>ACTUAL WALK-INS</label>
-                      <input 
-                        type="number" 
-                        value={newSourcingActual} 
-                        onChange={e => setNewSourcingActual(e.target.value)} 
-                        style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }} 
-                      />
-                    </div>
-                  </div>
-
-                  <button type="submit" className="btn-dark" style={{ width: '100%', padding: '0.8rem', fontWeight: 'bold', marginTop: '0.5rem' }}>
-                    REGISTER WEEKLY TARGETS
-                  </button>
-                </form>
-              </div>
-
-              {/* Right Column: Zone registries */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                <div className="widget-card">
-                  <div className="flex-between mb-2" style={{ borderBottom: '1px solid #f1f3f5', paddingBottom: '0.75rem' }}>
-                    <h3 className="serif" style={{ margin: 0 }}>Zone Databases Target Board</h3>
-                    
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      {['East', 'West'].map(z => {
-                        const zoneCount = sourcingMetricsList.filter(m => m.zone === z).length;
-                        return (
-                          <button
-                            key={z}
-                            onClick={() => setSelectedZone(z)}
-                            className={`btn-outline ${selectedZone === z ? 'active' : ''}`}
-                            style={{ padding: '4px 12px', fontSize: '0.7rem', borderRadius: '4px', textTransform: 'uppercase' }}
-                          >
-                            {z} Zone ({zoneCount})
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <table className="table-standard">
-                    <thead>
-                      <tr>
-                        <th>CP FIRM</th>
-                        <th>ZONE</th>
-                        <th>TARGET GOAL</th>
-                        <th>ACTUAL PHYSICAL WALK-INS</th>
-                        <th>% RING</th>
-                        <th>ACTIONS</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sourcingMetricsList.filter(m => m.zone === selectedZone).map((m, idx) => {
-                        const partner = cpPartners.find(cp => cp.username === m.cp_username) || { firm_name: m.cp_username };
-                        const rate = m.walk_in_target > 0 ? Math.round((m.walk_in_actual / m.walk_in_target) * 100) : 0;
-                        return (
-                          <tr key={m.id || idx}>
-                            <td>
-                              <strong>{partner.firm_name}</strong><br/>
-                              <span className="text-muted" style={{ fontSize: '0.72rem' }}>CP: {m.cp_username}</span>
-                            </td>
-                            <td><span className="badge available">{m.zone.toUpperCase()}</span></td>
-                            <td><strong>{m.walk_in_target} walk-ins</strong></td>
-                            <td style={{ color: m.walk_in_actual >= m.walk_in_target ? '#137333' : '#d97706', fontWeight: 'bold' }}>
-                              {m.walk_in_actual} walk-ins
-                            </td>
-                            <td><strong>{rate}%</strong></td>
-                            <td>
-                              <button onClick={() => handleUpdateSourcingActual(m.id, m.walk_in_actual)} className="btn-outline" style={{ padding: '3px 8px', fontSize: '0.68rem', margin: 0 }}>
-                                🔄 UPDATE ACTUAL
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {sourcingMetricsList.filter(m => m.zone === selectedZone).length === 0 && (
-                        <tr><td colSpan="6" className="text-muted" style={{ textAlign: 'center', padding: '2rem' }}>No targets assigned for this zone. Use form on the left.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        )}
 
         {/* Removed duplicate bottom sections */}
 
@@ -3174,7 +4006,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                   >
                     <option value="unassigned">Awaiting Allocation (Unassigned)</option>
                     <option value="SR-9999">Vikram Sethi (SR-9999)</option>
-                    <option value="SR-1111">Ananya Rao (SR-1111)</option>
+                    <option value="SR-1111">Administrator (SR-1111)</option>
                     <option value="SR-2222">Rahul Verma (SR-2222)</option>
                     <option value="SR-3333">Sneha Patil (SR-3333)</option>
                     <option value="SR-4444">Aditya Sharma (SR-4444)</option>

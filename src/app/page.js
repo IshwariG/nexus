@@ -14,21 +14,12 @@ export default function Home() {
         </div>
 
         {/* Left Side: Content — sits on top with gradient fade */}
-        <div style={{
-          width: '52%',
-          background: 'linear-gradient(to right, #e0deda 65%, transparent 100%)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          padding: '6rem 4rem',
-          zIndex: 10,
-          position: 'relative'
-        }}>
+        <div className="hero-content-wrapper">
           <div className="animate-fade-in" style={{ maxWidth: '600px', margin: '0 auto' }}>
             <p className="subtitle" style={{ color: 'var(--vanya-green)', fontSize: '0.8rem', letterSpacing: '3px', marginTop: '3rem', marginBottom: '1.5rem', fontWeight: 600, textTransform: 'uppercase' }}>
               PRESERVING THE HERITAGE COLLECTION
             </p>
-            <h1 className="title" style={{ color: 'var(--vanya-green)', fontSize: '4.5rem', lineHeight: 1.1, marginBottom: '2rem', fontFamily: 'var(--font-serif)', fontWeight: 500 }}>
+            <h1 className="title hero-main-title" style={{ color: 'var(--vanya-green)', lineHeight: 1.1, marginBottom: '2rem', fontFamily: 'var(--font-serif)', fontWeight: 500 }}>
               Ancestral Wisdom,<br />Modern Grace.
             </h1>
             <p className="description" style={{ color: '#555', fontSize: '1.1rem', marginBottom: '3rem', lineHeight: 1.6 }}>

@@ -215,14 +215,38 @@
   border-radius: 6px;
 }
 
+.form-row-2col {
+  display: flex;
+  gap: 2rem;
+}
+
 @media (max-width: 768px) {
   .experience-block, .experience-block.reverse, .sanctuary-section {
     flex-direction: column;
   }
   .exp-image, .sanctuary-image {
-    width: 100%;
-    height: 300px;
+    width: 100% !important;
+    height: 300px !important;
   }
   .lifestyle-hero-content h1 { font-size: 2.5rem; }
   .sanctuary-content h2 { font-size: 2.5rem; }
+  
+  .form-row-2col {
+    flex-direction: column;
+    gap: 1rem !important;
+  }
+  
+  .legacy-form-container {
+    padding: 2rem !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .sanctuary-stats {
+    gap: 1.5rem !important;
+    justify-content: space-between;
+  }
+  .stat-item h3 {
+    font-size: 1.8rem !important;
+  }
 }

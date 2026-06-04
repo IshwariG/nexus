@@ -423,15 +423,15 @@ export default function GridClient({ units, inquiries, buyers = [], users = [], 
           return (
             <>
               {/* ===== MAIN GRID: Donut | Bar Chart | KPI Stack ===== */}
-              <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr 220px', gap: '1.5rem', marginBottom: '1.5rem' }}>
+              <div className="responsive-grid-3col" style={{ display: 'grid', gridTemplateColumns: '220px 410px 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
                 
                 {/* LEFT: Inventory Distribution Donut */}
-                <div className="widget-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px' }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '1rem' }}>INVENTORY DISTRIBUTION</span>
+                <div className="widget-card" style={{ padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: '700', color: '#4b5563', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>INVENTORY DISTRIBUTION</span>
                   
                   {/* Refined SVG Donut Chart */}
-                  <div style={{ position: 'relative', width: '160px', height: '160px', marginBottom: '1rem' }}>
-                    <svg width="160" height="160" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
+                  <div style={{ position: 'relative', width: '135px', height: '135px', marginBottom: '0.6rem' }}>
+                    <svg width="135" height="135" viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)' }}>
                       <circle cx="18" cy="18" r="14" fill="none" stroke="#f1f3f5" strokeWidth="3.8" />
                       <circle cx="18" cy="18" r="14" fill="none" stroke="#137333" strokeWidth="4" pathLength="100"
                         strokeDasharray={`${pAvailablePerc} ${100 - pAvailablePerc}`} strokeDashoffset="0"
@@ -444,7 +444,7 @@ export default function GridClient({ units, inquiries, buyers = [], users = [], 
                         strokeLinecap="round" style={{ transition: 'stroke-dasharray 0.8s ease' }} />
                     </svg>
                     <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                      <h2 className="serif" style={{ margin: 0, fontSize: '2.2rem', color: 'var(--vanya-green)', fontWeight: 'bold', lineHeight: 1 }}>{totalUnits}</h2>
+                      <h2 className="serif" style={{ margin: 0, fontSize: '1.8rem', color: 'var(--vanya-green)', fontWeight: 'bold', lineHeight: 1 }}>{totalUnits}</h2>
                       <span style={{ fontSize: '0.58rem', color: '#9ca3af', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>TOTAL UNITS</span>
                     </div>
                   </div>
@@ -471,10 +471,43 @@ export default function GridClient({ units, inquiries, buyers = [], users = [], 
                 </div>
 
                 {/* CENTER: Monthly Sales Velocity Bar Chart */}
-                <div className="widget-card" style={{ padding: '1.5rem', background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <div className="widget-card" style={{ padding: '1rem 1.25rem', background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px', maxWidth: '410px', width: '100%', margin: '0 auto' }}>
+                  <div style={{ marginBottom: '0.75rem' }}>
                     <div>
                       <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--vanya-green)', letterSpacing: '0.5px' }}>MONTHLY SALES VELOCITY</span>
+                      
+                      {/* Velocity Range Filter Dropdown - Moved below title */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.4rem', marginBottom: '0.4rem' }}>
+                        <button 
+                          type="button"
+                          onClick={() => setVelocityOffset(prev => prev - 1)}
+                          style={{ background: '#f1f3f5', border: 'none', borderRadius: '4px', padding: '0.2rem 0.5rem', cursor: 'pointer', color: '#4b5563', fontSize: '0.75rem', fontWeight: 'bold' }}
+                        >
+                          &lt;
+                        </button>
+                        <select
+                          value={velocityRange}
+                          onChange={(e) => {
+                            setVelocityRange(e.target.value);
+                            setVelocityOffset(0);
+                          }}
+                          style={{ padding: '0.25rem 0.5rem', fontSize: '0.72rem', border: '1px solid #d1d5db', borderRadius: '6px', background: '#fff', color: '#374151', fontWeight: '600', outline: 'none', cursor: 'pointer' }}
+                        >
+                          <option value="WEEK">Week</option>
+                          <option value="MONTH">Month</option>
+                          <option value="H1">Jan - Jun</option>
+                          <option value="H2">Jul - Dec</option>
+                        </select>
+                        <button 
+                          type="button"
+                          onClick={() => setVelocityOffset(prev => prev + 1)}
+                          disabled={velocityOffset >= 0}
+                          style={{ background: velocityOffset >= 0 ? '#f9fafb' : '#f1f3f5', border: 'none', borderRadius: '4px', padding: '0.2rem 0.5rem', cursor: velocityOffset >= 0 ? 'not-allowed' : 'pointer', color: velocityOffset >= 0 ? '#d1d5db' : '#4b5563', fontSize: '0.75rem', fontWeight: 'bold' }}
+                        >
+                          &gt;
+                        </button>
+                      </div>
+
                       <div style={{ display: 'flex', gap: '1rem', marginTop: '0.3rem', fontSize: '0.65rem', fontWeight: 'bold' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#137333' }}>
                           <span style={{ width: '8px', height: '8px', background: '#137333', borderRadius: '50%', display: 'inline-block' }}></span> REVENUE
@@ -483,36 +516,6 @@ export default function GridClient({ units, inquiries, buyers = [], users = [], 
                           <span style={{ width: '8px', height: '8px', background: 'none', border: '2px solid #9ca3af', borderRadius: '50%', display: 'inline-block' }}></span> TARGET
                         </span>
                       </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <button 
-                        type="button"
-                        onClick={() => setVelocityOffset(prev => prev - 1)}
-                        style={{ background: '#f1f3f5', border: 'none', borderRadius: '4px', padding: '0.3rem 0.6rem', cursor: 'pointer', color: '#4b5563', fontSize: '0.9rem', fontWeight: 'bold' }}
-                      >
-                        &lt;
-                      </button>
-                      <select
-                        value={velocityRange}
-                        onChange={(e) => {
-                          setVelocityRange(e.target.value);
-                          setVelocityOffset(0);
-                        }}
-                        style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem', border: '1px solid #d1d5db', borderRadius: '6px', background: '#fff', color: '#374151', fontWeight: '600', outline: 'none', cursor: 'pointer' }}
-                      >
-                        <option value="WEEK">Week</option>
-                        <option value="MONTH">Month</option>
-                        <option value="H1">Jan - Jun</option>
-                        <option value="H2">Jul - Dec</option>
-                      </select>
-                      <button 
-                        type="button"
-                        onClick={() => setVelocityOffset(prev => prev + 1)}
-                        disabled={velocityOffset >= 0}
-                        style={{ background: velocityOffset >= 0 ? '#f9fafb' : '#f1f3f5', border: 'none', borderRadius: '4px', padding: '0.3rem 0.6rem', cursor: velocityOffset >= 0 ? 'not-allowed' : 'pointer', color: velocityOffset >= 0 ? '#d1d5db' : '#4b5563', fontSize: '0.9rem', fontWeight: 'bold' }}
-                      >
-                        &gt;
-                      </button>
                     </div>
                   </div>
                   {/* SVG Bar chart */}
@@ -525,49 +528,62 @@ export default function GridClient({ units, inquiries, buyers = [], users = [], 
                     const targetLine = maxVal * 0.55;
                     
                     return (
-                      <div style={{ position: 'relative', height: '220px', marginTop: '1rem' }}>
-                        <svg viewBox="0 0 600 220" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ overflow: 'visible' }}>
-                          {[0, 0.25, 0.5, 0.75, 1].map((perc, i) => {
-                            const val = (maxVal * 1.2 * perc).toFixed(1);
-                            const y = 195 - (perc * 170);
-                            return (
-                              <g key={i}>
-                                <line x1="40" y1={y} x2="580" y2={y} stroke="#f1f3f5" strokeWidth="1" />
-                                <text x="30" y={y + 4} textAnchor="end" style={{ fontSize: '0.78rem', fill: '#9ca3af', fontWeight: '700' }}>{val}</text>
-                              </g>
-                            );
-                          })}
-                          
-                          <line x1="40" y1={195 - (targetLine / (maxVal * 1.2)) * 170} x2="580" y2={195 - (targetLine / (maxVal * 1.2)) * 170} stroke="#137333" strokeWidth="1.5" strokeDasharray="8 4" opacity="0.4" />
-                          
-                          {months.map((m, idx) => {
-                            const n = Math.max(months.length, 1);
-                            const totalWidth = 540;
-                            const maxBarWidth = 55;
-                            const minGap = 8;
-                            const gap = Math.max(minGap, Math.floor(totalWidth / (n * 8)));
-                            const barWidth = Math.min(maxBarWidth, Math.floor((totalWidth - gap * (n + 1)) / n));
-                            const x = 40 + gap + idx * (barWidth + gap);
-                            const barHeight = Math.max(3, (m.value / (maxVal * 1.2)) * 170);
-                            const y = 195 - barHeight;
-                            const crLabel = `${m.value.toFixed(1)} Cr`;
+                      <>
+                        <div style={{ position: 'relative', height: '180px', marginTop: '1rem' }}>
+                          <svg viewBox="0 0 600 220" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ overflow: 'visible' }}>
+                            {[0, 0.25, 0.5, 0.75, 1].map((perc, i) => {
+                              const val = (maxVal * 1.2 * perc).toFixed(1);
+                              const y = 195 - (perc * 170);
+                              return (
+                                <g key={i}>
+                                  <line x1="40" y1={y} x2="580" y2={y} stroke="#f1f3f5" strokeWidth="1" />
+                                  <text x="30" y={y + 4} textAnchor="end" style={{ fontSize: '12px', fill: '#9ca3af', fontWeight: '700' }}>{val}</text>
+                                </g>
+                              );
+                            })}
                             
-                            return (
-                              <g key={idx}>
-                                <rect x={x} y={y} width={barWidth} height={barHeight} rx="4" ry="4" fill="url(#barGradientGrid)" />
-                                <text x={x + barWidth / 2} y={y - 8} textAnchor="middle" style={{ fontSize: '0.70rem', fill: '#1f2937', fontWeight: '700' }}>{crLabel}</text>
-                                <text x={x + barWidth / 2} y={210} textAnchor="middle" style={{ fontSize: '0.68rem', fill: '#6b7280', fontWeight: '700' }}>{m.label}</text>
-                              </g>
-                            );
-                          })}
-                          <defs>
-                            <linearGradient id="barGradientGrid" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#2d7c5f" stopOpacity="0.9" />
-                              <stop offset="100%" stopColor="#b8d8c8" stopOpacity="0.6" />
-                            </linearGradient>
-                          </defs>
-                        </svg>
-                      </div>
+                            <line x1="40" y1={195 - (targetLine / (maxVal * 1.2)) * 170} x2="580" y2={195 - (targetLine / (maxVal * 1.2)) * 170} stroke="#137333" strokeWidth="1.5" strokeDasharray="8 4" opacity="0.4" />
+                            
+                            {months.map((m, idx) => {
+                              const n = Math.max(months.length, 1);
+                              const totalWidth = 540;
+                              const maxBarWidth = 55;
+                              const minGap = 8;
+                              const gap = Math.max(minGap, Math.floor(totalWidth / (n * 8)));
+                              const barWidth = Math.min(maxBarWidth, Math.floor((totalWidth - gap * (n + 1)) / n));
+                              const x = 40 + gap + idx * (barWidth + gap);
+                              const barHeight = Math.max(3, (m.value / (maxVal * 1.2)) * 170);
+                              const y = 195 - barHeight;
+                              const crLabel = `${m.value.toFixed(1)} Cr`;
+                              
+                              return (
+                                <g key={idx}>
+                                  <rect x={x} y={y} width={barWidth} height={barHeight} rx="4" ry="4" fill="url(#barGradientGrid)" />
+                                  <text x={x + barWidth / 2} y={y - 8} textAnchor="middle" style={{ fontSize: '11px', fill: '#1f2937', fontWeight: '700' }}>{crLabel}</text>
+                                  {m.label.includes('(') ? (
+                                    <>
+                                      <text x={x + barWidth / 2} y={204} textAnchor="middle" style={{ fontSize: '11px', fill: '#6b7280', fontWeight: '700' }}>
+                                        {m.label.split(' ')[0]}
+                                      </text>
+                                      <text x={x + barWidth / 2} y={215} textAnchor="middle" style={{ fontSize: '10px', fill: '#9ca3af', fontWeight: '600' }}>
+                                        {m.label.slice(m.label.indexOf('('))}
+                                      </text>
+                                    </>
+                                  ) : (
+                                    <text x={x + barWidth / 2} y={210} textAnchor="middle" style={{ fontSize: '11px', fill: '#6b7280', fontWeight: '700' }}>{m.label}</text>
+                                  )}
+                                </g>
+                              );
+                            })}
+                            <defs>
+                              <linearGradient id="barGradientGrid" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#2d7c5f" stopOpacity="0.9" />
+                                <stop offset="100%" stopColor="#b8d8c8" stopOpacity="0.6" />
+                              </linearGradient>
+                            </defs>
+                          </svg>
+                        </div>
+                      </>
                     );
                   })()}
                 </div>
@@ -582,7 +598,7 @@ export default function GridClient({ units, inquiries, buyers = [], users = [], 
                           <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                         </svg>
                       </div>
-                      <h3 className="num-mono" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>₹ {formatCr(pAvgPriceLakhs)}</h3>
+                      <h3 className="num-mono" style={{ margin: 0, fontSize: '1.15rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>₹ {formatCr(pAvgPriceLakhs)}</h3>
                     </div>
                   </div>
                   <div className="widget-card" style={{ padding: '1.25rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', background: '#fff', border: '1px solid #f1f3f5', borderRadius: '12px' }}>
@@ -593,7 +609,7 @@ export default function GridClient({ units, inquiries, buyers = [], users = [], 
                           <rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 7V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3" />
                         </svg>
                       </div>
-                      <h3 className="num-mono" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>₹ {formatCr(pTotalPortfolioLakhs)}</h3>
+                      <h3 className="num-mono" style={{ margin: 0, fontSize: '1.15rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>₹ {formatCr(pTotalPortfolioLakhs)}</h3>
                     </div>
                     <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: '700', marginTop: '0.3rem', marginLeft: '0.1rem' }}>↑ +{project === 'vanya-estate' ? '18.4' : project === 'vanya-meadows' ? '21.0' : portfolioIncreasePerc.toFixed(1)}% INCREASE</span>
                   </div>
@@ -605,7 +621,7 @@ export default function GridClient({ units, inquiries, buyers = [], users = [], 
                           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
                         </svg>
                       </div>
-                      <h3 className="num-mono" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{pConversionRate}%</h3>
+                      <h3 className="num-mono" style={{ margin: 0, fontSize: '1.15rem', color: 'var(--vanya-green)', fontWeight: 'bold' }}>{pConversionRate}%</h3>
                     </div>
                     <span style={{ fontSize: '0.65rem', color: '#6b7280', fontWeight: '600', marginTop: '0.3rem', marginLeft: '0.1rem' }}>LEAD TO DEPOSIT</span>
                   </div>

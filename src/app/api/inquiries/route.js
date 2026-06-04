@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import fs from 'fs';
+import path from 'path';
 
 export async function GET() {
   try {
@@ -185,6 +187,69 @@ export async function POST(request) {
   }
 }
 
+// Helper to normalize phone numbers for referral matching
+const normalizePhoneForSync = (p) => {
+  if (!p) return '';
+  return p.replace(/[^\d]/g, '').slice(-10);
+};
+
+// Sync Referral Status between Inquiry progression and Referral list
+async function syncReferralStatus(phone, newStatus) {
+  if (!phone) return;
+  const targetPhoneNormalized = normalizePhoneForSync(phone);
+  
+  let referralStatus = null;
+  if (newStatus.startsWith('DONE|')) {
+    referralStatus = 'WALKED_IN';
+  } else if (newStatus.startsWith('CONVERTED|')) {
+    referralStatus = 'BOOKED';
+  }
+  
+  if (!referralStatus) return;
+
+  // 1. Try updating in Supabase
+  try {
+    const { data: allReferrals, error: fetchErr } = await supabase
+      .from('Referrals')
+      .select('*');
+    
+    if (!fetchErr && allReferrals) {
+      const match = allReferrals.find(r => normalizePhoneForSync(r.friend_phone) === targetPhoneNormalized);
+      if (match) {
+        await supabase
+          .from('Referrals')
+          .update({ status: referralStatus })
+          .eq('id', match.id);
+        console.log(`Updated referral ID ${match.id} to ${referralStatus} in Supabase`);
+      }
+    }
+  } catch (e) {
+    console.warn('Supabase referral sync failed, falling back to local file DB:', e.message);
+  }
+
+  // 2. Sync to local referrals_db.json fallback
+  try {
+    const dbPath = path.join(process.cwd(), 'referrals_db.json');
+    if (fs.existsSync(dbPath)) {
+      const fileData = fs.readFileSync(dbPath, 'utf8');
+      const referrals = JSON.parse(fileData) || [];
+      let updated = false;
+      for (const r of referrals) {
+        if (normalizePhoneForSync(r.friend_phone) === targetPhoneNormalized) {
+          r.status = referralStatus;
+          updated = true;
+        }
+      }
+      if (updated) {
+        fs.writeFileSync(dbPath, JSON.stringify(referrals, null, 2), 'utf8');
+        console.log(`Updated matching referrals to ${referralStatus} in local referrals_db.json`);
+      }
+    }
+  } catch (e) {
+    console.error('Error updating local referrals DB:', e);
+  }
+}
+
 export async function PATCH(request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -201,18 +266,26 @@ export async function PATCH(request) {
 
     if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 });
 
-    // Detect if this is a site walk-in qualification event (DONE status)
+    // Fetch details of the inquiry being updated to identify referred phone and source details
+    let inqPhone = null;
     let isWalkIn = false;
     let cpUsername = null;
-    if (status && status.startsWith('DONE|')) {
-      isWalkIn = true;
+
+    if (status) {
       const { data: currentInq } = await supabase
         .from('Inquiries')
-        .select('source')
+        .select('phone, source')
         .eq('id', id)
         .maybeSingle();
-      if (currentInq && currentInq.source && currentInq.source.startsWith('CP_Referral|')) {
-        cpUsername = currentInq.source.split('|')[1];
+
+      if (currentInq) {
+        inqPhone = currentInq.phone;
+        if (status.startsWith('DONE|')) {
+          isWalkIn = true;
+          if (currentInq.source && currentInq.source.startsWith('CP_Referral|')) {
+            cpUsername = currentInq.source.split('|')[1];
+          }
+        }
       }
     }
 
@@ -232,6 +305,11 @@ export async function PATCH(request) {
       .select();
 
     if (error) throw error;
+
+    // If status is updated, sync the referral status to reward the buyer
+    if (status && inqPhone) {
+      await syncReferralStatus(inqPhone, status);
+    }
 
     // If walk-in physical arrival occurs, promote Inquiry to Opportunities with 30-day CP tagging rules
     if (isWalkIn) {

@@ -23,6 +23,7 @@ const maskEmail = (emailStr) => {
 
 export default function ChannelPartnerClient({ username }) {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -134,6 +135,7 @@ export default function ChannelPartnerClient({ username }) {
 
   const changeTab = (tabName, leadId = null) => {
     setActiveTab(tabName);
+    setIsMobileSidebarOpen(false);
     if (leadId) setSelectedLeadId(leadId);
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -771,7 +773,7 @@ export default function ChannelPartnerClient({ username }) {
     <div className="admin-layout" style={{ background: 'var(--admin-bg)' }}>
       
       {/* SIDEBAR NAVIGATION */}
-      <aside className="admin-sidebar" style={{ background: '#ffffff', borderRight: '1px solid #f1f3f5', display: 'flex', flexDirection: 'column', width: '260px', overflowY: 'auto' }}>
+      <aside className={`admin-sidebar ${isMobileSidebarOpen ? 'open' : ''}`} style={{ background: '#ffffff', borderRight: '1px solid #f1f3f5', display: 'flex', flexDirection: 'column', width: '260px', overflowY: 'auto' }}>
         <div className="admin-sidebar-logo">
           <h2>DreamSpaces</h2>
           <p style={{ color: 'var(--vanya-gold)', fontSize: '0.6rem', letterSpacing: '1px' }}>CP PARTNER PORTAL</p>
@@ -821,13 +823,17 @@ export default function ChannelPartnerClient({ username }) {
       </aside>
 
       {/* MAIN CONTAINER */}
-      <main className="admin-main" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      {isMobileSidebarOpen && <div className="mobile-sidebar-backdrop" onClick={() => setIsMobileSidebarOpen(false)} />}
+      <main className="admin-main" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh', overflowX: 'hidden' }}>
         
         {/* HEADER BAR */}
         <header className="admin-header" style={{ background: 'white', padding: '1rem 2.5rem', borderBottom: '1px solid #f1f3f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h1 className="serif" style={{ fontSize: '1.35rem', margin: 0, color: 'var(--vanya-green)' }}>Welcome back, Partner! 👋</h1>
-            <p className="text-muted" style={{ margin: 0, fontSize: '0.68rem', letterSpacing: '0.5px' }}>PARTNER CODE: {username.toUpperCase()} • BASE COMM RATE: {cpDetails.commission_rate}%</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button className="mobile-sidebar-toggle" onClick={() => setIsMobileSidebarOpen(true)}>☰</button>
+            <div>
+              <h1 className="serif" style={{ fontSize: '1.35rem', margin: 0, color: 'var(--vanya-green)' }}>Welcome back, Partner! 👋</h1>
+              <p className="text-muted" style={{ margin: 0, fontSize: '0.68rem', letterSpacing: '0.5px' }}>PARTNER CODE: {username.toUpperCase()} • BASE COMM RATE: {cpDetails.commission_rate}%</p>
+            </div>
           </div>
         </header>
 
@@ -846,7 +852,7 @@ export default function ChannelPartnerClient({ username }) {
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem' }}>
             
             {/* Top KPI Cards (Row 1 of 4 Cards) */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
+            <div className="responsive-grid-4col" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
               <div className="kpi-card">
                 <span>TOTAL LEADS</span>
                 <h2>{leads.length}</h2>
@@ -900,13 +906,14 @@ export default function ChannelPartnerClient({ username }) {
             </div>
 
             {/* Bottom Row: Recent Leads & Earnings Summary */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem' }}>
+            <div className="responsive-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem' }}>
               <div className="widget-card">
                 <div className="flex-between mb-2">
                   <h3 className="serif" style={{ margin: 0 }}>Recent Leads</h3>
                   <button onClick={() => changeTab('my-leads')} style={{ background: 'none', border: 'none', color: 'var(--vanya-gold)', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>View All Leads</button>
                 </div>
-                <table className="table-standard">
+                <div className="table-responsive-wrapper">
+                  <table className="table-standard">
                   <thead>
                     <tr>
                       <th>CLIENT NAME</th>
@@ -924,6 +931,7 @@ export default function ChannelPartnerClient({ username }) {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
 
               <div className="widget-card" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -1036,7 +1044,7 @@ export default function ChannelPartnerClient({ username }) {
             <div className="widget-card">
               <div className="flex-between mb-2" style={{ borderBottom: '1px solid #f1f3f5', paddingBottom: '1rem' }}>
                 {/* Status Filter Tab Pills */}
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   {['all', 'new', 'under-review', 'visit-scheduled', 'approved', 'converted', 'rejected'].map(t => (
                     <button 
                       key={t}
@@ -1063,7 +1071,8 @@ export default function ChannelPartnerClient({ username }) {
                 </div>
               </div>
 
-              <table className="table-standard" style={{ marginTop: '1rem' }}>
+              <div className="table-responsive-wrapper">
+                <table className="table-standard" style={{ marginTop: '1rem' }}>
                 <thead>
                   <tr>
                     <th>LEAD DETAILS</th>
@@ -1101,6 +1110,7 @@ export default function ChannelPartnerClient({ username }) {
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         )}
@@ -1115,10 +1125,10 @@ export default function ChannelPartnerClient({ username }) {
               <span className="text-muted" style={{ fontSize: '0.75rem' }}>Lead ID: #FLD-{selectedLead.id.slice(0, 8).toUpperCase()}</span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem' }}>
+            <div className="responsive-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem' }}>
               <div className="widget-card">
                 <h3 className="serif" style={{ margin: '0 0 1.25rem 0', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.5rem' }}>Contact Details</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', fontSize: '0.82rem' }}>
+                <div className="responsive-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', fontSize: '0.82rem' }}>
                   <div>
                     <span style={{ fontSize: '0.65rem', color: '#999', display: 'block', fontWeight: 'bold' }}>MOBILE NUMBER</span>
                     <strong style={{ color: 'var(--vanya-green)', fontSize: '1rem' }}>📞 {selectedLead.phone || 'N/A'}</strong>
@@ -1468,7 +1478,7 @@ export default function ChannelPartnerClient({ username }) {
         {activeTab === 'earnings' && (
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem' }}>
             {/* KPI Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
+            <div className="responsive-grid-3col" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
               <div className="kpi-card">
                 <span>TOTAL EARNINGS</span>
                 <h2>{formatAmountINR(totalEarningsVal)}</h2>
@@ -1483,7 +1493,7 @@ export default function ChannelPartnerClient({ username }) {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+            <div className="responsive-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
               {/* Earnings velocity bar chart */}
               <div className="widget-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -1533,7 +1543,8 @@ export default function ChannelPartnerClient({ username }) {
             {/* Earnings breakdown table */}
             <div className="widget-card">
               <h3 className="serif" style={{ margin: '0 0 1rem 0' }}>Earnings Breakdown</h3>
-              <table className="table-standard">
+              <div className="table-responsive-wrapper">
+                <table className="table-standard">
                 <thead>
                   <tr>
                     <th>PROJECT</th>
@@ -1553,6 +1564,7 @@ export default function ChannelPartnerClient({ username }) {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         )}
@@ -1560,7 +1572,7 @@ export default function ChannelPartnerClient({ username }) {
         {/* ==================== 6. PAYOUTS PAGE ==================== */}
         {activeTab === 'payouts' && (
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
+            <div className="responsive-grid-4col" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
               <div className="kpi-card">
                 <span>TOTAL PAYOUTS</span>
                 <h2>{formatAmountINR(paidAmountVal)}</h2>
@@ -1581,7 +1593,8 @@ export default function ChannelPartnerClient({ username }) {
 
             <div className="widget-card">
               <h3 className="serif" style={{ margin: '0 0 1.25rem 0' }}>Payout History & Upcoming Payouts</h3>
-              <table className="table-standard">
+              <div className="table-responsive-wrapper">
+                <table className="table-standard">
                 <thead>
                   <tr>
                     <th>PAYOUT ID</th>
@@ -1612,6 +1625,7 @@ export default function ChannelPartnerClient({ username }) {
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         )}
@@ -1619,7 +1633,7 @@ export default function ChannelPartnerClient({ username }) {
         {/* ==================== 7. PROFILE PAGE ==================== */}
         {activeTab === 'profile' && (
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem' }}>
+            <div className="responsive-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem' }}>
               
               {/* Profile Information card */}
               <div className="widget-card">
@@ -1640,7 +1654,7 @@ export default function ChannelPartnerClient({ username }) {
                     <label>RERA Registration Number</label>
                     <input type="text" readOnly value={cpDetails.rera_number} style={{ width: '96%', background: '#f5f5f5', border: '1px solid #ddd' }} />
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="responsive-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     <div className="form-group">
                       <label>Full Name</label>
                       <input type="text" value={profileName} onChange={(e) => setProfileName(e.target.value)} style={{ width: '92%' }} />
@@ -1708,7 +1722,7 @@ export default function ChannelPartnerClient({ username }) {
         {/* ==================== 8. MESSAGES PAGE ==================== */}
         {activeTab === 'messages' && (
           <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1.5rem', height: '450px' }}>
+            <div className="responsive-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1.5rem', height: 'auto' }}>
               
               {/* Left sidebar chats threads */}
               <div className="widget-card" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '1rem', overflowY: 'auto' }}>

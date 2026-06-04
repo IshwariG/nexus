@@ -57,21 +57,211 @@ export default function SalespersonCRMClient({
   };
 
 
+  // --- FILTER & CALCULATIONS ---
+  // Inquiries filter rule for salesman: status splits into [STATUS, salesmanId]
+  const myInquiries = inquiries.filter(inq => {
+    if (!inq.status) return false;
+    
+    // Ignore internal admin unit assignments from the pipeline
+    const isInternalAction = (inq.source || '').startsWith('UNIT_ASSIGNMENT_');
+    if (isInternalAction) return false;
+
+    const parts = inq.status.split('|');
+    return parts.length > 1 && parts[1] === userId;
+  });
+
   // Active Tab State
   const [activeTab, setActiveTabState] = useState('dashboard');
   const [selectedLeadId, setSelectedLeadIdState] = useState(null);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [reportsPeriod, setReportsPeriod] = useState('ALL');
+
+  // Leads volume trend filter states for Reports tab
+  const [trendView, setTrendView] = useState('month');
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
+  const [startMonth, setStartMonth] = useState(0);
+  const [endMonth, setEndMonth] = useState(11);
+  const [selectedWeek, setSelectedWeek] = useState(() => {
+    const day = new Date().getDate();
+    if (day <= 7) return 0;
+    if (day <= 14) return 1;
+    if (day <= 21) return 2;
+    return 3;
+  });
+
+  const resetToCurrentPeriod = (viewVal = trendView) => {
+    const now = new Date();
+    setSelectedYear(now.getFullYear());
+    setSelectedMonth(now.getMonth());
+    setStartMonth(0);
+    setEndMonth(11);
+    const curDay = now.getDate();
+    if (curDay <= 7) setSelectedWeek(0);
+    else if (curDay <= 14) setSelectedWeek(1);
+    else if (curDay <= 21) setSelectedWeek(2);
+    else setSelectedWeek(3);
+  };
+
+  const getWeek4EndDay = (yr, mo) => {
+    return new Date(yr, mo + 1, 0).getDate();
+  };
+
+  const getWeekOptions = (yr, mo) => [
+    { value: 0, label: `1–7` },
+    { value: 1, label: `8–14` },
+    { value: 2, label: `15–21` },
+    { value: 3, label: `22–${getWeek4EndDay(yr, mo)}` }
+  ];
+
+  const availableYears = React.useMemo(() => {
+    const years = new Set();
+    const curYear = new Date().getFullYear();
+    for (let y = curYear - 2; y <= curYear + 2; y++) {
+      years.add(y);
+    }
+    myInquiries.forEach(inq => {
+      if (inq.created_at) {
+        const yr = new Date(inq.created_at).getFullYear();
+        if (yr) years.add(yr);
+      }
+    });
+    return Array.from(years).sort((a, b) => a - b);
+  }, [myInquiries]);
+
+  const isNextDisabled = () => {
+    const now = new Date();
+    const curYr = now.getFullYear();
+    const curMo = now.getMonth();
+    const curDay = now.getDate();
+    let curWk = 0;
+    if (curDay <= 7) curWk = 0;
+    else if (curDay <= 14) curWk = 1;
+    else if (curDay <= 21) curWk = 2;
+    else curWk = 3;
+
+    if (trendView === 'week') {
+      return selectedYear > curYr || 
+             (selectedYear === curYr && selectedMonth > curMo) || 
+             (selectedYear === curYr && selectedMonth === curMo && selectedWeek >= curWk);
+    }
+    if (trendView === 'month') {
+      return selectedYear > curYr || 
+             (selectedYear === curYr && selectedMonth >= curMo);
+    }
+    if (trendView === 'year') {
+      return selectedYear >= curYr;
+    }
+    return false;
+  };
+
+  const handlePrevPeriod = () => {
+    if (trendView === 'week') {
+      if (selectedWeek > 0) {
+        setSelectedWeek(selectedWeek - 1);
+      } else {
+        if (selectedMonth > 0) {
+          setSelectedMonth(selectedMonth - 1);
+          setSelectedWeek(3);
+        } else {
+          const prevYr = selectedYear - 1;
+          if (availableYears.includes(prevYr)) {
+            setSelectedYear(prevYr);
+            setSelectedMonth(11);
+            setSelectedWeek(3);
+          }
+        }
+      }
+    } else if (trendView === 'month') {
+      if (selectedMonth > 0) {
+        setSelectedMonth(selectedMonth - 1);
+      } else {
+        const prevYr = selectedYear - 1;
+        if (availableYears.includes(prevYr)) {
+          setSelectedYear(prevYr);
+          setSelectedMonth(11);
+        }
+      }
+    } else if (trendView === 'year') {
+      const prevYr = selectedYear - 1;
+      if (availableYears.includes(prevYr)) {
+        setSelectedYear(prevYr);
+      }
+    }
+  };
+
+  const handleNextPeriod = () => {
+    if (trendView === 'week') {
+      if (selectedWeek < 3) {
+        setSelectedWeek(selectedWeek + 1);
+      } else {
+        if (selectedMonth < 11) {
+          setSelectedMonth(selectedMonth + 1);
+          setSelectedWeek(0);
+        } else {
+          const nextYr = selectedYear + 1;
+          if (availableYears.includes(nextYr)) {
+            setSelectedYear(nextYr);
+            setSelectedMonth(0);
+            setSelectedWeek(0);
+          }
+        }
+      }
+    } else if (trendView === 'month') {
+      if (selectedMonth < 11) {
+        setSelectedMonth(selectedMonth + 1);
+      } else {
+        const nextYr = selectedYear + 1;
+        if (availableYears.includes(nextYr)) {
+          setSelectedYear(nextYr);
+          setSelectedMonth(0);
+        }
+      }
+    } else if (trendView === 'year') {
+      const nextYr = selectedYear + 1;
+      if (availableYears.includes(nextYr)) {
+        setSelectedYear(nextYr);
+      }
+    }
+  };
 
   // Profile states
-  const [profileData, setProfileData] = useState({
-    full_name: '',
-    phone: '',
-    email: '',
-    employee_id: ''
+  const [profileData, setProfileData] = useState(() => {
+    const currentUser = (allUsers || []).find(u => u.username === userId) || {};
+    return {
+      full_name: currentUser.full_name || '',
+      phone: currentUser.phone || '',
+      email: currentUser.email || '',
+      employee_id: currentUser.employee_id || ''
+    };
   });
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [profileSuccess, setProfileSuccess] = useState('');
   const [profileLoading, setProfileLoading] = useState(true);
+
+  // Construction progress update states for Salesman
+  const [updatingBuyer, setUpdatingBuyer] = useState(null);
+  const [updatingMilestones, setUpdatingMilestones] = useState([]);
+  const [updatingProgress, setUpdatingProgress] = useState(0);
+  const [updatingPossessionDate, setUpdatingPossessionDate] = useState('');
+  const [updatingTotalValue, setUpdatingTotalValue] = useState('');
+  const [updatingTotalPaid, setUpdatingTotalPaid] = useState('');
+  const [isSavingProgress, setIsSavingProgress] = useState(false);
+
+  const handleOpenUpdateModal = (buyer) => {
+    setUpdatingBuyer(buyer);
+    setUpdatingProgress(buyer.construction_progress || 0);
+    setUpdatingPossessionDate(buyer.possession_date || '');
+    setUpdatingTotalValue(buyer.total_amount || '');
+    setUpdatingTotalPaid(buyer.amount_paid || '');
+    setUpdatingMilestones(buyer.milestones || [
+      { step: "Foundation", status: "PENDING" },
+      { step: "Structure", status: "PENDING" },
+      { step: "Finishing", status: "PENDING" },
+      { step: "Handover", status: "PENDING" }
+    ]);
+  };
 
   useEffect(() => {
     async function loadProfile() {
@@ -139,6 +329,7 @@ export default function SalespersonCRMClient({
 
   const setActiveTab = (tabName) => {
     setActiveTabState(tabName);
+    setIsMobileSidebarOpen(false);
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       params.set('tab', tabName);
@@ -283,17 +474,18 @@ export default function SalespersonCRMClient({
   // Salesperson Names mapping
   const salesmanNames = {
     'SR-9999': 'Vikram Sethi',
-    'SR-1111': 'Ananya Rao',
+    'SR-1111': 'Administrator',
     'SR-2222': 'Rahul Verma',
     'SR-3333': 'Sneha Patil',
     'SR-4444': 'Aditya Sharma'
   };
-  const currentSalesmanName = profileData.full_name || salesmanNames[userId] || 'Executive Advisor';
+  const currentUserObj = (allUsers || []).find(u => u.username === userId) || {};
+  const currentSalesmanName = profileData.full_name || currentUserObj.full_name || salesmanNames[userId] || 'Executive Advisor';
 
   // Salesperson avatar meta
   const salesmanMeta = {
     'SR-9999': { initials: 'VS', color: '#1a73e8' },
-    'SR-1111': { initials: 'AR', color: '#34a853' },
+    'SR-1111': { initials: 'AD', color: '#34a853' },
     'SR-2222': { initials: 'RV', color: '#ea4335' },
     'SR-3333': { initials: 'SP', color: '#fbbc05' },
     'SR-4444': { initials: 'AS', color: '#ab47bc' }
@@ -306,24 +498,15 @@ export default function SalespersonCRMClient({
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
 
-  const initials = profileData.full_name ? getInitials(profileData.full_name) : (salesmanMeta[userId]?.initials || 'EX');
+  const initials = profileData.full_name 
+    ? getInitials(profileData.full_name) 
+    : (currentUserObj.full_name ? getInitials(currentUserObj.full_name) : (salesmanMeta[userId]?.initials || 'EX'));
   const meta = {
     initials: initials,
     color: salesmanMeta[userId]?.color || 'var(--vanya-green)'
   };
 
-  // --- FILTER & CALCULATIONS ---
-  // Inquiries filter rule for salesman: status splits into [STATUS, salesmanId]
-  const myInquiries = inquiries.filter(inq => {
-    if (!inq.status) return false;
-    
-    // Ignore internal admin unit assignments from the pipeline
-    const isInternalAction = (inq.source || '').startsWith('UNIT_ASSIGNMENT_');
-    if (isInternalAction) return false;
 
-    const parts = inq.status.split('|');
-    return parts.length > 1 && parts[1] === userId;
-  });
 
   // Assign units rule
   const validUnits = units.filter(u => {
@@ -709,7 +892,8 @@ export default function SalespersonCRMClient({
     <div className="admin-layout" style={{ display: 'flex', minHeight: '100vh', background: 'var(--admin-bg)' }}>
       
       {/* --- SIDEBAR --- */}
-      <aside className="admin-sidebar" style={{
+      {isMobileSidebarOpen && <div className="mobile-sidebar-backdrop" onClick={() => setIsMobileSidebarOpen(false)} />}
+      <aside className={`admin-sidebar ${isMobileSidebarOpen ? 'open' : ''}`} style={{
         width: '260px',
         background: '#ffffff',
         borderRight: '1px solid #f1f3f5',
@@ -876,7 +1060,8 @@ export default function SalespersonCRMClient({
       }}>
         
         {/* Header Greeting */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+        <div className="admin-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+          <button className="mobile-sidebar-toggle" onClick={() => setIsMobileSidebarOpen(true)}>☰</button>
           <div>
             <h1 className="serif" style={{ fontSize: '2.2rem', margin: 0, fontWeight: 'normal', color: 'var(--vanya-green)' }}>
               Namaste, {currentSalesmanName.split(' ')[0]}
@@ -910,7 +1095,7 @@ export default function SalespersonCRMClient({
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
             
             {/* KPI Cards Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem' }}>
+            <div className="responsive-grid-4col" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem' }}>
               {[
                 { label: 'Assigned Leads', val: totalLeads, desc: `${newLeads} new leads unattended`, icon: '👥', color: '#eff6ff', border: '#bfdbfe' },
                 { label: 'Qualified Leads', val: qualifiedLeads, desc: `${contactedLeads} contacted in funnel`, icon: '🎯', color: '#fef3c7', border: '#fde68a' },
@@ -945,7 +1130,7 @@ export default function SalespersonCRMClient({
             </div>
 
             {/* Pipeline funnel and tasks row */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '2rem' }}>
+            <div className="responsive-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '2rem' }}>
               
               {/* Funnel Widget */}
               <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
@@ -1031,7 +1216,8 @@ export default function SalespersonCRMClient({
                 <button onClick={() => setActiveTab('visits')} className="btn-outline" style={{ padding: '0.4rem 1rem', fontSize: '0.7rem' }}>VISIT MANAGER</button>
               </div>
 
-              <table className="table-standard">
+              <div className="table-responsive-wrapper">
+                <table className="table-standard">
                 <thead>
                   <tr>
                     <th>CLIENT NAME</th>
@@ -1074,9 +1260,10 @@ export default function SalespersonCRMClient({
                 </tbody>
               </table>
             </div>
+            </div>
 
             {/* Collection Targets */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+            <div className="responsive-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
               <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
                 <h3 className="serif" style={{ margin: '0 0 1.25rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Quarterly Target Collections</h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
@@ -1164,9 +1351,9 @@ export default function SalespersonCRMClient({
               </div>
             </div>
 
-            {/* Leads Table */}
             <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '1.5rem', border: '1px solid #f1f3f5' }}>
-              <table className="table-standard">
+              <div className="table-responsive-wrapper">
+                <table className="table-standard">
                 <thead>
                   <tr>
                     <th>CLIENT NAME</th>
@@ -1256,6 +1443,7 @@ export default function SalespersonCRMClient({
                 </tbody>
               </table>
             </div>
+            </div>
 
           </div>
         )}
@@ -1283,7 +1471,7 @@ export default function SalespersonCRMClient({
             </div>
 
             {/* Split layout: Details vs Notes/Timeline */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '2rem' }}>
+            <div className="responsive-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '2rem' }}>
               
               {/* Left Column: Metadata card & actions */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -1609,7 +1797,8 @@ export default function SalespersonCRMClient({
                 <span className="badge negotiation">Active</span>
               </div>
 
-              <table className="table-standard">
+              <div className="table-responsive-wrapper">
+                <table className="table-standard">
                 <thead>
                   <tr>
                     <th>CLIENT</th>
@@ -1643,6 +1832,7 @@ export default function SalespersonCRMClient({
                 </tbody>
               </table>
             </div>
+            </div>
 
           </div>
         )}
@@ -1654,7 +1844,7 @@ export default function SalespersonCRMClient({
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)' }}>Verified Customer Bookings</h2>
             
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginBottom: '1.5rem' }}>
+            <div className="responsive-grid-3col" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', marginBottom: '1.5rem' }}>
               <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '1.5rem', border: '1px solid #f1f3f5' }}>
                 <span className="text-muted" style={{ fontSize: '0.72rem', textTransform: 'uppercase' }}>Bookings Achieved</span>
                 <h2 className="serif" style={{ fontSize: '2rem', margin: '0.4rem 0', color: 'var(--vanya-green)' }}>{ClosedWonCount(myInquiries)}</h2>
@@ -1662,20 +1852,27 @@ export default function SalespersonCRMClient({
               </div>
               <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '1.5rem', border: '1px solid #f1f3f5' }}>
                 <span className="text-muted" style={{ fontSize: '0.72rem', textTransform: 'uppercase' }}>Verified Value</span>
-                <h2 className="serif" style={{ fontSize: '2rem', margin: '0.4rem 0', color: '#34a853' }}>₹ 85.0 L</h2>
+                <h2 className="serif" style={{ fontSize: '2rem', margin: '0.4rem 0', color: '#34a853' }}>
+                  {closedRevenueSecured === 0 ? '₹ 0.00' : formatPriceCr(closedRevenueSecured)}
+                </h2>
                 <span style={{ fontSize: '0.7rem', color: '#6b7280' }}>Based on deposit transactions</span>
               </div>
               <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '1.5rem', border: '1px solid #f1f3f5' }}>
                 <span className="text-muted" style={{ fontSize: '0.72rem', textTransform: 'uppercase' }}>RERA Status</span>
-                <h2 className="serif" style={{ fontSize: '2rem', margin: '0.4rem 0', color: 'var(--vanya-gold)' }}>100%</h2>
-                <span style={{ fontSize: '0.7rem', color: '#6b7280' }}>All closed units RERA compliant</span>
+                <h2 className="serif" style={{ fontSize: '2rem', margin: '0.4rem 0', color: 'var(--vanya-gold)' }}>
+                  {ClosedWonCount(myInquiries) > 0 ? '100%' : '—'}
+                </h2>
+                <span style={{ fontSize: '0.7rem', color: '#6b7280' }}>
+                  {ClosedWonCount(myInquiries) > 0 ? `All ${ClosedWonCount(myInquiries)} closed units compliant` : 'No closed units logged'}
+                </span>
               </div>
             </div>
 
             <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
               <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Active Bookings Registry</h3>
               
-              <table className="table-standard">
+              <div className="table-responsive-wrapper">
+                <table className="table-standard">
                 <thead>
                   <tr>
                     <th>BUYER NAME</th>
@@ -1713,6 +1910,56 @@ export default function SalespersonCRMClient({
                 </tbody>
               </table>
             </div>
+            </div>
+
+            <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5', marginTop: '1.5rem' }}>
+              <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Buyer Progress & Milestones</h3>
+              
+              <div className="table-responsive-wrapper">
+                <table className="table-standard">
+                  <thead>
+                    <tr>
+                      <th>BUYER USERNAME</th>
+                      <th>UNIT ID</th>
+                      <th>CONSTRUCTION PROGRESS</th>
+                      <th>POSSESSION DATE</th>
+                      <th>ACTION</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {myBuyerDetails.map((b, idx) => (
+                      <tr key={b.id || idx}>
+                        <td><strong>{b.username}</strong></td>
+                        <td><span className="badge available" style={{ fontSize: '0.7rem' }}>V-{b.unit_id}</span></td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <div style={{ flex: 1, background: '#e5e7eb', height: '6px', borderRadius: '3px', minWidth: '80px' }}>
+                              <div style={{ background: 'var(--vanya-green)', height: '100%', width: `${b.construction_progress}%`, borderRadius: '3px' }} />
+                            </div>
+                            <span>{b.construction_progress}%</span>
+                          </div>
+                        </td>
+                        <td>{b.possession_date ? new Date(b.possession_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'N/A'}</td>
+                        <td>
+                          <button 
+                            className="btn-outline" 
+                            onClick={() => handleOpenUpdateModal(b)} 
+                            style={{ padding: '4px 10px', fontSize: '0.7rem', borderRadius: '4px', cursor: 'pointer', background: '#D9A036', color: 'white', border: 'none' }}
+                          >
+                            Update Progress
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {myBuyerDetails.length === 0 && (
+                      <tr>
+                        <td colSpan="5" style={{ textAlign: 'center', padding: '2.5rem', color: '#9ca3af' }}>No buyer accounts linked to your closed units.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
           </div>
         )}
@@ -1730,7 +1977,8 @@ export default function SalespersonCRMClient({
                 <span className="badge reserved">Visits Logs</span>
               </div>
 
-              <table className="table-standard">
+              <div className="table-responsive-wrapper">
+                <table className="table-standard">
                 <thead>
                   <tr>
                     <th>CLIENT NAME</th>
@@ -1773,6 +2021,7 @@ export default function SalespersonCRMClient({
                 </tbody>
               </table>
             </div>
+            </div>
 
           </div>
         )}
@@ -1784,7 +2033,7 @@ export default function SalespersonCRMClient({
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)' }}>My Task Board</h2>
             
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '2rem' }}>
+            <div className="responsive-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '2rem' }}>
               
               {/* Tasks List */}
               <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
@@ -2110,77 +2359,422 @@ export default function SalespersonCRMClient({
         {/* ============================================================== */}
         {/* TAB 11: REPORTS & ANALYTICS */}
         {/* ============================================================== */}
-        {activeTab === 'reports' && (
-          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)' }}>CRM Performance Reports</h2>
+        {activeTab === 'reports' && (() => {
+          // --- Dynamic Calculations for Reports Filter ---
+          const now = new Date();
+          const filteredInq = myInquiries.filter(inq => {
+            const created = new Date(inq.created_at);
+            if (isNaN(created.getTime())) return true;
+            const diffTime = Math.abs(now - created);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+            if (reportsPeriod === '30D') return diffDays <= 30;
+            if (reportsPeriod === '90D') return diffDays <= 90;
+            if (reportsPeriod === '6M') return diffDays <= 180;
+            return true; // 'ALL'
+          });
+
+          const totalReportsCount = filteredInq.length;
+          
+          let webCount = 0;
+          let directCount = 0;
+          let cpCount = 0;
+          
+          filteredInq.forEach(inq => {
+            const src = (inq.source || '').toLowerCase();
+            if (src.includes('cp_referral') || src.includes('referral') || src.includes('cp')) {
+              cpCount++;
+            } else if (src.includes('direct') || src.includes('admin') || src.includes('outreach')) {
+              directCount++;
+            } else {
+              webCount++;
+            }
+          });
+
+          const webPct = totalReportsCount > 0 ? Math.round((webCount / totalReportsCount) * 100) : 0;
+          const directPct = totalReportsCount > 0 ? Math.round((directCount / totalReportsCount) * 100) : 0;
+          const cpPct = totalReportsCount > 0 ? Math.max(0, 100 - webPct - directPct) : 0;
+
+          const webOffset = 25;
+          const directOffset = (25 - webPct);
+          const cpOffset = (25 - webPct - directPct);
+
+          // --- Dynamic Leads Volume Trend Calculations based on Week / Month / Year Filter ---
+          const getLeadsChartInfo = () => {
+            const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+            const isRealInq = (inq) =>
+              !inq.source?.startsWith('UNIT_ASSIGNMENT_');
+
+            let points = [], periodLabel = '';
+
+            if (trendView === 'week') {
+              const yr = selectedYear;
+              const mo = selectedMonth;
+              let startDay = 1;
+              let endDay = 7;
+              if (selectedWeek === 0) { startDay = 1; endDay = 7; }
+              else if (selectedWeek === 1) { startDay = 8; endDay = 14; }
+              else if (selectedWeek === 2) { startDay = 15; endDay = 21; }
+              else if (selectedWeek === 3) {
+                startDay = 22;
+                endDay = getWeek4EndDay(yr, mo);
+              }
+
+              periodLabel = `${startDay} ${MONTHS[mo]} – ${endDay} ${MONTHS[mo]} ${yr}`;
               
-              {/* Chart 1: Donut Source Chart */}
-              <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5', textAlign: 'center' }}>
-                <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)', textAlign: 'left' }}>Leads Source Acquisition</h3>
+              for (let day = startDay; day <= endDay; day++) {
+                const d = new Date(yr, mo, day);
+                const label = `${DAYS[d.getDay()]} ${day}`;
+                const count = myInquiries.filter(inq => {
+                  if (!isRealInq(inq)) return false;
+                  const id = new Date(inq.created_at);
+                  return id.getFullYear() === yr && id.getMonth() === mo && id.getDate() === day;
+                }).length;
+                points.push({ label, count });
+              }
+            } else if (trendView === 'month') {
+              const yr = selectedYear;
+              const mo = selectedMonth;
+              const dim = getWeek4EndDay(yr, mo);
+              periodLabel = `${MONTHS[mo]} ${yr}`;
+              
+              const weeks = [
+                { s: 1, e: 7 },
+                { s: 8, e: 14 },
+                { s: 15, e: 21 },
+                { s: 22, e: dim }
+              ];
+              
+              weeks.forEach((w, index) => {
+                const total = myInquiries.filter(inq => {
+                  if (!isRealInq(inq)) return false;
+                  const d = new Date(inq.created_at);
+                  return d.getFullYear() === yr && d.getMonth() === mo && d.getDate() >= w.s && d.getDate() <= w.e;
+                }).length;
+                points.push({ label: `W${index + 1} (${w.s}–${w.e} ${MONTHS[mo]})`, count: total });
+              });
+            } else {
+              const yr = selectedYear;
+              const startMo = startMonth;
+              const endMo = endMonth;
+              periodLabel = `${MONTHS[startMo]} ${yr} – ${MONTHS[endMo]} ${yr}`;
+              
+              for (let mo = startMo; mo <= endMo; mo++) {
+                const count = myInquiries.filter(inq => {
+                  if (!isRealInq(inq)) return false;
+                  const d = new Date(inq.created_at);
+                  return d.getFullYear() === yr && d.getMonth() === mo;
+                }).length;
+                points.push({ label: MONTHS[mo], count });
+              }
+            }
+
+            return { points, periodLabel };
+          };
+
+          const { points: trendPoints, periodLabel: trendPeriodLabel } = getLeadsChartInfo();
+          const leadsTotal = trendPoints.reduce((s, p) => s + p.count, 0);
+
+          const maxTrendCount = Math.max(...trendPoints.map(p => p.count), 1);
+          const xStep = 100 / Math.max(trendPoints.length - 1, 1);
+          const trendCoords = trendPoints.map((p, i) => {
+            const x = i * xStep;
+            const y = 35 - (p.count / maxTrendCount) * 27;
+            return { x, y };
+          });
+
+          let pathD = '';
+          if (trendCoords.length > 0) {
+            pathD = `M ${trendCoords[0].x} ${trendCoords[0].y}`;
+            for (let i = 1; i < trendCoords.length; i++) {
+              const prev = trendCoords[i - 1];
+              const curr = trendCoords[i];
+              const cp1x = prev.x + (xStep / 2);
+              const cp1y = prev.y;
+              const cp2x = curr.x - (xStep / 2);
+              const cp2y = curr.y;
+              pathD += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${curr.x} ${curr.y}`;
+            }
+          }
+
+          const areaD = trendCoords.length > 0 ? `${pathD} L 100 40 L 0 40 Z` : '';
+
+          return (
+            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+              <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)' }}>CRM Performance Reports</h2>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
                 
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '2.5rem', height: '220px' }}>
-                  <svg width="150" height="150" viewBox="0 0 42 42">
-                    <circle cx="21" cy="21" r="15.9155" fill="none" stroke="#ddd" strokeWidth="5" />
-                    {/* Circle slices: Website Referral (50%), Direct Outreach (30%), Channel Partners (20%) */}
-                    <circle cx="21" cy="21" r="15.9155" fill="none" stroke="var(--vanya-green)" strokeWidth="5" strokeDasharray="50 100" strokeDashoffset="25" />
-                    <circle cx="21" cy="21" r="15.9155" fill="none" stroke="var(--vanya-gold)" strokeWidth="5" strokeDasharray="30 100" strokeDashoffset="75" />
-                    <circle cx="21" cy="21" r="15.9155" fill="none" stroke="#ab47bc" strokeWidth="5" strokeDasharray="20 100" strokeDashoffset="5" />
-                    <g fill="var(--vanya-green)" fontSize="3" fontWeight="bold">
-                      <text x="21" y="21" textAnchor="middle" alignmentBaseline="middle">Sources</text>
-                    </g>
-                  </svg>
+                {/* Chart 1: Donut Source Chart */}
+                <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
                   
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', textAlign: 'left', fontSize: '0.8rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ display: 'inline-block', width: '12px', height: '12px', background: 'var(--vanya-green)', borderRadius: '3px' }}></span>
-                      <span>Website Referral (50%)</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ display: 'inline-block', width: '12px', height: '12px', background: 'var(--vanya-gold)', borderRadius: '3px' }}></span>
-                      <span>Direct Outreach (30%)</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#ab47bc', borderRadius: '3px' }}></span>
-                      <span>Channel Partners (20%)</span>
+                  {/* Chart Header with Filter Select */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <h3 className="serif" style={{ margin: 0, fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Leads Source Acquisition</h3>
+                    
+                    <select 
+                      value={reportsPeriod}
+                      onChange={(e) => setReportsPeriod(e.target.value)}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '0.72rem',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '6px',
+                        background: '#fff',
+                        color: '#1e293b',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        outline: 'none',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <option value="30D">Last 30 Days</option>
+                      <option value="90D">Last 90 Days</option>
+                      <option value="6M">Last 6 Months</option>
+                      <option value="ALL">All Time</option>
+                    </select>
+                  </div>
+                  
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '2.5rem', height: '220px' }}>
+                    <svg width="150" height="150" viewBox="0 0 42 42">
+                      <circle cx="21" cy="21" r="15.9155" fill="none" stroke="#f1f5f9" strokeWidth="5" />
+                      
+                      {/* Animated/Interactive Circle slices */}
+                      <circle 
+                        cx="21" cy="21" r="15.9155" fill="none" 
+                        stroke="var(--vanya-green)" strokeWidth="5" 
+                        strokeDasharray={`${webPct} 100`} 
+                        strokeDashoffset={webOffset} 
+                        style={{
+                          transition: 'stroke-dasharray 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)'
+                        }}
+                      />
+                      <circle 
+                        cx="21" cy="21" r="15.9155" fill="none" 
+                        stroke="var(--vanya-gold)" strokeWidth="5" 
+                        strokeDasharray={`${directPct} 100`} 
+                        strokeDashoffset={directOffset} 
+                        style={{
+                          transition: 'stroke-dasharray 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)'
+                        }}
+                      />
+                      <circle 
+                        cx="21" cy="21" r="15.9155" fill="none" 
+                        stroke="#ab47bc" strokeWidth="5" 
+                        strokeDasharray={`${cpPct} 100`} 
+                        strokeDashoffset={cpOffset} 
+                        style={{
+                          transition: 'stroke-dasharray 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)'
+                        }}
+                      />
+                      <g fill="var(--vanya-green)" fontSize="3" fontWeight="bold">
+                        <text x="21" y="19" textAnchor="middle" alignmentBaseline="middle">Sources</text>
+                        <text x="21" y="24" textAnchor="middle" alignmentBaseline="middle" fontSize="2.2" fill="#6b7280" fontWeight="normal">
+                          {totalReportsCount} Leads
+                        </text>
+                      </g>
+                    </svg>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', textAlign: 'left', fontSize: '0.8rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ display: 'inline-block', width: '12px', height: '12px', background: 'var(--vanya-green)', borderRadius: '3px' }}></span>
+                        <span style={{ fontWeight: '600' }}>Website Referral ({webPct}%)</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ display: 'inline-block', width: '12px', height: '12px', background: 'var(--vanya-gold)', borderRadius: '3px' }}></span>
+                        <span style={{ fontWeight: '600' }}>Direct Outreach ({directPct}%)</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ display: 'inline-block', width: '12px', height: '12px', background: '#ab47bc', borderRadius: '3px' }}></span>
+                        <span style={{ fontWeight: '600' }}>Channel Partners ({cpPct}%)</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Chart 2: Trend Line Chart */}
-              <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
-                <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Leads Volume Trend (Last 6 Months)</h3>
-                
-                <div style={{ position: 'relative', height: '220px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-                  {/* SVG Chart Line */}
-                  <svg viewBox="0 0 100 40" style={{ width: '100%', height: '160px' }}>
-                    <path d="M 0 35 Q 20 20 40 28 T 80 15 T 100 8" fill="none" stroke="#D9A036" strokeWidth="2" />
-                    <circle cx="0" cy="35" r="1.5" fill="var(--vanya-green)" />
-                    <circle cx="20" cy="22" r="1.5" fill="var(--vanya-green)" />
-                    <circle cx="40" cy="28" r="1.5" fill="var(--vanya-green)" />
-                    <circle cx="60" cy="22" r="1.5" fill="var(--vanya-green)" />
-                    <circle cx="80" cy="15" r="1.5" fill="var(--vanya-green)" />
-                    <circle cx="100" cy="8" r="1.5" fill="var(--vanya-green)" />
-                  </svg>
+                {/* Chart 2: Trend Line Chart */}
+                <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
                   
-                  {/* Labels */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#888', borderTop: '1px solid #eee', marginTop: '0.5rem', paddingTop: '0.5rem' }}>
-                    <span>Dec</span>
-                    <span>Jan</span>
-                    <span>Feb</span>
-                    <span>Mar</span>
-                    <span>Apr</span>
-                    <span>May</span>
+                  {/* Header Row */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                    <div>
+                      <h3 className="serif" style={{ margin: 0, fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Leads Volume Trend</h3>
+                      <span className="text-muted" style={{ fontSize: '0.72rem' }}>Total in period: {leadsTotal} leads ({trendPeriodLabel})</span>
+                    </div>
+                    
+                    {/* View selector: Week, Month, Year */}
+                    <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: '8px', padding: '3px', gap: '2px' }}>
+                      {[['week','Week'],['month','Month'],['year','Year']].map(([val, label]) => (
+                        <button key={val}
+                          onClick={() => { setTrendView(val); resetToCurrentPeriod(val); }}
+                          style={{ padding: '4px 10px', fontSize: '0.65rem', fontWeight: '700', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: 'all 0.2s',
+                            background: trendView === val ? 'var(--vanya-green)' : 'transparent',
+                            color: trendView === val ? '#fff' : '#6b7280' }}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Navigation row: ◀ period select ▶ */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                    <button onClick={handlePrevPeriod}
+                      style={{ width: '26px', height: '26px', borderRadius: '50%', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', transition: 'all 0.15s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                    >◀</button>
+                    
+                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                      {trendView === 'week' && (
+                        <select
+                          value={selectedWeek}
+                          onChange={(e) => setSelectedWeek(Number(e.target.value))}
+                          style={{ padding: '3px 8px', fontSize: '0.68rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#fff', fontWeight: 'bold', color: '#1e293b' }}
+                        >
+                          {getWeekOptions(selectedYear, selectedMonth).map(opt => (
+                            <option key={opt.value} value={opt.value}>{`Week ${opt.value + 1} (${opt.label})`}</option>
+                          ))}
+                        </select>
+                      )}
+                      {(trendView === 'week' || trendView === 'month') && (
+                        <select
+                          value={selectedMonth}
+                          onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                          style={{ padding: '3px 8px', fontSize: '0.68rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#fff', fontWeight: 'bold', color: '#1e293b' }}
+                        >
+                          {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, idx) => (
+                            <option key={idx} value={idx}>{m}</option>
+                          ))}
+                        </select>
+                      )}
+                      {trendView === 'year' && (
+                        <>
+                          <span style={{ fontSize: '0.7rem', color: '#4b5563', fontWeight: 'bold' }}>From</span>
+                          <select
+                            value={startMonth}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setStartMonth(val);
+                              if (val > endMonth) setEndMonth(val);
+                            }}
+                            style={{ padding: '3px 8px', fontSize: '0.68rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#fff', fontWeight: 'bold', color: '#1e293b' }}
+                          >
+                            {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, idx) => (
+                              <option key={idx} value={idx}>{m}</option>
+                            ))}
+                          </select>
+                          <span style={{ fontSize: '0.7rem', color: '#4b5563', fontWeight: 'bold' }}>To</span>
+                          <select
+                            value={endMonth}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setEndMonth(val);
+                              if (val < startMonth) setStartMonth(val);
+                            }}
+                            style={{ padding: '3px 8px', fontSize: '0.68rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#fff', fontWeight: 'bold', color: '#1e293b' }}
+                          >
+                            {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, idx) => (
+                              <option key={idx} value={idx}>{m}</option>
+                            ))}
+                          </select>
+                        </>
+                      )}
+                      <select
+                        value={selectedYear}
+                        onChange={(e) => setSelectedYear(Number(e.target.value))}
+                        style={{ padding: '3px 8px', fontSize: '0.68rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#fff', fontWeight: 'bold', color: '#1e293b' }}
+                      >
+                        {availableYears.map(yr => (
+                          <option key={yr} value={yr}>{yr}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <button onClick={handleNextPeriod}
+                      disabled={isNextDisabled()}
+                      style={{ 
+                        width: '26px', 
+                        height: '26px', 
+                        borderRadius: '50%', 
+                        border: '1px solid #e2e8f0', 
+                        background: '#fff', 
+                        cursor: isNextDisabled() ? 'not-allowed' : 'pointer', 
+                        fontSize: '0.75rem', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        color: isNextDisabled() ? '#cbd5e1' : '#475569', 
+                        boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', 
+                        opacity: isNextDisabled() ? 0.5 : 1,
+                        transition: 'all 0.15s' 
+                      }}
+                      onMouseEnter={e => { if(!isNextDisabled()) e.currentTarget.style.background = '#f8fafc'; }}
+                      onMouseLeave={e => { if(!isNextDisabled()) e.currentTarget.style.background = '#fff'; }}
+                    >▶</button>
+                  </div>
+                  
+                  <div style={{ position: 'relative', height: '170px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                    
+                    <svg viewBox="0 0 100 40" style={{ width: '100%', height: '120px' }}>
+                      <defs>
+                        <linearGradient id="goldGradientReportsDynamic" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#D9A036" stopOpacity="0.35" />
+                          <stop offset="100%" stopColor="#D9A036" stopOpacity="0.0" />
+                        </linearGradient>
+                      </defs>
+                      
+                      {/* Area Chart Gradient Fill */}
+                      {areaD && <path d={areaD} fill="url(#goldGradientReportsDynamic)" style={{ transition: 'd 0.8s ease' }} />}
+                      
+                      {/* Smooth Line Curve */}
+                      {pathD && <path d={pathD} fill="none" stroke="#D9A036" strokeWidth="1.8" style={{ transition: 'd 0.8s ease' }} />}
+                      
+                      {/* Interactive node circles with tooltips */}
+                      {trendCoords.map((coord, idx) => (
+                        <g key={idx} style={{ cursor: 'pointer' }}>
+                          <circle 
+                            cx={coord.x} 
+                            cy={coord.y} 
+                            r="1.8" 
+                            fill="var(--vanya-green)" 
+                            stroke="#ffffff"
+                            strokeWidth="0.5"
+                            style={{ 
+                              transition: 'cx 0.8s ease, cy 0.8s ease, r 0.15s ease' 
+                            }}
+                            onMouseEnter={e => e.currentTarget.setAttribute('r', '2.8')}
+                            onMouseLeave={e => e.currentTarget.setAttribute('r', '1.8')}
+                          />
+                          {/* Mini Tooltip Count values on hover */}
+                          <text 
+                            x={coord.x} 
+                            y={coord.y - 4} 
+                            textAnchor="middle" 
+                            fontSize="2.5" 
+                            fill="#1e293b" 
+                            fontWeight="bold"
+                            style={{ opacity: 0.85 }}
+                          >
+                            {trendPoints[idx].count}
+                          </text>
+                        </g>
+                      ))}
+                    </svg>
+                    
+                    {/* Labels */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem', color: '#6b7280', borderTop: '1px solid #e2e8f0', marginTop: '0.5rem', paddingTop: '0.5rem', fontWeight: '600', overflowX: 'auto', gap: '0.2rem' }}>
+                      {trendPoints.map((tp, idx) => (
+                        <span key={idx} style={{ display: 'inline-block', whiteSpace: 'nowrap', textAlign: 'center', flex: 1 }}>{tp.label}</span>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
 
+              </div>
             </div>
-
-          </div>
-        )}
+          );
+        })()}
 
         {/* ============================================================== */}
         {/* TAB 12: MY PROFILE */}
@@ -2298,11 +2892,11 @@ export default function SalespersonCRMClient({
                   </div>
                   <div>
                     <span className="text-muted" style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold' }}>OFFICE TELEPHONE</span>
-                    <strong>{profileData.phone ? `+91 ${profileData.phone.replace(/(\d{5})(\d{5})/, '$1 $2')}` : '+91 98765 43210'}</strong>
+                    <strong>{profileData.phone ? `+91 ${profileData.phone.replace(/(\d{5})(\d{5})/, '$1 $2')}` : (currentUserObj.phone ? `+91 ${currentUserObj.phone.replace(/(\d{5})(\d{5})/, '$1 $2')}` : '+91 98765 43210')}</strong>
                   </div>
                   <div>
                     <span className="text-muted" style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold' }}>EMAIL ADDRESS</span>
-                    <strong>{profileData.email || `${currentSalesmanName.toLowerCase().replace(' ', '.')}@dreamspaces.com`}</strong>
+                    <strong>{profileData.email || currentUserObj.email || `${currentSalesmanName.toLowerCase().replace(' ', '.')}@dreamspaces.com`}</strong>
                   </div>
                 </div>
               </div>
@@ -2715,6 +3309,111 @@ export default function SalespersonCRMClient({
 
               <button type="submit" className="btn-primary" style={{ background: 'var(--vanya-green)', color: 'white', border: 'none', borderRadius: '6px', padding: '0.9rem', cursor: 'pointer', fontWeight: 'bold', marginTop: '0.5rem' }}>
                 CONFIRM & REGISTER BUYER
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* SALESMAN UPDATE BUYER RECORD MODAL */}
+      {/* ============================================================== */}
+      {updatingBuyer && (
+        <div onClick={() => setUpdatingBuyer(null)} style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, cursor: 'pointer'
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'white', width: '100%', maxWidth: '450px', borderRadius: '12px', padding: '2rem', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto', cursor: 'default' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.5rem' }}>
+              <h3 className="serif" style={{ margin: 0, fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Update Progress: {updatingBuyer.username}</h3>
+              <button onClick={() => setUpdatingBuyer(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>&times;</button>
+            </div>
+            
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setIsSavingProgress(true);
+              try {
+                const res = await fetch(`/api/buyers?username=${encodeURIComponent(updatingBuyer.username)}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    unit_id: updatingBuyer.unit_id,
+                    total_amount: updatingTotalValue,
+                    amount_paid: updatingTotalPaid,
+                    construction_progress: updatingProgress,
+                    possession_date: updatingPossessionDate,
+                    milestones: updatingMilestones
+                  })
+                });
+                const data = await res.json();
+                if (data.success) {
+                  alert('Buyer record and milestones updated successfully!');
+                  setUpdatingBuyer(null);
+                  router.refresh();
+                  setTimeout(() => window.location.reload(), 500);
+                } else {
+                  alert('Error: ' + data.error);
+                }
+              } catch (err) {
+                alert('Network error.');
+              } finally {
+                setIsSavingProgress(false);
+              }
+            }} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>UNIT ID</label>
+                  <input type="text" readOnly value={updatingBuyer.unit_id} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem', background: '#f5f5f5' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>PROGRESS (%)</label>
+                  <input type="number" min="0" max="100" value={updatingProgress} onChange={e => setUpdatingProgress(parseInt(e.target.value) || 0)} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }} />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>TOTAL VALUE</label>
+                  <input type="text" required value={updatingTotalValue} onChange={e => setUpdatingTotalValue(e.target.value)} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>TOTAL PAID</label>
+                  <input type="text" required value={updatingTotalPaid} onChange={e => setUpdatingTotalPaid(e.target.value)} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }} />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>POSSESSION DATE</label>
+                <input type="date" required value={updatingPossessionDate} onChange={e => setUpdatingPossessionDate(e.target.value)} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }} />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>CONSTRUCTION MILESTONES</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.66rem', background: '#fafafa', border: '1px solid #f1f3f5', padding: '0.8rem', borderRadius: '8px' }}>
+                  {updatingMilestones.map((m, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151' }}>{m.step}</span>
+                      <select 
+                        value={m.status} 
+                        onChange={(e) => {
+                          const newM = [...updatingMilestones];
+                          newM[idx] = { ...newM[idx], status: e.target.value };
+                          setUpdatingMilestones(newM);
+                        }}
+                        style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #d1d5db', fontSize: '0.75rem', width: '130px', background: '#fff' }}
+                      >
+                        <option value="PENDING">PENDING</option>
+                        <option value="IN PROGRESS">IN PROGRESS</option>
+                        <option value="COMPLETED">COMPLETED</option>
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <button type="submit" className="btn-dark" style={{ width: '100%', padding: '1rem', marginTop: '0.5rem', cursor: 'pointer', background: '#D9A036', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold' }} disabled={isSavingProgress}>
+                {isSavingProgress ? 'SAVING CHANGES...' : 'UPDATE BUYER PROGRESS'}
               </button>
             </form>
           </div>

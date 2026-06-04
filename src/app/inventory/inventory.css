@@ -329,3 +329,74 @@
 .text-blue{
   color: darkblue;
 }
+
+/* ==========================================
+   RESPONSIVE DESIGN OVERRIDES
+   ========================================== */
+@media (max-width: 1024px) {
+  .inventory-hero {
+    height: auto !important;
+    min-height: auto !important;
+    padding: 8rem 0 4rem 0;
+  }
+  
+  .hero-text-box {
+    padding: 2rem !important;
+    margin: 0 1rem;
+    max-width: 100%;
+  }
+
+  .hero-text-box .title {
+    font-size: 2rem !important;
+  }
+
+  .filters-bar {
+    margin-top: 1rem !important;
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 1.25rem !important;
+    padding: 1.5rem !important;
+  }
+
+  .filter-btn {
+    width: 100% !important;
+    padding: 0.9rem !important;
+    text-align: center;
+  }
+
+  .heritage-collection {
+    padding: 4rem 0 !important;
+  }
+
+  .section-header-flex {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 1rem !important;
+  }
+
+  .heritage-desc {
+    text-align: left !important;
+    max-width: 100% !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .inventory-hero {
+    padding: 6rem 0 3rem 0;
+  }
+  .hero-text-box {
+    padding: 1.5rem 1rem !important;
+  }
+  .hero-text-box .title {
+    font-size: 1.75rem !important;
+  }
+  .heritage-grid {
+    margin-top: 2rem !important;
+  }
+  .heritage-card {
+    height: 300px !important;
+  }
+  .load-more-section {
+    margin-top: 2rem !important;
+  }
+}
