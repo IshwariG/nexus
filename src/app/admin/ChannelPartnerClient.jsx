@@ -276,7 +276,8 @@ export default function ChannelPartnerClient({ username }) {
       const currentLead = data?.leads?.find(l => l.id === leadId);
       const statusParts = (currentLead?.status || '').split('|');
       
-      let salesperson = 'SR-9999';
+      const dbSales = (data?.allUsers || []).find(u => u.role === 'Sales' && u.is_active !== false);
+      let salesperson = dbSales ? dbSales.username : 'SR-1111';
       for (const part of statusParts) {
         if (part && part !== 'VISIT_SCHEDULED' && part !== 'NEW' && part !== 'CONTACTED' && part !== 'PROPOSAL' && part !== 'SCHEDULED' && part !== 'DONE' && part !== 'NEGOTIATION' && part !== 'BOOKED' && part !== 'CONVERTED' && part !== 'LOST' && part !== 'READY_TO_BOOK' && part !== 'UNASSIGNED' && part !== username) {
           const isSales = (data?.allUsers || []).some(u => (u.username === part || u.employee_id === part) && u.role === 'Sales');
@@ -312,7 +313,8 @@ export default function ChannelPartnerClient({ username }) {
       const currentLead = data?.leads?.find(l => l.id === leadId);
       const statusParts = (currentLead?.status || '').split('|');
       
-      let salesperson = 'SR-9999';
+      const dbSales = (data?.allUsers || []).find(u => u.role === 'Sales' && u.is_active !== false);
+      let salesperson = dbSales ? dbSales.username : 'SR-1111';
       for (const part of statusParts) {
         if (part && part !== 'VISIT_SCHEDULED' && part !== 'NEW' && part !== 'CONTACTED' && part !== 'PROPOSAL' && part !== 'SCHEDULED' && part !== 'DONE' && part !== 'NEGOTIATION' && part !== 'BOOKED' && part !== 'CONVERTED' && part !== 'LOST' && part !== 'READY_TO_BOOK' && part !== 'UNASSIGNED' && part !== username) {
           const isSales = (data?.allUsers || []).some(u => (u.username === part || u.employee_id === part) && u.role === 'Sales');
@@ -1281,10 +1283,16 @@ export default function ChannelPartnerClient({ username }) {
                       }
                     }
 
-                    // 3. If still not found, default to Vikram Sethi (SR-9999)
+                    // 3. If still not found, default to the first active salesperson, or unassigned/SR-1111 fallback
                     if (!salesman) {
-                      salesmanId = 'SR-9999';
-                      salesman = allUsers.find(u => u.username === salesmanId || u.employee_id === salesmanId);
+                      const dbSales = allUsers.find(u => u.role === 'Sales' && u.is_active !== false);
+                      if (dbSales) {
+                        salesman = dbSales;
+                        salesmanId = dbSales.username;
+                      } else {
+                        salesmanId = 'SR-1111';
+                        salesman = allUsers.find(u => u.username === salesmanId || u.employee_id === salesmanId);
+                      }
                     }
 
                     if (!salesman && !salesmanId) {
@@ -1351,7 +1359,8 @@ export default function ChannelPartnerClient({ username }) {
                   
                   // Scan status parts for a valid Salesperson in allUsers
                   const statusParts = (selectedLead.status || '').split('|');
-                  let salesperson = 'SR-9999';
+                  const dbSales = (allUsers || []).find(u => u.role === 'Sales' && u.is_active !== false);
+                  let salesperson = dbSales ? dbSales.username : 'SR-1111';
                   for (let i = 1; i < statusParts.length; i++) {
                     const part = statusParts[i];
                     if (part && part !== username) {

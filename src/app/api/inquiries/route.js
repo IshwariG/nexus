@@ -63,26 +63,43 @@ export async function POST(request) {
     }
 
     // Round-robin assignment if not explicitly assigned
-    const salesmen = ['SR-9999', 'SR-1111', 'SR-2222', 'SR-3333', 'SR-4444'];
-    let nextSalesman = salesmen[0];
+    let nextSalesman = 'unassigned';
 
     if (data.salesman_id) {
       nextSalesman = data.salesman_id;
     } else {
-      const { data: lastInquiry } = await supabase
-        .from('Inquiries')
-        .select('status')
-        .order('created_at', { ascending: false })
-        .limit(1);
+      let salesmen = [];
+      try {
+        const { data: dbSales } = await supabase
+          .from('Users')
+          .select('username')
+          .eq('role', 'Sales')
+          .neq('is_active', false);
         
-      if (lastInquiry && lastInquiry.length > 0) {
-        const lastStatus = lastInquiry[0].status || '';
-        const parts = lastStatus.split('|');
-        if (parts.length > 1) {
-          const lastSalesman = parts[1];
-          const lastIndex = salesmen.indexOf(lastSalesman);
-          if (lastIndex !== -1) {
-            nextSalesman = salesmen[(lastIndex + 1) % salesmen.length];
+        if (dbSales && dbSales.length > 0) {
+          salesmen = dbSales.map(u => u.username);
+        }
+      } catch (e) {
+        console.error("Failed to fetch salesmen from DB:", e.message);
+      }
+
+      if (salesmen.length > 0) {
+        nextSalesman = salesmen[0];
+        const { data: lastInquiry } = await supabase
+          .from('Inquiries')
+          .select('status')
+          .order('created_at', { ascending: false })
+          .limit(1);
+          
+        if (lastInquiry && lastInquiry.length > 0) {
+          const lastStatus = lastInquiry[0].status || '';
+          const parts = lastStatus.split('|');
+          if (parts.length > 1) {
+            const lastSalesman = parts[1];
+            const lastIndex = salesmen.indexOf(lastSalesman);
+            if (lastIndex !== -1) {
+              nextSalesman = salesmen[(lastIndex + 1) % salesmen.length];
+            }
           }
         }
       }

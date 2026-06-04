@@ -52,29 +52,45 @@ export async function POST(request) {
     }
 
     // 1. Assign to a Sales Executive using round-robin logic
-    const salesmen = ['SR-9999', 'SR-1111', 'SR-2222', 'SR-3333', 'SR-4444'];
-    let nextSalesman = salesmen[0];
-
+    let nextSalesman = 'unassigned';
+    let salesmen = [];
     try {
-      const { data: lastInquiry } = await supabase
-        .from('Inquiries')
-        .select('status')
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (lastInquiry && lastInquiry.length > 0) {
-        const lastStatus = lastInquiry[0].status || '';
-        const parts = lastStatus.split('|');
-        if (parts.length > 1) {
-          const lastSalesman = parts[1];
-          const lastIndex = salesmen.indexOf(lastSalesman);
-          if (lastIndex !== -1) {
-            nextSalesman = salesmen[(lastIndex + 1) % salesmen.length];
-          }
-        }
+      const { data: dbSales } = await supabase
+        .from('Users')
+        .select('username')
+        .eq('role', 'Sales')
+        .neq('is_active', false);
+      
+      if (dbSales && dbSales.length > 0) {
+        salesmen = dbSales.map(u => u.username);
       }
     } catch (e) {
-      console.warn('Failed to query last inquiry for round-robin assignment:', e.message);
+      console.warn('Failed to fetch salespersons from DB:', e.message);
+    }
+
+    if (salesmen.length > 0) {
+      nextSalesman = salesmen[0];
+      try {
+        const { data: lastInquiry } = await supabase
+          .from('Inquiries')
+          .select('status')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (lastInquiry && lastInquiry.length > 0) {
+          const lastStatus = lastInquiry[0].status || '';
+          const parts = lastStatus.split('|');
+          if (parts.length > 1) {
+            const lastSalesman = parts[1];
+            const lastIndex = salesmen.indexOf(lastSalesman);
+            if (lastIndex !== -1) {
+              nextSalesman = salesmen[(lastIndex + 1) % salesmen.length];
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to query last inquiry for round-robin assignment:', e.message);
+      }
     }
 
     const finalStatus = `NEW|${nextSalesman}`;

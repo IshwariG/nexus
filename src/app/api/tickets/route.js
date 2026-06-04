@@ -36,6 +36,19 @@ export async function GET(request) {
         if (updatedRecord) {
           updatedTickets.push(updatedRecord);
           // Also append an alert inquiry so the admin dashboard notices
+          let targetSalesman = 'unassigned';
+          try {
+            const { data: dbSales } = await supabase
+              .from('Users')
+              .select('username')
+              .eq('role', 'Sales')
+              .neq('is_active', false);
+            
+            if (dbSales && dbSales.length > 0) {
+              targetSalesman = dbSales[0].username;
+            }
+          } catch (err) {}
+
           try {
             await supabase.from('Inquiries').insert([
               {
@@ -44,7 +57,7 @@ export async function GET(request) {
                 email: 'support@system.com',
                 message: `[Ticket Escalated] Buyer ${t.username}'s complaint regarding "${t.category}" has remained unanswered for over 5 minutes. Immediate response required.`,
                 source: 'SYSTEM_ALERT',
-                status: 'NEW|SR-9999'
+                status: `NEW|${targetSalesman}`
               }
             ]);
           } catch(e) {}

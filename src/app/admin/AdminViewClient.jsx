@@ -3082,6 +3082,10 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                           const repId = inq.status && inq.status.includes('|') ? inq.status.split('|')[1] : 'unassigned';
                           
                           const getRepName = (id) => {
+                            if (id === 'unassigned') return 'Awaiting Alloc';
+                            const dbUser = allUsers.find(u => u.username === id);
+                            if (dbUser) return dbUser.full_name || dbUser.username;
+                            
                             const map = {
                               'SR-9999': 'Vikram Sethi',
                               'SR-1111': 'Administrator',
@@ -3089,7 +3093,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                               'SR-3333': 'Sneha Patil',
                               'SR-4444': 'Aditya Sharma',
                             };
-                            return map[id] || 'Awaiting Alloc';
+                            return map[id] || id;
                           };
 
                           return (
@@ -3106,31 +3110,14 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                                     style={{ padding: '4px 8px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid #ccc' }}
                                   >
                                     <option value="unassigned">Select Rep...</option>
-                                    {(() => {
-                                      const mockExecs = [
-                                        { username: 'SR-9999', full_name: 'Vikram Sethi' },
-                                        { username: 'SR-1111', full_name: 'Administrator' },
-                                        { username: 'SR-2222', full_name: 'Rahul Verma' },
-                                        { username: 'SR-3333', full_name: 'Sneha Patil' },
-                                        { username: 'SR-4444', full_name: 'Aditya Sharma' }
-                                      ];
-                                      const salesUsers = allUsers.filter(u => u.role === 'Sales' && u.is_active !== false);
-                                      const combined = [...salesUsers];
-                                      mockExecs.forEach(m => {
-                                        if (!combined.some(c => c.username === m.username)) {
-                                          combined.push({ username: m.username, role: 'Sales', full_name: m.full_name });
-                                        }
-                                      });
-                                      const filteredCombined = combined.filter(c => {
-                                        const dbUser = allUsers.find(u => u.username === c.username);
-                                        return dbUser ? dbUser.is_active !== false : true;
-                                      });
-                                      return filteredCombined.map(c => (
-                                        <option key={c.username} value={c.username}>
-                                          {c.full_name || c.username} ({c.username})
+                                    {allUsers
+                                      .filter(u => u.role === 'Sales' && u.is_active !== false)
+                                      .map(u => (
+                                        <option key={u.username} value={u.username}>
+                                          {u.full_name || u.username} ({u.username})
                                         </option>
-                                      ));
-                                    })()}
+                                      ))
+                                    }
                                   </select>
                                   <button onClick={() => handleAssignLead(inq.id, leadAssignState.salesmanId)} className="btn-dark" style={{ padding: '4px 10px', fontSize: '0.65rem' }}>ALLOCATE</button>
                                 </div>
@@ -4005,11 +3992,14 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                     style={{ width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '6px' }}
                   >
                     <option value="unassigned">Awaiting Allocation (Unassigned)</option>
-                    <option value="SR-9999">Vikram Sethi (SR-9999)</option>
-                    <option value="SR-1111">Administrator (SR-1111)</option>
-                    <option value="SR-2222">Rahul Verma (SR-2222)</option>
-                    <option value="SR-3333">Sneha Patil (SR-3333)</option>
-                    <option value="SR-4444">Aditya Sharma (SR-4444)</option>
+                    {allUsers
+                      .filter(u => u.role === 'Sales' && u.is_active !== false)
+                      .map(u => (
+                        <option key={u.username} value={u.username}>
+                          {u.full_name || u.username} ({u.username})
+                        </option>
+                      ))
+                    }
                   </select>
                 </div>
 

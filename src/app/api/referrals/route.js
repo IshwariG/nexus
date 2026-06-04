@@ -128,6 +128,38 @@ export async function POST(request) {
     }
 
     // 3. Create a corresponding Inquiry/Lead so the Salesperson CRM can view/track it
+    let targetSalesman = 'unassigned';
+    try {
+      const { data: dbSales } = await supabase
+        .from('Users')
+        .select('username')
+        .eq('role', 'Sales')
+        .neq('is_active', false);
+      
+      if (dbSales && dbSales.length > 0) {
+        const salesmen = dbSales.map(u => u.username);
+        targetSalesman = salesmen[0];
+        const { data: lastInquiry } = await supabase
+          .from('Inquiries')
+          .select('status')
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (lastInquiry && lastInquiry.length > 0) {
+          const lastStatus = lastInquiry[0].status || '';
+          const parts = lastStatus.split('|');
+          if (parts.length > 1) {
+            const lastSalesman = parts[1];
+            const lastIndex = salesmen.indexOf(lastSalesman);
+            if (lastIndex !== -1) {
+              targetSalesman = salesmen[(lastIndex + 1) % salesmen.length];
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch salespersons for referral inquiry status:', err.message);
+    }
+
     try {
       await supabase
         .from('Inquiries')
@@ -138,7 +170,7 @@ export async function POST(request) {
             email: '',
             message: `[Buyer Referral] Referred by Resident Owner: ${referrer_username}. Interested in Skyview layouts.`,
             source: `Referral|${referrer_username}`,
-            status: 'NEW|SR-9999' // Round-robin or default sales assignment
+            status: `NEW|${targetSalesman}`
           }
         ]);
     } catch (e) {
