@@ -96,6 +96,25 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
       }
     });
 
+    // Add CP ready-to-book alerts dynamically
+    const readyToBookCpLeads = inquiries.filter(inq =>
+      inq.source?.startsWith('CP_Referral|') &&
+      (inq.status || '').split('|')[0] === 'READY_TO_BOOK'
+    );
+
+    readyToBookCpLeads.forEach(inq => {
+      const cpName = inq.source.split('|')[1];
+      const alertId = `cp-ready-${inq.id}`;
+      if (!dismissedAlertIds.includes(alertId)) {
+        items.push({
+          id: alertId,
+          text: `Deal closed by CP (${cpName}): ${inq.name} is Ready to Book. Awaiting Salesperson action.`,
+          icon: '🤝',
+          color: 'var(--vanya-gold)'
+        });
+      }
+    });
+
     return {
       items,
       count: items.length
@@ -3482,7 +3501,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
             <div className="responsive-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '1.5rem' }}>
               {/* Commissions Approval Ledger */}
               <div>
-                <AdminCPCommissionsClient initialCommissions={commissions} cpPartners={cpPartners} />
+                <AdminCPCommissionsClient initialCommissions={commissions} cpPartners={cpPartners} inquiries={inquiries} allUsers={allUsers} />
               </div>
               
               {/* CP Partner Profile registry */}
@@ -3869,12 +3888,19 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
             <div className="widget-card">
               <h3 className="serif" style={{ margin: '0 0 1rem 0' }}>Administrative Alerts Log</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
-                {notificationAlerts.items.filter(item => item.id !== 'cp-ref' && !item.id.startsWith('cp-ref-')).map(item => (
-                  <div key={item.id} style={{ position: 'relative', display: 'flex', gap: '1rem', padding: '1rem', background: item.color === '#c53030' ? '#fff5f5' : '#fffdf9', border: `1px solid ${item.color === '#c53030' ? '#feb2b2' : 'var(--vanya-gold)'}`, borderRadius: '8px' }}>
+                {notificationAlerts.items.map(item => (
+                  <div key={item.id} style={{ position: 'relative', display: 'flex', gap: '1rem', padding: '1rem', background: item.color === '#c53030' ? '#fff5f5' : item.color === '#1a73e8' ? '#f0f4f9' : '#fffdf9', border: `1px solid ${item.color === '#c53030' ? '#feb2b2' : item.color === '#1a73e8' ? '#a7f3d0' : 'var(--vanya-gold)'}`, borderRadius: '8px' }}>
                     <span style={{ fontSize: '1.5rem' }}>{item.icon}</span>
                     <div style={{ paddingRight: '1.5rem' }}>
-                      <h4 style={{ margin: '0 0 0.25rem 0', color: item.color === '#c53030' ? '#c53030' : '#b08e40', textTransform: 'uppercase', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                        {item.id === 'unassigned-leads' ? 'Action Required: Unassigned Leads' : item.id === 'pending-visits' ? 'Operational Warning: Pending Site Visits' : 'System Notice: Low Inventory'}
+                      <h4 style={{ margin: '0 0 0.25rem 0', color: item.color === '#c53030' ? '#c53030' : item.color === '#1a73e8' ? '#1a73e8' : '#b08e40', textTransform: 'uppercase', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                        {(() => {
+                          if (item.id === 'unassigned-leads') return 'Action Required: Unassigned Leads';
+                          if (item.id === 'pending-visits') return 'Operational Warning: Pending Site Visits';
+                          if (item.id === 'low-inventory') return 'System Notice: Low Inventory';
+                          if (item.id.startsWith('cp-ready-')) return 'Action Required: CP Deal Ready to Book';
+                          if (item.id.startsWith('cp-ref-')) return 'New CP Referral';
+                          return 'Alert Notice';
+                        })()}
                       </h4>
                       <p style={{ margin: 0, fontSize: '0.85rem', color: '#333' }}>{item.text}</p>
                     </div>
@@ -3887,7 +3913,7 @@ export default function AdminViewClient({ inquiries, units, buyers, cpPartners, 
                     </button>
                   </div>
                 ))}
-                {notificationAlerts.items.filter(item => item.id !== 'cp-ref' && !item.id.startsWith('cp-ref-')).length === 0 && (
+                {notificationAlerts.items.length === 0 && (
                   <div style={{ display: 'flex', gap: '1rem', padding: '1.5rem', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', alignItems: 'center' }}>
                     <span style={{ fontSize: '1.8rem' }}>✅</span>
                     <div>

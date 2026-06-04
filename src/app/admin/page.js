@@ -68,7 +68,7 @@ export default async function AdminDashboard(props) {
   }
 
   if (userRole === 'Buyer') {
-    return <BuyerPortalClient username={userId} buyerDetails={currentBuyer} inquiries={inquiries} units={units} />;
+    return <BuyerPortalClient username={userId} buyerDetails={currentBuyer} inquiries={inquiries} units={units} allUsers={allUsers} />;
   }
 
   if (userRole === 'ChannelPartner') {

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-export default function AdminCPCommissionsClient({ initialCommissions, cpPartners }) {
+export default function AdminCPCommissionsClient({ initialCommissions, cpPartners, inquiries = [], allUsers = [] }) {
   const router = useRouter();
   const [commissions, setCommissions] = useState(initialCommissions || []);
   const [updatingId, setUpdatingId] = useState(null);
@@ -182,6 +182,78 @@ export default function AdminCPCommissionsClient({ initialCommissions, cpPartner
           )}
         </tbody>
       </table>
+
+      {/* Deals Awaiting Booking Section */}
+      {(() => {
+        const readyToBookLeads = inquiries.filter(inq => 
+          inq.source?.startsWith('CP_Referral|') && 
+          (inq.status || '').split('|')[0] === 'READY_TO_BOOK'
+        );
+
+        const getCPFirmName = (cpUsername) => {
+          const cp = cpPartners.find(p => p.username === cpUsername);
+          return cp ? `${cp.firm_name} (${cp.username})` : cpUsername;
+        };
+
+        const getSalespersonName = (salesmanId) => {
+          const user = allUsers.find(u => u.username === salesmanId || u.employee_id === salesmanId);
+          return user ? `${user.full_name} (${user.username})` : salesmanId;
+        };
+
+        if (readyToBookLeads.length === 0) return null;
+
+        return (
+          <div style={{ marginTop: '2.5rem', borderTop: '1px solid #e2dfd7', paddingTop: '1.5rem' }}>
+            <div style={{ textAlign: 'left', marginBottom: '1.25rem' }}>
+              <h3 className="serif" style={{ margin: '0 0 0.25rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>🤝 Broker Deals Awaiting Salesperson Booking</h3>
+              <p className="text-muted" style={{ margin: 0, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                Deals submitted by channel partners as "Ready to Book", waiting for booking confirmation by assigned representative
+              </p>
+            </div>
+            <table className="table-standard">
+              <thead>
+                <tr>
+                  <th>CLIENT NAME & CONTACT</th>
+                  <th>BROKER PARTNER</th>
+                  <th>ASSIGNED SALESPERSON</th>
+                  <th>STATUS</th>
+                  <th>SUBMISSION TIME</th>
+                </tr>
+              </thead>
+              <tbody>
+                {readyToBookLeads.map((inq, i) => {
+                  const cpUsername = inq.source.split('|')[1];
+                  const repId = inq.status && inq.status.includes('|') ? inq.status.split('|')[1] : 'unassigned';
+                  return (
+                    <tr key={inq.id || i} style={{ background: '#fffbeb' }}>
+                      <td>
+                        <strong>{inq.name?.toUpperCase()}</strong>
+                        <div className="text-muted" style={{ fontSize: '0.72rem', marginTop: '0.2rem' }}>
+                          {inq.phone} {inq.email ? `| ${inq.email}` : ''}
+                        </div>
+                      </td>
+                      <td>
+                        <strong>{getCPFirmName(cpUsername)}</strong>
+                      </td>
+                      <td>
+                        <strong>{getSalespersonName(repId)}</strong>
+                      </td>
+                      <td>
+                        <span className="badge reserved" style={{ background: '#fff3cd', color: '#856404', border: '1px solid #ffeeba' }}>
+                          🤝 READY TO BOOK
+                        </span>
+                      </td>
+                      <td className="text-muted num-mono" style={{ fontSize: '0.72rem' }}>
+                        {new Date(inq.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
 
       <style dangerouslySetInnerHTML={{__html: `@keyframes fadeInUp { from { opacity: 0; transform: translateX(-50%) translateY(12px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }`}} />
     </div>

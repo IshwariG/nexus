@@ -199,6 +199,11 @@ h1, h2, h3, h4, .serif {
   color: #b45309;
   border: 1px solid #fde68a;
 }
+.badge.ready-to-book, .badge.ready_to_book {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeeba;
+}
 
 /* --- WIDGET CARD --- */
 .widget-card {

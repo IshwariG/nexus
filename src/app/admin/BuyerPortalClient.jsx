@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import './admin.css';
 
-export default function BuyerPortalClient({ username, buyerDetails, inquiries, units }) {
+export default function BuyerPortalClient({ username, buyerDetails, inquiries, units, allUsers = [] }) {
   const router = useRouter();
 
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
@@ -520,6 +520,122 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
     ]
   });
   const [newMsg, setNewMsg] = useState('');
+  const [previewImage, setPreviewImage] = useState(null);
+
+  const [readNotifIds, setReadNotifIds] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(`read_notifs_${username}`);
+        return stored ? JSON.parse(stored) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const markAsRead = (id) => {
+    setReadNotifIds(prev => {
+      const next = [...prev];
+      if (!next.includes(id)) {
+        next.push(id);
+      }
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`read_notifs_${username}`, JSON.stringify(next));
+      }
+      return next;
+    });
+  };
+
+  const markAllAsRead = (ids) => {
+    setReadNotifIds(prev => {
+      const next = [...prev];
+      ids.forEach(id => {
+        if (!next.includes(id)) {
+          next.push(id);
+        }
+      });
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`read_notifs_${username}`, JSON.stringify(next));
+      }
+      return next;
+    });
+  };
+
+  const getNotifications = () => {
+    const list = [];
+
+    // 1. CP Referral Lead completion / site visit completed
+    if (userInquiry) {
+      const inqStatus = (userInquiry.status || '').split('|')[0].toUpperCase();
+      const repId = (userInquiry.status || '').split('|')[1] || 'unassigned';
+      const dbSales = (allUsers || []).find(u => u.username === repId || u.employee_id === repId);
+      const repDisplay = dbSales ? (dbSales.full_name || dbSales.username) : repId;
+
+      if (inqStatus === 'DONE' || ['BOOKED', 'CONVERTED', 'READY_TO_BOOK'].includes(inqStatus)) {
+        list.push({
+          id: `inq-done-${userInquiry.id}`,
+          text: "Site visit walk-in verification completed.",
+          sub: `Accompanied by sales representative: ${repDisplay}`,
+          date: siteVisitDate ? siteVisitDate.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '20 May 2026, 10:30 AM',
+          rawDate: siteVisitDate || new Date()
+        });
+      } else if (inqStatus === 'VISIT_SCHEDULED') {
+        const visitTimeStr = (userInquiry.status || '').split('|')[2] || '';
+        const visitTimeFormatted = visitTimeStr ? new Date(visitTimeStr).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Upcoming';
+        list.push({
+          id: `inq-visit-${userInquiry.id}`,
+          text: `Site visit scheduled.`,
+          sub: `Date: ${visitTimeFormatted}. Rep: ${repDisplay}`,
+          date: inquiryDate ? inquiryDate.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '20 May 2026, 10:30 AM',
+          rawDate: inquiryDate || new Date()
+        });
+      }
+    }
+
+    // 2. Construction Updates
+    const milestoneUpdatesItem = (buyerDetails?.milestones || []).find(m => m.step === 'CONSTRUCTION_UPDATES');
+    const realUpdates = milestoneUpdatesItem?.updates || [
+      { title: "Foundation Completed", date: "2026-06-04", description: "Deep pile foundation completed successfully.", image: "/images/uc1.png" },
+      { title: "12th Floor Slab Completed", date: "2026-05-20", description: "Tower A slab completion and reinforcement.", image: "/images/uc1.png" },
+      { title: "10th Floor Slab Completed", date: "2026-05-10", description: "Completed slab pouring for Floor 10.", image: "/images/uc1.png" }
+    ];
+
+    realUpdates.forEach((upd, idx) => {
+      list.push({
+        id: `const-${upd.title}-${upd.date}`,
+        text: `Construction update: ${upd.title}`,
+        sub: upd.description || "Tower slab completion and reinforcement.",
+        date: new Date(upd.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }),
+        rawDate: new Date(upd.date)
+      });
+    });
+
+    // 3. Buyer Details - Booking registration
+    if (buyerDetails) {
+      list.push({
+        id: `booking-${buyerDetails.id}-${buyerDetails.unit_id}`,
+        text: `Flat Booking Finalized: Unit V-${buyerDetails.unit_id}`,
+        sub: `Contract booking registered for total price of ₹ ${buyerDetails.total_amount}.`,
+        date: buyerDetails.created_at ? new Date(buyerDetails.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '4 Jun 2026, 11:20 AM',
+        rawDate: buyerDetails.created_at ? new Date(buyerDetails.created_at) : new Date()
+      });
+
+      // 4. Payment received
+      if (buyerDetails.amount_paid) {
+        list.push({
+          id: `payment-${buyerDetails.id}`,
+          text: `Payment of ₹ ${buyerDetails.amount_paid} received successfully.`,
+          sub: "Payment receipt updated in Documents ledger.",
+          date: buyerDetails.created_at ? new Date(buyerDetails.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '4 Jun 2026, 11:30 AM',
+          rawDate: buyerDetails.created_at ? new Date(buyerDetails.created_at) : new Date()
+        });
+      }
+    }
+
+    // Sort descending by rawDate
+    return list.sort((a, b) => b.rawDate - a.rawDate);
+  };
 
   const changeTab = (tabName) => {
     setActiveTab(tabName);
@@ -595,15 +711,33 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
     return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
   };
   
-  let userInquiry = (inquiries || []).find(i => i.name?.toLowerCase().includes(username?.toLowerCase()) || i.phone === username);
+  let userInquiry = (inquiries || []).find(i => i.name?.toLowerCase() === username?.toLowerCase() || i.phone === username || (i.email && i.email.toLowerCase() === username?.toLowerCase()));
   let baseBookingDate = buyerDetails?.created_at ? new Date(buyerDetails.created_at) : new Date("2026-06-04");
   if (username === 'ram' || !buyerDetails?.created_at) {
     baseBookingDate = new Date("2026-06-04");
   }
   
-  let inquiryDate = new Date(baseBookingDate.getTime() - 10 * 24 * 60 * 60 * 1000);
-  let siteVisitDate = new Date(baseBookingDate.getTime() - 2 * 24 * 60 * 60 * 1000);
-  let agreementDate = new Date(baseBookingDate.getTime() + 8 * 24 * 60 * 60 * 1000);
+  let inquiryDate = userInquiry?.created_at ? new Date(userInquiry.created_at) : new Date(baseBookingDate.getTime() - 2 * 24 * 60 * 60 * 1000);
+  
+  // Try to find a scheduled site visit in comments, otherwise default to 1 day before booking
+  let siteVisitDate = null;
+  if (userInquiry?.message) {
+    const visitMatch = userInquiry.message.match(/\[VISIT SCHEDULED:\s*([^\]\s]+)/i);
+    if (visitMatch && visitMatch[1]) {
+      const d = new Date(visitMatch[1]);
+      if (!isNaN(d.getTime())) siteVisitDate = d;
+    }
+  }
+  if (!siteVisitDate) {
+    siteVisitDate = new Date(baseBookingDate.getTime() - 1 * 24 * 60 * 60 * 1000);
+  }
+  
+  // If Site Visit date is earlier than Inquiry date, make it midpoint or Inquiry date
+  if (siteVisitDate.getTime() < inquiryDate.getTime()) {
+    siteVisitDate = new Date(inquiryDate.getTime() + (baseBookingDate.getTime() - inquiryDate.getTime()) / 2);
+  }
+
+  let agreementDate = new Date(baseBookingDate.getTime() + 3 * 24 * 60 * 60 * 1000); // 3 days after booking
   
   const now = new Date();
   
@@ -978,12 +1112,25 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
           <button className={activeTab === 'amenities' ? 'active' : ''} onClick={() => changeTab('amenities')}>
             <span className="nav-icon">🌟</span> Amenities
           </button>
-          <button className={activeTab === 'messages' ? 'active' : ''} onClick={() => changeTab('messages')}>
-            <span className="nav-icon">✉️</span> Messages
-          </button>
-          <button className={activeTab === 'notifications' ? 'active' : ''} onClick={() => changeTab('notifications')}>
-            <span className="nav-icon">🔔</span> Notifications
-          </button>
+          {(() => {
+            const unreadCount = getNotifications().filter(n => !readNotifIds.includes(n.id)).length;
+            return (
+              <button 
+                className={activeTab === 'notifications' ? 'active' : ''} 
+                onClick={() => changeTab('notifications')}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span className="nav-icon">🔔</span> Notifications
+                </div>
+                {unreadCount > 0 && (
+                  <span style={{ background: '#c62828', color: 'white', fontSize: '0.65rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold' }}>
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+            );
+          })()}
           <button className={activeTab === 'referrals' ? 'active' : ''} onClick={() => changeTab('referrals')}>
             <span className="nav-icon">🤝</span> Refer & Earn
           </button>
@@ -992,13 +1139,6 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
           </button>
           <button className={activeTab === 'profile' ? 'active' : ''} onClick={() => changeTab('profile')}>
             <span className="nav-icon">👤</span> Profile
-          </button>
-          <button onClick={() => {
-             document.cookie = "user_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
-             document.cookie = "user_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
-             window.location.href = "/";
-          }}>
-            <span className="nav-icon">🚪</span> Logout
           </button>
         </nav>
         
@@ -1183,22 +1323,43 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                 </div>
               </div>
 
-              <div className="widget-card" style={{ display: 'flex', gap: '1.25rem', padding: '1.25rem', margin: 0, alignItems: 'center' }}>
-                <div style={{
-                  backgroundImage: "url('/images/uc1.png')",
-                  width: '120px',
-                  height: '95px',
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  borderRadius: '8px',
-                  flexShrink: 0
-                }}></div>
-                <div>
-                  <h4 className="serif" style={{ margin: '0 0 0.25rem 0', color: 'var(--vanya-green)', fontSize: '1rem' }}>Latest Update</h4>
-                  <p style={{ margin: 0, fontSize: '0.78rem', color: '#4b5563', lineHeight: 1.4 }}>Tower A - 12th Floor slab completed. Brickwork initiated in lower segments.</p>
-                  <span className="text-muted" style={{ display: 'block', fontSize: '0.62rem', marginTop: '0.4rem' }}>PUBLISHED: 20 May 2026</span>
-                </div>
-              </div>
+              {(() => {
+                const milestoneUpdatesItem = (buyerDetails?.milestones || []).find(m => m.step === 'CONSTRUCTION_UPDATES');
+                const realUpdates = milestoneUpdatesItem?.updates || [
+                  { title: "Foundation Completed", date: "2026-06-04", description: "Deep pile foundation completed successfully.", image: "/images/uc1.png" },
+                  { title: "12th Floor Slab Completed", date: "2026-05-20", description: "Tower A slab completion and reinforcement.", image: "/images/uc1.png" },
+                  { title: "10th Floor Slab Completed", date: "2026-05-10", description: "Completed slab pouring for Floor 10.", image: "/images/uc1.png" }
+                ];
+
+                const latestUpdate = [...realUpdates].sort((a, b) => new Date(b.date) - new Date(a.date))[0] || {
+                  title: "Latest Update",
+                  description: "Tower A - 12th Floor slab completed. Brickwork initiated in lower segments.",
+                  date: "2026-05-20",
+                  image: "/images/uc1.png"
+                };
+
+                const formattedPubDate = new Date(latestUpdate.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+
+                return (
+                  <div className="widget-card" style={{ display: 'flex', gap: '1.25rem', padding: '1.25rem', margin: 0, alignItems: 'center' }}>
+                    <div style={{
+                      backgroundImage: `url(${latestUpdate.image || '/images/uc1.png'})`,
+                      width: '120px',
+                      height: '95px',
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                      borderRadius: '8px',
+                      flexShrink: 0,
+                      cursor: 'pointer'
+                    }} onClick={() => setPreviewImage(latestUpdate)}></div>
+                    <div>
+                      <h4 className="serif" style={{ margin: '0 0 0.25rem 0', color: 'var(--vanya-green)', fontSize: '1rem' }}>{latestUpdate.title}</h4>
+                      <p style={{ margin: 0, fontSize: '0.78rem', color: '#4b5563', lineHeight: 1.4 }}>{latestUpdate.description}</p>
+                      <span className="text-muted" style={{ display: 'block', fontSize: '0.62rem', marginTop: '0.4rem' }}>PUBLISHED: {formattedPubDate}</span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
           </div>
@@ -1503,7 +1664,23 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                 <div style={{ background: '#f1f3f5', height: '8px', width: '80%', borderRadius: '4px', overflow: 'hidden' }}>
                   <div style={{ background: '#D9A036', width: `${progressPercent}%`, height: '100%' }}></div>
                 </div>
-                <span className="text-muted" style={{ fontSize: '0.62rem', marginTop: '1rem' }}>Last updated: 20 May 2026</span>
+                <span className="text-muted" style={{ fontSize: '0.62rem', marginTop: '1rem' }}>
+                  Last updated: {(() => {
+                    const milestoneUpdatesItem = (buyerDetails?.milestones || []).find(m => m.step === 'CONSTRUCTION_UPDATES');
+                    const realUpdates = milestoneUpdatesItem?.updates || [
+                      { title: "Foundation Completed", date: "2026-06-04", description: "Deep pile foundation completed successfully.", image: "/images/uc1.png" },
+                      { title: "12th Floor Slab Completed", date: "2026-05-20", description: "Tower A slab completion and reinforcement.", image: "/images/uc1.png" },
+                      { title: "10th Floor Slab Completed", date: "2026-05-10", description: "Completed slab pouring for Floor 10.", image: "/images/uc1.png" }
+                    ];
+                    const latestDate = realUpdates.reduce((latest, current) => {
+                      if (!latest) return current.date;
+                      return new Date(current.date) > new Date(latest) ? current.date : latest;
+                    }, "");
+                    return latestDate 
+                      ? new Date(latestDate).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
+                      : '20 May 2026';
+                  })()}
+                </span>
               </div>
 
               <div className="widget-card" style={{ margin: 0 }}>
@@ -1522,39 +1699,65 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                   </div>
                 </div>
 
-                {constructionSubTab === 'photo' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginTop: '1rem' }}>
-                    {[
-                      { title: "12th Floor Slab Completed", date: "20 May 2026" },
-                      { title: "10th Floor Slab Completed", date: "10 May 2026" },
-                      { title: "8th Floor Slab Completed", date: "30 Apr 2026" }
-                    ].map((upd, idx) => (
-                      <div key={idx} style={{ border: '1px solid #f1f3f5', borderRadius: '8px', overflow: 'hidden' }}>
-                        <div style={{ backgroundImage: "url('/images/uc1.png')", height: '110px', backgroundSize: 'cover', backgroundPosition: 'center' }}></div>
-                        <div style={{ padding: '8px 10px' }}>
-                          <strong style={{ fontSize: '0.75rem', display: 'block', color: 'var(--vanya-green)' }}>{upd.title}</strong>
-                          <span className="text-muted" style={{ fontSize: '0.62rem', display: 'block', marginTop: '2px' }}>{upd.date}</span>
+                {(() => {
+                  const milestoneUpdatesItem = (buyerDetails?.milestones || []).find(m => m.step === 'CONSTRUCTION_UPDATES');
+                  const realUpdates = milestoneUpdatesItem?.updates || [
+                    { title: "Foundation Completed", date: "2026-06-04", description: "Deep pile foundation completed successfully.", image: "/images/uc1.png" },
+                    { title: "12th Floor Slab Completed", date: "2026-05-20", description: "Tower A slab completion and reinforcement.", image: "/images/uc1.png" },
+                    { title: "10th Floor Slab Completed", date: "2026-05-10", description: "Completed slab pouring for Floor 10.", image: "/images/uc1.png" }
+                  ];
+
+                  return (
+                    <>
+                      {constructionSubTab === 'photo' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginTop: '1rem' }}>
+                          {realUpdates.map((upd, idx) => (
+                            <div key={idx} style={{ border: '1px solid #f1f3f5', borderRadius: '8px', overflow: 'hidden' }}>
+                              <div 
+                                style={{ backgroundImage: `url(${upd.image || '/images/uc1.png'})`, height: '110px', backgroundSize: 'cover', backgroundPosition: 'center', cursor: 'pointer' }}
+                                onClick={() => setPreviewImage(upd)}
+                              ></div>
+                              <div style={{ padding: '8px 10px' }}>
+                                <strong style={{ fontSize: '0.75rem', display: 'block', color: 'var(--vanya-green)' }}>{upd.title}</strong>
+                                <span className="text-muted" style={{ fontSize: '0.62rem', display: 'block', marginTop: '2px' }}>
+                                  {new Date(upd.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      )}
 
-                {constructionSubTab === 'timeline' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem', fontSize: '0.8rem', color: '#4b5563' }}>
-                    <div><strong>May 2026:</strong> 12th Floor Slab Completed, brickwork initiation.</div>
-                    <div><strong>April 2026:</strong> 8th and 9th Floor plumbing and electrical conduits.</div>
-                    <div><strong>March 2026:</strong> Foundation waterproofing completion.</div>
-                  </div>
-                )}
+                      {constructionSubTab === 'timeline' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem', fontSize: '0.8rem', color: '#4b5563' }}>
+                          {realUpdates.map((upd, idx) => (
+                            <div key={idx}>
+                              <strong>{new Date(upd.date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}:</strong> {upd.description || upd.title}
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
-                {constructionSubTab === 'milestones' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem', fontSize: '0.8rem' }}>
-                    <div className="flex-between"><span>Foundation Slabs</span><span className="badge available">Completed</span></div>
-                    <div className="flex-between"><span>Structure Towers</span><span className="badge negotiation">In Progress</span></div>
-                    <div className="flex-between"><span>Interior Fitouts</span><span className="badge reserved">Pending</span></div>
-                  </div>
-                )}
+                      {constructionSubTab === 'milestones' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem', fontSize: '0.8rem' }}>
+                          {(buyerDetails?.milestones || [])
+                            .filter(m => m.step !== 'CONSTRUCTION_UPDATES')
+                            .map((m, idx) => {
+                              let badgeClass = 'reserved';
+                              if (m.status === 'COMPLETED') badgeClass = 'available';
+                              else if (m.status === 'IN PROGRESS') badgeClass = 'negotiation';
+                              return (
+                                <div key={idx} className="flex-between">
+                                  <span>{m.step}</span>
+                                  <span className={`badge ${badgeClass}`}>{m.status}</span>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
             
@@ -1594,135 +1797,101 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
                   </div>
                 ))}
               </div>
-              <div style={{ textAlign: 'center', marginTop: '2.5rem' }}>
-                <button onClick={() => alert('Booking system simulated.')} className="btn-dark" style={{ padding: '10px 20px', borderRadius: '8px', background: '#D9A036', border: 'none', color: 'white', fontWeight: 'bold' }}>
-                  View All Amenities
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ==================== 8. MESSAGES PAGE ==================== */}
-        {activeTab === 'messages' && (
-          <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1.5rem', height: '450px' }}>
-              
-              {/* Sidebar chats threads */}
-              <div className="widget-card" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '1rem', margin: 0 }}>
-                <h4 className="serif" style={{ margin: '0 0 1rem 0', color: 'var(--vanya-green)', fontSize: '1rem' }}>Conversations</h4>
-                
-                <button 
-                  onClick={() => setActiveChatThread('team')}
-                  className={`btn-outline ${activeChatThread === 'team' ? 'active' : ''}`}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '10px', width: '100%', textAlign: 'left', border: 'none', borderRadius: '8px' }}
-                >
-                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--vanya-green)', color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }}>DS</div>
-                  <div>
-                    <strong style={{ fontSize: '0.8rem', display: 'block' }}>DreamSpaces Team</strong>
-                    <span style={{ fontSize: '0.62rem', color: '#888' }}>Concierge Support</span>
-                  </div>
-                </button>
-
-                <button 
-                  onClick={() => setActiveChatThread('sales')}
-                  className={`btn-outline ${activeChatThread === 'sales' ? 'active' : ''}`}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '10px', width: '100%', textAlign: 'left', border: 'none', borderRadius: '8px' }}
-                >
-                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--vanya-gold)', color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }}>RV</div>
-                  <div>
-                    <strong style={{ fontSize: '0.8rem', display: 'block' }}>Rahul Verma</strong>
-                    <span style={{ fontSize: '0.62rem', color: '#888' }}>Sales Representative</span>
-                  </div>
-                </button>
-
-                <button 
-                  onClick={() => setActiveChatThread('support')}
-                  className={`btn-outline ${activeChatThread === 'support' ? 'active' : ''}`}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '10px', width: '100%', textAlign: 'left', border: 'none', borderRadius: '8px' }}
-                >
-                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#9ca3af', color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }}>CS</div>
-                  <div>
-                    <strong style={{ fontSize: '0.8rem', display: 'block' }}>Customer Support</strong>
-                    <span style={{ fontSize: '0.62rem', color: '#888' }}>ERP Desk</span>
-                  </div>
-                </button>
-              </div>
-
-              {/* Active chat pane */}
-              <div className="widget-card" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1.25rem', margin: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', borderBottom: '1px solid #f1f3f5', paddingBottom: '0.75rem', marginBottom: '0.75rem' }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: activeChatThread === 'team' ? 'var(--vanya-green)' : activeChatThread === 'sales' ? 'var(--vanya-gold)' : '#9ca3af', color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {activeChatThread === 'team' ? 'DS' : activeChatThread === 'sales' ? 'RV' : 'CS'}
-                  </div>
-                  <div>
-                    <strong style={{ fontSize: '0.85rem', display: 'block', color: 'var(--vanya-green)' }}>
-                      {activeChatThread === 'team' ? 'DreamSpaces Team' : activeChatThread === 'sales' ? 'Rahul Verma' : 'Customer Support'}
-                    </strong>
-                    <span style={{ fontSize: '0.65rem', color: '#137333', fontWeight: 'bold' }}>● ONLINE</span>
-                  </div>
-                </div>
-
-                <div style={{ flex: 1, overflowY: 'auto', border: '1px solid #f1f3f5', padding: '1rem', borderRadius: '8px', background: '#fafafa', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {chatMessages[activeChatThread]?.map((m, idx) => (
-                    <div key={idx} style={{ 
-                      alignSelf: m.sender === 'buyer' ? 'flex-end' : 'flex-start', 
-                      background: m.sender === 'buyer' ? '#D9A036' : '#fff', 
-                      color: m.sender === 'buyer' ? 'white' : '#333', 
-                      padding: '8px 12px', 
-                      borderRadius: '8px', 
-                      maxWidth: '70%', 
-                      fontSize: '0.8rem', 
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)' 
-                    }}>
-                      <div>{m.text}</div>
-                      <span style={{ fontSize: '0.58rem', opacity: 0.7, display: 'block', textAlign: 'right', marginTop: '4px' }}>{m.time}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-                  <input type="text" value={newMsg} onChange={(e) => setNewMsg(e.target.value)} placeholder="Type your message..." style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '0.82rem' }} />
-                  <button type="submit" className="btn-dark" style={{ padding: '8px 16px', fontSize: '0.8rem', background: 'var(--vanya-green)', border: 'none', color: 'white', borderRadius: '6px' }}>SEND</button>
-                </form>
-              </div>
 
             </div>
           </div>
         )}
 
         {/* ==================== 9. NOTIFICATIONS PAGE ==================== */}
-        {activeTab === 'notifications' && (
-          <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem' }}>
-            <div className="widget-card">
-              <div className="flex-between mb-2" style={{ borderBottom: '1px solid #f1f3f5', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
-                <h3 className="serif" style={{ margin: 0, color: 'var(--vanya-green)' }}>Notifications</h3>
-                <span onClick={() => alert('All notifications marked as read.')} style={{ color: '#D9A036', fontSize: '0.72rem', fontWeight: 'bold', cursor: 'pointer' }}>Mark all as read</span>
-              </div>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {[
-                  { text: `Your payment of ₹ 5,00,000 has been received.`, sub: "Payment receipt updated in Documents", date: "20 May 2026, 10:30 AM" },
-                  { text: "Construction update for Tower A is available.", sub: "Check photo log under Construction tab", date: "20 May 2026, 04:30 PM" },
-                  { text: "Your document [Payment Receipt - Mar] is uploaded.", sub: "Agreements and Receipts folder", date: "15 May 2026, 11:20 AM" },
-                  { text: "Upcoming payment of ₹ 2,45,000 is due on 25 May 2026.", sub: "Instalment schedule 4th stage", date: "10 May 2026, 09:00 AM" },
-                  { text: "Site visit scheduled on 25 May 2026 at 11:00 AM.", sub: "Accompanied by Rahul Verma (Sales Rep)", date: "09 May 2026, 05:30 PM" }
-                ].map((notif, idx) => (
-                  <div key={idx} style={{ padding: '1rem', background: idx < 2 ? 'var(--admin-surface)' : '#fff', borderLeft: idx < 2 ? '4px solid #D9A036' : '4px solid #eee', borderRadius: '6px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <div style={{ width: '8px', height: '8px', background: idx < 2 ? '#D9A036' : 'transparent', borderRadius: '50%' }}></div>
-                    <div>
-                      <strong>{notif.text}</strong>
-                      <div className="text-muted" style={{ fontSize: '0.7rem', marginTop: '2px' }}>{notif.sub} • {notif.date}</div>
+        {activeTab === 'notifications' && (() => {
+          const list = getNotifications();
+          const unreadIds = list.filter(n => !readNotifIds.includes(n.id)).map(n => n.id);
+          
+          return (
+            <div className="dashboard-layout-main" style={{ padding: '1.5rem 2.5rem' }}>
+              <div className="widget-card">
+                <div className="flex-between mb-2" style={{ borderBottom: '1px solid #f1f3f5', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
+                  <h3 className="serif" style={{ margin: 0, color: 'var(--vanya-green)' }}>Notifications</h3>
+                  {unreadIds.length > 0 && (
+                    <span 
+                      onClick={() => markAllAsRead(unreadIds)} 
+                      style={{ color: '#D9A036', fontSize: '0.72rem', fontWeight: 'bold', cursor: 'pointer' }}
+                    >
+                      Mark all as read
+                    </span>
+                  )}
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {list.map((notif, idx) => {
+                    const isRead = readNotifIds.includes(notif.id);
+                    return (
+                      <div 
+                        key={notif.id || idx} 
+                        style={{ 
+                          padding: '1rem', 
+                          background: isRead ? '#fafafa' : 'var(--admin-surface)', 
+                          borderLeft: isRead ? '4px solid #eee' : '4px solid #D9A036', 
+                          borderRadius: '6px', 
+                          fontSize: '0.82rem', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'space-between',
+                          gap: '1rem',
+                          opacity: isRead ? 0.65 : 1,
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <div style={{ width: '8px', height: '8px', background: isRead ? 'transparent' : '#D9A036', borderRadius: '50%' }}></div>
+                          <div>
+                            <strong>{notif.text}</strong>
+                            <div className="text-muted" style={{ fontSize: '0.7rem', marginTop: '2px' }}>{notif.sub} • {notif.date}</div>
+                          </div>
+                        </div>
+                        <div>
+                          {isRead ? (
+                            <span style={{ fontSize: '0.72rem', color: '#9ca3af', fontWeight: '600' }}>✓ Read</span>
+                          ) : (
+                            <button
+                              onClick={() => markAsRead(notif.id)}
+                              style={{
+                                background: 'transparent',
+                                border: '1px solid #D9A036',
+                                color: '#D9A036',
+                                padding: '4px 10px',
+                                borderRadius: '4px',
+                                fontSize: '0.68rem',
+                                fontWeight: 'bold',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s'
+                              }}
+                              onMouseEnter={e => {
+                                e.currentTarget.style.background = '#D9A036';
+                                e.currentTarget.style.color = '#fff';
+                              }}
+                              onMouseLeave={e => {
+                                e.currentTarget.style.background = 'transparent';
+                                e.currentTarget.style.color = '#D9A036';
+                              }}
+                            >
+                              Mark Read
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {list.length === 0 && (
+                    <div className="text-muted" style={{ textAlign: 'center', padding: '2rem' }}>
+                      No notifications logged.
                     </div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ textAlign: 'center', marginTop: '2rem' }}>
-                <span onClick={() => alert('Showing all historical notifications')} style={{ color: '#D9A036', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>View All Notifications</span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ==================== 10. SUPPORT PAGE ==================== */}
         {activeTab === 'support' && (
@@ -2425,6 +2594,93 @@ export default function BuyerPortalClient({ username, buyerDetails, inquiries, u
         )}
 
       </main>
+
+      {/* Lightbox / Modal for Construction Image Preview */}
+      {previewImage && (
+        <div 
+          onClick={() => setPreviewImage(null)} 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(15, 23, 42, 0.9)', 
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: '2rem',
+            animation: 'fadeIn 0.25s ease'
+          }}
+        >
+          <div 
+            onClick={e => e.stopPropagation()} 
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              maxWidth: '800px',
+              width: '100%',
+              overflow: 'hidden',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              animation: 'scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+            }}
+          >
+            <div style={{ position: 'relative', width: '100%', maxHeight: '60vh', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <img 
+                src={previewImage.image || '/images/uc1.png'} 
+                alt={previewImage.title || 'Construction Progress'} 
+                style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain' }}
+              />
+              <button 
+                onClick={() => setPreviewImage(null)}
+                style={{
+                  position: 'absolute',
+                  top: '16px',
+                  right: '16px',
+                  background: 'rgba(255, 255, 255, 0.9)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '36px',
+                  height: '36px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.25rem',
+                  fontWeight: 'bold',
+                  color: '#1e293b',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
+                  transition: 'background 0.2s'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = '#ffffff'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.9)'}
+              >
+                &times;
+              </button>
+            </div>
+            <div style={{ padding: '1.75rem', background: '#ffffff' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--vanya-gold)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                Construction Update · {new Date(previewImage.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+              </span>
+              <h3 className="serif" style={{ margin: '0.35rem 0 0.75rem 0', fontSize: '1.5rem', color: 'var(--vanya-green)' }}>
+                {previewImage.title}
+              </h3>
+              <p style={{ margin: 0, fontSize: '0.88rem', color: '#475569', lineHeight: 1.6 }}>
+                {previewImage.description || 'Slab completed and reinforcement checks passed for the corresponding tower segment.'}
+              </p>
+            </div>
+          </div>
+          <style dangerouslySetInnerHTML={{__html: `
+            @keyframes scaleUp {
+              from { transform: scale(0.95); opacity: 0; }
+              to { transform: scale(1); opacity: 1; }
+            }
+          `}} />
+        </div>
+      )}
     </div>
   );
 }

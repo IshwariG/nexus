@@ -520,7 +520,7 @@ export default function InquiryPipelineClient({
                   </div>
                 </td>
                 <td><span className="source-pill">🌐 {inq.source?.toUpperCase() || 'WEBSITE PORTAL'}</span></td>
-                <td><span className={`badge ${statusText.toLowerCase().replace(' ', '-')}`}>{statusText}</span></td>
+                <td><span className={`badge ${statusText.toLowerCase().replace(/[\s_]+/g, '-')}`}>{statusText.replace(/_/g, ' ')}</span></td>
                 <td className="text-muted num-mono" style={{fontSize:'0.75rem'}}>{new Date(inq.created_at).toLocaleString('en-US', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</td>
                 <td style={{textAlign: 'right', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end'}}>
                   <button 

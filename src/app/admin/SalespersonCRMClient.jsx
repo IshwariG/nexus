@@ -248,6 +248,10 @@ export default function SalespersonCRMClient({
   const [updatingTotalValue, setUpdatingTotalValue] = useState('');
   const [updatingTotalPaid, setUpdatingTotalPaid] = useState('');
   const [isSavingProgress, setIsSavingProgress] = useState(false);
+  const [newUpdateTitle, setNewUpdateTitle] = useState('');
+  const [newUpdateDescription, setNewUpdateDescription] = useState('');
+  const [newUpdateDate, setNewUpdateDate] = useState('');
+  const [newUpdateImage, setNewUpdateImage] = useState('');
 
   const handleOpenUpdateModal = (buyer) => {
     setUpdatingBuyer(buyer);
@@ -261,6 +265,10 @@ export default function SalespersonCRMClient({
       { step: "Finishing", status: "PENDING" },
       { step: "Handover", status: "PENDING" }
     ]);
+    setNewUpdateTitle('');
+    setNewUpdateDescription('');
+    setNewUpdateDate(new Date().toISOString().split('T')[0]);
+    setNewUpdateImage('');
   };
 
   useEffect(() => {
@@ -616,6 +624,7 @@ export default function SalespersonCRMClient({
     else if (rawStatus === 'DONE') { badgeClass += 'available'; label = 'Visit Done'; }
     else if (rawStatus === 'PROPOSAL') { badgeClass += 'reserved'; label = 'Proposal Sent'; }
     else if (rawStatus === 'NEGOTIATION') { badgeClass += 'negotiation'; label = 'In Negotiation'; }
+    else if (rawStatus === 'READY_TO_BOOK') { badgeClass += 'ready-to-book'; label = 'Ready to Book'; }
     else if (rawStatus === 'BOOKED' || rawStatus === 'CONVERTED') { badgeClass += 'available'; label = 'Closed Won'; }
     else if (rawStatus === 'LOST') { badgeClass += 'sold'; label = 'Lost'; }
     else { badgeClass += 'available'; }
@@ -958,6 +967,7 @@ export default function SalespersonCRMClient({
           {[
             { id: 'dashboard', label: 'Dashboard', icon: '📊' },
             { id: 'inventory', label: 'Tower Inventory', icon: '🏢' },
+            { id: 'sold_flats', label: 'Sold Flats Progress', icon: '🏗️' },
             { id: 'leads', label: 'Leads Pipeline', icon: '🤝', count: activeLeadsCount },
             { id: 'followups', label: 'Follow Ups', icon: '📞' },
             { id: 'bookings', label: 'Bookings', icon: '🔑' },
@@ -1943,8 +1953,21 @@ export default function SalespersonCRMClient({
             </div>
             </div>
 
-            <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5', marginTop: '1.5rem' }}>
-              <h3 className="serif" style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Buyer Progress & Milestones</h3>
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* TAB: SOLD FLATS CONSTRUCTION PROGRESS */}
+        {/* ============================================================== */}
+        {activeTab === 'sold_flats' && (
+          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <h2 className="serif" style={{ margin: 0, fontSize: '1.5rem', color: 'var(--vanya-green)' }}>Sold Flats & Construction Updates</h2>
+            
+            <div className="widget-card" style={{ background: 'white', borderRadius: '12px', padding: '2rem', border: '1px solid #f1f3f5' }}>
+              <h3 className="serif" style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', color: 'var(--vanya-green)' }}>Customer Accounts Registry</h3>
+              <p style={{ fontSize: '0.8rem', color: '#6b7280', margin: '0 0 1.5rem 0' }}>
+                All apartments sold by you. Click "Update Progress" to update milestones, construction progress percentage, or to add/remove construction timeline updates and photos visible in the buyer's portal.
+              </p>
               
               <div className="table-responsive-wrapper">
                 <table className="table-standard">
@@ -1991,7 +2014,6 @@ export default function SalespersonCRMClient({
                 </table>
               </div>
             </div>
-
           </div>
         )}
 
@@ -3422,15 +3444,18 @@ export default function SalespersonCRMClient({
               <div>
                 <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>CONSTRUCTION MILESTONES</label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.66rem', background: '#fafafa', border: '1px solid #f1f3f5', padding: '0.8rem', borderRadius: '8px' }}>
-                  {updatingMilestones.map((m, idx) => (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  {updatingMilestones.filter(m => m.step !== 'CONSTRUCTION_UPDATES').map((m, idx) => (
+                    <div key={m.step || idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151' }}>{m.step}</span>
                       <select 
                         value={m.status} 
                         onChange={(e) => {
                           const newM = [...updatingMilestones];
-                          newM[idx] = { ...newM[idx], status: e.target.value };
-                          setUpdatingMilestones(newM);
+                          const targetIdx = newM.findIndex(orig => orig.step === m.step);
+                          if (targetIdx !== -1) {
+                            newM[targetIdx] = { ...newM[targetIdx], status: e.target.value };
+                            setUpdatingMilestones(newM);
+                          }
                         }}
                         style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #d1d5db', fontSize: '0.75rem', width: '130px', background: '#fff' }}
                       >
@@ -3440,6 +3465,133 @@ export default function SalespersonCRMClient({
                       </select>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.3rem' }}>CONSTRUCTION UPDATES & PHOTO LOGS</label>
+                <div style={{ background: '#fafafa', border: '1px solid #f1f3f5', padding: '0.8rem', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {/* List of existing updates */}
+                  {(() => {
+                    const updatesItem = updatingMilestones.find(m => m.step === 'CONSTRUCTION_UPDATES');
+                    const updates = updatesItem?.updates || [];
+                    if (updates.length === 0) {
+                      return <span style={{ fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center' }}>No log updates added yet.</span>;
+                    }
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '150px', overflowY: 'auto' }}>
+                        {updates.map((upd, uIdx) => (
+                          <div key={uIdx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', background: 'white', padding: '0.4rem', borderRadius: '4px', border: '1px solid #eee' }}>
+                            {upd.image && <img src={upd.image} style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px' }} />}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <strong style={{ fontSize: '0.72rem', display: 'block', color: 'var(--vanya-green)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{upd.title}</strong>
+                              <span style={{ fontSize: '0.6rem', color: '#9ca3af' }}>{upd.date}</span>
+                            </div>
+                            <button 
+                              type="button" 
+                              onClick={() => {
+                                const newM = [...updatingMilestones];
+                                const itemIdx = newM.findIndex(m => m.step === 'CONSTRUCTION_UPDATES');
+                                if (itemIdx !== -1) {
+                                  const updatedList = newM[itemIdx].updates.filter((_, i) => i !== uIdx);
+                                  newM[itemIdx] = { ...newM[itemIdx], updates: updatedList };
+                                  setUpdatingMilestones(newM);
+                                }
+                              }} 
+                              style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '1.25rem', lineHeight: '1' }}
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Form to add a new update */}
+                  <div style={{ borderTop: '1px solid #eee', paddingTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#374151' }}>Add New Photo / Log:</span>
+                    <input 
+                      type="text" 
+                      placeholder="Update Title (e.g. 12th Floor slab)" 
+                      value={newUpdateTitle} 
+                      onChange={e => setNewUpdateTitle(e.target.value)} 
+                      style={{ padding: '0.4rem 0.6rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.75rem' }} 
+                    />
+                    <input 
+                      type="date" 
+                      value={newUpdateDate} 
+                      onChange={e => setNewUpdateDate(e.target.value)} 
+                      style={{ padding: '0.4rem 0.6rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.75rem' }} 
+                    />
+                    <textarea 
+                      placeholder="Brief Description..." 
+                      value={newUpdateDescription} 
+                      onChange={e => setNewUpdateDescription(e.target.value)} 
+                      rows="2"
+                      style={{ padding: '0.4rem 0.6rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.75rem', resize: 'vertical' }} 
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                      <span style={{ fontSize: '0.65rem', color: '#6b7280' }}>Upload Photo:</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setNewUpdateImage(reader.result);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }} 
+                        style={{ fontSize: '0.7rem' }}
+                      />
+                      {newUpdateImage && (
+                        <div style={{ marginTop: '0.25rem' }}>
+                          <img src={newUpdateImage} style={{ width: '80px', height: '60px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #ddd' }} />
+                        </div>
+                      )}
+                    </div>
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        if (!newUpdateTitle.trim() || !newUpdateDate) {
+                          alert('Title and Date are required.');
+                          return;
+                        }
+                        const newM = [...updatingMilestones];
+                        let itemIdx = newM.findIndex(m => m.step === 'CONSTRUCTION_UPDATES');
+                        const newUpd = {
+                          title: newUpdateTitle.trim(),
+                          date: newUpdateDate,
+                          description: newUpdateDescription.trim(),
+                          image: newUpdateImage
+                        };
+                        if (itemIdx === -1) {
+                          newM.push({
+                            step: 'CONSTRUCTION_UPDATES',
+                            status: 'COMPLETED',
+                            updates: [newUpd]
+                          });
+                        } else {
+                          const currentUpdates = newM[itemIdx].updates || [];
+                          newM[itemIdx] = {
+                            ...newM[itemIdx],
+                            updates: [...currentUpdates, newUpd]
+                          };
+                        }
+                        setUpdatingMilestones(newM);
+                        setNewUpdateTitle('');
+                        setNewUpdateDescription('');
+                        setNewUpdateImage('');
+                      }} 
+                      style={{ background: 'var(--vanya-gold)', color: 'white', padding: '0.5rem', border: 'none', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 'bold', marginTop: '0.25rem' }}
+                    >
+                      + Add Log Update & Photo
+                    </button>
+                  </div>
                 </div>
               </div>
 

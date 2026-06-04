@@ -110,6 +110,7 @@ export async function PATCH(request) {
   try {
     const { searchParams } = new URL(request.url);
     const username = searchParams.get('username');
+    const body = await request.json();
     const { unit_id, total_amount, amount_paid, construction_progress, possession_date, mobile, email, address, pan_number, milestones } = body;
 
     const updateObj = {};
